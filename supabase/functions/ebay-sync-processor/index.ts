@@ -596,6 +596,13 @@ async function processCreate(
         fulfillmentPolicyId,
         paymentPolicyId,
         returnPolicyId,
+        ...(template?.best_offer_enabled ? {
+          bestOfferTerms: {
+            bestOfferEnabled: true,
+            ...(template.auto_accept_price != null ? { autoAcceptPrice: { value: template.auto_accept_price.toFixed(2), currency: 'USD' } } : {}),
+            ...(template.auto_decline_price != null ? { autoDeclinePrice: { value: template.auto_decline_price.toFixed(2), currency: 'USD' } } : {}),
+          },
+        } : {}),
       },
       categoryId,
       merchantLocationKey: storeConfig.location_key || undefined,
@@ -626,6 +633,13 @@ async function processCreate(
         fulfillmentPolicyId,
         paymentPolicyId,
         returnPolicyId,
+        ...(template?.best_offer_enabled ? {
+          bestOfferTerms: {
+            bestOfferEnabled: true,
+            ...(template.auto_accept_price != null ? { autoAcceptPrice: { value: template.auto_accept_price.toFixed(2), currency: 'USD' } } : {}),
+            ...(template.auto_decline_price != null ? { autoDeclinePrice: { value: template.auto_decline_price.toFixed(2), currency: 'USD' } } : {}),
+          },
+        } : {}),
       },
       categoryId,
       merchantLocationKey: storeConfig.location_key || undefined,
@@ -862,6 +876,13 @@ async function processUpdate(
         fulfillmentPolicyId,
         paymentPolicyId,
         returnPolicyId,
+        ...(template?.best_offer_enabled ? {
+          bestOfferTerms: {
+            bestOfferEnabled: true,
+            ...(template.auto_accept_price != null ? { autoAcceptPrice: { value: template.auto_accept_price.toFixed(2), currency: 'USD' } } : {}),
+            ...(template.auto_decline_price != null ? { autoDeclinePrice: { value: template.auto_decline_price.toFixed(2), currency: 'USD' } } : {}),
+          },
+        } : {}),
       },
       categoryId,
       merchantLocationKey: storeConfig.location_key || undefined,

@@ -34,6 +34,9 @@ interface ListingTemplate {
   payment_policy_id: string | null;
   return_policy_id: string | null;
   price_markup_percent: number | null;
+  best_offer_enabled: boolean;
+  auto_accept_price: number | null;
+  auto_decline_price: number | null;
   tag_match: string[];
   is_default: boolean;
   is_active: boolean;
@@ -215,6 +218,9 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
         payment_policy_id: editingTemplate.payment_policy_id || null,
         return_policy_id: editingTemplate.return_policy_id || null,
         price_markup_percent: editingTemplate.price_markup_percent ?? null,
+        best_offer_enabled: editingTemplate.best_offer_enabled ?? false,
+        auto_accept_price: editingTemplate.best_offer_enabled ? (editingTemplate.auto_accept_price ?? null) : null,
+        auto_decline_price: editingTemplate.best_offer_enabled ? (editingTemplate.auto_decline_price ?? null) : null,
         tag_match: editingTemplate.tag_match || [],
         is_default: editingTemplate.is_default ?? false,
         is_active: editingTemplate.is_active ?? true,
@@ -289,6 +295,9 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
       payment_policy_id: null,
       return_policy_id: null,
       price_markup_percent: null,
+      best_offer_enabled: false,
+      auto_accept_price: null,
+      auto_decline_price: null,
       tag_match: [],
     });
     setSelectedCategoryName('');
@@ -401,6 +410,13 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
                       {(template.fulfillment_policy_id || template.payment_policy_id || template.return_policy_id) && (
                         <div className="mt-1">
                           <Badge variant="outline" className="text-[10px]">Policy overrides</Badge>
+                        </div>
+                      )}
+                      {template.best_offer_enabled && (
+                        <div className="mt-1">
+                          <Badge variant="outline" className="text-[10px]">Best Offer
+                            {template.auto_decline_price != null && ` ≥$${template.auto_decline_price}`}
+                          </Badge>
                         </div>
                       )}
                     </div>
@@ -678,7 +694,50 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
                 </div>
               </div>
 
-              {/* Policy Overrides */}
+              {/* Best Offer */}
+              <div className="space-y-3 pt-2 border-t">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-sm font-medium">Best Offer</Label>
+                    <p className="text-xs text-muted-foreground">Allow buyers to submit offers on listings using this template</p>
+                  </div>
+                  <Switch
+                    checked={editingTemplate?.best_offer_enabled ?? false}
+                    onCheckedChange={(checked) => setEditingTemplate(prev => ({ ...prev, best_offer_enabled: checked }))}
+                  />
+                </div>
+                {editingTemplate?.best_offer_enabled && (
+                  <div className="grid grid-cols-2 gap-4 pl-1">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Auto-Accept at or above ($)</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={editingTemplate?.auto_accept_price ?? ''}
+                        onChange={(e) => setEditingTemplate(prev => ({ ...prev, auto_accept_price: e.target.value ? parseFloat(e.target.value) : null }))}
+                        placeholder="e.g. 180.00"
+                        className="w-full"
+                      />
+                      <p className="text-[10px] text-muted-foreground">Offers ≥ this amount are automatically accepted</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Auto-Decline below ($)</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={editingTemplate?.auto_decline_price ?? ''}
+                        onChange={(e) => setEditingTemplate(prev => ({ ...prev, auto_decline_price: e.target.value ? parseFloat(e.target.value) : null }))}
+                        placeholder="e.g. 100.00"
+                        className="w-full"
+                      />
+                      <p className="text-[10px] text-muted-foreground">Offers below this amount are automatically declined</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-3 pt-2 border-t">
                 <Label className="text-sm font-medium">Policy Overrides</Label>
                 <p className="text-xs text-muted-foreground">
