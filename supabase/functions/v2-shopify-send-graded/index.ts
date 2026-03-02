@@ -346,9 +346,9 @@ Deno.serve(async (req) => {
           weight: intakeItem.product_weight || 3,
           weight_unit: 'oz'
         }],
-        // image_urls are now guaranteed front-first from psa-lookup sorting
+        // Reverse so front image is sent last — Shopify features the last-uploaded image
         images: (intakeItem.image_urls && Array.isArray(intakeItem.image_urls) && intakeItem.image_urls.length > 0)
-          ? intakeItem.image_urls.map((url: string) => ({ src: url, alt: title }))
+          ? [...intakeItem.image_urls].reverse().map((url: string) => ({ src: url, alt: title }))
           : imageUrl ? [{ src: imageUrl, alt: title }] : []
       }
     }
