@@ -1,30 +1,31 @@
 
 
-## Make Shopify Title Match Database Title & Add Variant
+## Convert Auto-Decline to Percentage-Based
 
-### Problem
-The Shopify title differs from the database title shown in the UI:
-- **DB/UI**: `2018-06 Marvel Comics Amazing Spider-Man #798 PSA 10` (normal case)
-- **Shopify**: `2018-06 MARVEL COMICS AMAZING SPIDER-MAN #798 PSA 10` (uppercased brand & subject)
-- **Variant** is missing from both — needs to be included
+Currently `auto_decline_price` is stored as a fixed dollar amount. The user wants it to be a percentage of the listing price instead, so the decline threshold scales with each item's price.
 
 ### Changes
 
-**1. `supabase/functions/v2-shopify-send-graded/index.ts` (~lines 123-134)**
-- Remove `.toUpperCase()` from `brandTitle` and `subject` in the title builder
-- Add `cardVariant` to the title parts (after `#cardNumber`, before grade) — it's already extracted on line 114 but only conditionally used
-- This makes the Shopify title match the DB display exactly
+**1. Database: Rename column for clarity**
+- SQL migration: rename `auto_decline_price` to `auto_decline_percent` (numeric, 0-100) on `ebay_listing_templates`
+- Update existing data: if any templates have a value, we can null them out or leave as-is (they'll need re-entry as percentages)
 
-**2. `src/features/inventory/hooks/useInventoryFieldSync.ts` (~lines 54-65)**
-- Add `variant` to the title-building logic so inline edits also include variant in the Shopify title
-- Add `variant` to the trigger fields that cause a title resync
+**2. `src/components/admin/EbayTemplateManager.tsx`**
+- Change the auto-decline input label from "Auto-Decline below ($)" to "Auto-Decline below (% of price)"
+- Update placeholder to e.g. "e.g. 80" meaning 80% of listing price
+- Update the badge display from `≥$X` to `≥X%`
+- Change step to `1`, max to `100`
+- Update field references from `auto_decline_price` to `auto_decline_percent`
 
-**3. `src/features/inventory/components/inspector/InspectorPanel.ts` (~line 40) and `src/features/inventory/components/ItemDetailsDrawer.tsx` (~line 40)**
-- Add variant to `generateTitle()` after `#card_number` in both files so the UI display also shows variant
+**3. `supabase/functions/ebay-sync-processor/index.ts` (~lines 601-603, 638-640, 881-883)**
+- At each `autoDeclinePrice` usage, compute the dollar value: `finalPrice * (template.auto_decline_percent / 100)`
+- Send computed dollar value to eBay API (it still expects a dollar amount)
 
-**4. Redeploy `v2-shopify-send-graded` edge function**
+**4. `src/integrations/supabase/types.ts`**
+- Update the type from `auto_decline_price` to `auto_decline_percent`
+
+**5. Redeploy `ebay-sync-processor`**
 
 ### Result
-All three places (UI display, Shopify initial send, Shopify inline-edit sync) will produce identical titles like:
-`2018-06 Marvel Comics Amazing Spider-Man #798 1st Red Goblin PSA 10`
+Template editor shows "Auto-Decline below 80%" → at sync time, an item priced at $200 would auto-decline offers below $160.
 
