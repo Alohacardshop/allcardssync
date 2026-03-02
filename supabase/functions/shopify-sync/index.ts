@@ -664,6 +664,20 @@ async function processQueueItem(supabase: any, queueItem: SyncQueueItem) {
       throw new Error(`Inventory item not found: ${queueItem.inventory_item_id}`)
     }
 
+    // Skip deleted items — mark queue entry as completed
+    if (item.deleted_at) {
+      console.log(`⏭️ Skipping deleted item: ${item.sku || item.id} (deleted_at: ${item.deleted_at})`)
+      await supabase
+        .from('shopify_sync_queue')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+          error_message: 'Skipped: source item was deleted'
+        })
+        .eq('id', queueItem.id)
+      return
+    }
+
     // Get Shopify credentials
     const credentials = await getShopifyCredentials(supabase, item.store_key)
     
