@@ -74,6 +74,7 @@ const WORKBENCH_COLUMNS: InventoryColumn[] = [
   'price',
   'quantity',
   'shopify_status',
+  'ebay_status',
   'actions',
 ];
 
