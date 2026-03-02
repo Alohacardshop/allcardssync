@@ -1020,7 +1020,7 @@ export default function EbayApp() {
                 </Card>
 
                 {/* Merchant Location */}
-                <EbayMerchantLocation locationKey={selectedConfig.location_key} />
+                <EbayMerchantLocation locationKey={selectedConfig.location_key} storeKey={selectedConfig.store_key} />
 
                 {/* Auto-save status indicator */}
                 <div className="flex justify-end items-center gap-2 text-sm text-muted-foreground">
