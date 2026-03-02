@@ -485,6 +485,9 @@ export type Database = {
       ebay_listing_templates: {
         Row: {
           aspects_mapping: Json | null
+          auto_accept_price: number | null
+          auto_decline_price: number | null
+          best_offer_enabled: boolean | null
           category_id: string
           category_name: string | null
           condition_id: string
@@ -510,6 +513,9 @@ export type Database = {
         }
         Insert: {
           aspects_mapping?: Json | null
+          auto_accept_price?: number | null
+          auto_decline_price?: number | null
+          best_offer_enabled?: boolean | null
           category_id: string
           category_name?: string | null
           condition_id?: string
@@ -535,6 +541,9 @@ export type Database = {
         }
         Update: {
           aspects_mapping?: Json | null
+          auto_accept_price?: number | null
+          auto_decline_price?: number | null
+          best_offer_enabled?: boolean | null
           category_id?: string
           category_name?: string | null
           condition_id?: string
