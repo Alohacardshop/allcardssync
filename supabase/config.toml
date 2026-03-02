@@ -208,3 +208,7 @@ verify_jwt = false
 # eBay category schema debug endpoint (requires staff/admin)
 [functions.ebay-category-schema]
 verify_jwt = true
+
+# eBay merchant location management (list/create locations)
+[functions.ebay-manage-location]
+verify_jwt = true
