@@ -341,3 +341,91 @@ export function mapConditionToEbay(condition?: string): string {
   const normalized = (condition || 'new').toLowerCase().replace(/\s+/g, '_')
   return conditionMap[normalized] || 'NEW'
 }
+
+/**
+ * Fetch valid condition policies for a category from eBay Metadata API
+ */
+export async function fetchConditionPolicies(
+  accessToken: string,
+  environment: 'sandbox' | 'production',
+  marketplaceId: string,
+  categoryId: string
+): Promise<{ conditionIds: string[]; error?: string }> {
+  try {
+    const response = await ebayApiRequest(
+      accessToken,
+      environment,
+      'GET',
+      `/sell/metadata/v1/marketplace/${marketplaceId}/get_item_condition_policies?filter=categoryIds:{${categoryId}}`
+    )
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.warn(`[fetchConditionPolicies] Failed for category ${categoryId}: ${response.status} - ${errorText}`)
+      return { conditionIds: [], error: errorText }
+    }
+
+    const data = await response.json()
+    const policies = data.itemConditionPolicies || []
+    
+    // Extract all valid condition IDs from the policy response
+    const conditionIds: string[] = []
+    for (const policy of policies) {
+      if (policy.itemConditions) {
+        for (const condition of policy.itemConditions) {
+          if (condition.conditionId) {
+            conditionIds.push(String(condition.conditionId))
+          }
+        }
+      }
+    }
+
+    console.log(`[fetchConditionPolicies] Category ${categoryId}: valid conditions = [${conditionIds.join(', ')}]`)
+    return { conditionIds }
+  } catch (err) {
+    console.error(`[fetchConditionPolicies] Error:`, err)
+    return { conditionIds: [], error: err.message }
+  }
+}
+
+/**
+ * Fetch valid aspect names for a category from eBay Taxonomy API
+ */
+export async function fetchCategoryAspects(
+  accessToken: string,
+  environment: 'sandbox' | 'production',
+  categoryId: string,
+  categoryTreeId: string = '0' // 0 = EBAY_US
+): Promise<{ aspectNames: Set<string>; error?: string }> {
+  try {
+    const response = await ebayApiRequest(
+      accessToken,
+      environment,
+      'GET',
+      `/sell/taxonomy/v1/category_tree/${categoryTreeId}/get_item_aspects_for_category?category_id=${categoryId}`
+    )
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.warn(`[fetchCategoryAspects] Failed for category ${categoryId}: ${response.status} - ${errorText}`)
+      return { aspectNames: new Set(), error: errorText }
+    }
+
+    const data = await response.json()
+    const aspectNames = new Set<string>()
+    
+    if (data.aspects) {
+      for (const aspect of data.aspects) {
+        if (aspect.localizedAspectName) {
+          aspectNames.add(aspect.localizedAspectName)
+        }
+      }
+    }
+
+    console.log(`[fetchCategoryAspects] Category ${categoryId}: found ${aspectNames.size} valid aspect names`)
+    return { aspectNames }
+  } catch (err) {
+    console.error(`[fetchCategoryAspects] Error:`, err)
+    return { aspectNames: new Set(), error: err.message }
+  }
+}
