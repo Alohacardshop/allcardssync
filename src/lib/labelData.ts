@@ -15,6 +15,15 @@ export interface CardItem {
 }
 
 /**
+ * Format a numeric grade by removing trailing ".0"
+ * e.g., "10.0" → "10", "9.5" → "9.5", "8.0" → "8"
+ */
+export function formatGrade(grade?: string | null): string {
+  if (!grade) return '';
+  return grade.replace(/\.0$/, '');
+}
+
+/**
  * Build title from card parts
  */
 export function buildTitleFromParts(

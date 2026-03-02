@@ -22,6 +22,7 @@ import { useSession } from '@/hooks/useSession';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queryKeys';
 import { useSendToInventory } from '@/hooks/useSendToInventory';
+import { formatGrade } from '@/lib/labelData';
 
 import type { IntakeItem } from "@/types/intake";
 
@@ -69,7 +70,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
     if (psaSnapshot && typeof psaSnapshot === 'object' && psaSnapshot !== null) {
       const psaTitle = psaSnapshot.cardName || psaSnapshot.subject || psaSnapshot.title;
       if (psaTitle) {
-        const gradePart = item.grade ? ` PSA ${item.grade}` : (psaSnapshot.grade ? ` PSA ${psaSnapshot.grade}` : '');
+        const gradePart = item.grade ? ` PSA ${formatGrade(item.grade)}` : (psaSnapshot.grade ? ` PSA ${formatGrade(psaSnapshot.grade)}` : '');
         return `${psaTitle}${gradePart}`;
       }
     }
@@ -100,9 +101,9 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
     
     // Handle grading - use PSA for PSA certs
     if (item.grade && item.psa_cert) {
-      parts.push(`PSA ${item.grade}`)
+      parts.push(`PSA ${formatGrade(item.grade)}`)
     } else if (item.grade) {
-      parts.push(`Grade ${item.grade}`)
+      parts.push(`Grade ${formatGrade(item.grade)}`)
     } else if (item.psa_cert) {
       parts.push(`PSA ${item.psa_cert}`)
     }
