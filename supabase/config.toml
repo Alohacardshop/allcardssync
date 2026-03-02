@@ -204,3 +204,7 @@ verify_jwt = false
 # Webhook health monitoring (cron job - no JWT)
 [functions.check-webhook-health]
 verify_jwt = false
+
+# eBay category schema debug endpoint (requires staff/admin)
+[functions.ebay-category-schema]
+verify_jwt = true

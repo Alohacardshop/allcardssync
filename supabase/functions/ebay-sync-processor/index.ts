@@ -14,16 +14,17 @@ import {
   deleteInventoryItem,
   getOffersBySku,
   mapConditionToEbay,
-  fetchConditionPolicies,
-  fetchCategoryAspects,
 } from '../_shared/ebayApi.ts'
 import {
   EBAY_CONDITION_IDS,
   buildGradedConditionDescriptors,
   buildComicConditionDescriptors,
-  validateAndResolveCondition,
-  filterAspectsByTaxonomy,
 } from '../_shared/ebayConditions.ts'
+import {
+  getCategorySchema,
+  resolveConditionId,
+  validateAspects,
+} from '../_shared/ebayCategorySchema.ts'
 import {
   resolveTemplate,
   buildCategoryAwareAspects,
@@ -388,14 +389,11 @@ async function processCreate(
   const categoryId = template?.category_id || 
     await getEbayCategoryIdDB(supabase, detectedCategory, isGraded)
 
-  // === DYNAMIC CONDITION VALIDATION ===
+  // === DYNAMIC CONDITION + ASPECT VALIDATION via Category Schema ===
   const marketplaceId = storeConfig.marketplace_id || 'EBAY_US'
-  const { conditionIds: validConditionIds } = await fetchConditionPolicies(accessToken, environment, marketplaceId, categoryId)
-  conditionId = validateAndResolveCondition(validConditionIds, conditionId, isGraded)
+  const schema = await getCategorySchema(accessToken, environment, marketplaceId, categoryId)
+  conditionId = resolveConditionId(schema, conditionId, isGraded)
   console.log(`[ebay-sync-processor] Validated conditionId: ${conditionId} for category ${categoryId}`)
-
-  // === DYNAMIC ASPECT VALIDATION ===
-  const { aspectNames: validAspectNames } = await fetchCategoryAspects(accessToken, environment, categoryId)
 
   // Build condition descriptors for graded items (comics use different descriptor IDs)
   let conditionDescriptors: any[] | undefined
@@ -429,8 +427,12 @@ async function processCreate(
     aspects = { ...aspects, ...gradingAspects }
   }
 
-  // Filter aspects to only valid taxonomy names
-  aspects = filterAspectsByTaxonomy(aspects, validAspectNames)
+  // Validate aspects against category schema (filter unsupported, enforce allowed values)
+  const { validated: validatedAspects, warnings: aspectWarnings } = validateAspects(schema, aspects)
+  aspects = validatedAspects
+  if (aspectWarnings.length > 0) {
+    console.log(`[ebay-sync-processor] Aspect warnings for ${categoryId}: ${aspectWarnings.join('; ')}`)
+  }
 
   // Look up tag mapping for per-category policy/markup overrides
   const { data: tagMappingPolicies } = detectedCategory ? await supabase
@@ -605,14 +607,11 @@ async function processUpdate(
   const categoryId = template?.category_id || 
     await getEbayCategoryIdDB(supabase, detectedCategory, isGraded)
 
-  // === DYNAMIC CONDITION VALIDATION ===
+  // === DYNAMIC CONDITION + ASPECT VALIDATION via Category Schema ===
   const marketplaceId = storeConfig.marketplace_id || 'EBAY_US'
-  const { conditionIds: validConditionIds } = await fetchConditionPolicies(accessToken, environment, marketplaceId, categoryId)
-  conditionId = validateAndResolveCondition(validConditionIds, conditionId, isGraded)
+  const schema = await getCategorySchema(accessToken, environment, marketplaceId, categoryId)
+  conditionId = resolveConditionId(schema, conditionId, isGraded)
   console.log(`[ebay-sync-processor] Update: Validated conditionId: ${conditionId} for category ${categoryId}`)
-
-  // === DYNAMIC ASPECT VALIDATION ===
-  const { aspectNames: validAspectNames } = await fetchCategoryAspects(accessToken, environment, categoryId)
 
   // Look up tag mapping for per-category policy/markup overrides
   const { data: tagMappingPolicies } = detectedCategory ? await supabase
@@ -641,8 +640,12 @@ async function processUpdate(
     aspects = { ...aspects, ...gradingAspects }
   }
 
-  // Filter aspects to only valid taxonomy names
-  aspects = filterAspectsByTaxonomy(aspects, validAspectNames)
+  // Validate aspects against category schema
+  const { validated: validatedAspects, warnings: aspectWarnings } = validateAspects(schema, aspects)
+  aspects = validatedAspects
+  if (aspectWarnings.length > 0) {
+    console.log(`[ebay-sync-processor] Update aspect warnings for ${categoryId}: ${aspectWarnings.join('; ')}`)
+  }
 
   // Build condition descriptors for graded items (comics use different descriptor IDs)
   let conditionDescriptors: any[] | undefined
