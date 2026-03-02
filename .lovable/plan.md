@@ -1,29 +1,21 @@
 
 
-## Analysis: Resync Button vs Auto-Sync
+## Problem
 
-These are actually **two different operations**:
+When you toggle "List on eBay" on an item, it only sets the `list_on_ebay` flag in `intake_items`. Nothing inserts a row into `ebay_sync_queue`, so the `ebay-sync-processor` cron (runs every 3 minutes) never picks it up. The item just sits at "Pending" forever.
 
-| | Auto-Sync (on edit) | Resync Button |
-|---|---|---|
-| **What it does** | Updates individual fields (price, title) via `shopify-update-product` | Re-pushes the **entire product** to Shopify via `v2-shopify-send-graded/raw` |
-| **When it runs** | Automatically after every field edit | Only on manual click |
-| **Use case** | Normal edits | Fixing data mismatches, re-uploading barcode/images, recovering from partial syncs |
+## Fix
 
-The Resync button is a **recovery/repair tool**, not a normal workflow step. Auto-sync handles the day-to-day edits, but Resync is a safety net for when things get out of sync.
+Modify `toggleListOnEbay` in `src/hooks/useEbayListing.ts` so that when enabling eBay (`!currentValue === true`), it also inserts a row into `ebay_sync_queue` with `action: 'create'` and `status: 'queued'`, and sets `ebay_sync_status: 'queued'` on the intake item. When disabling eBay, it clears the `ebay_sync_status`.
 
-## Recommendation
+### Changes to `src/hooks/useEbayListing.ts` — `toggleListOnEbay` function:
 
-Rather than removing it entirely (you'd lose the ability to fix broken syncs), **de-emphasize it**:
+1. After updating `list_on_ebay`, if enabling:
+   - Also update `ebay_sync_status` to `'queued'`
+   - Insert a row into `ebay_sync_queue` with `inventory_item_id`, `action: 'create'`, `status: 'queued'`
+2. If disabling:
+   - Set `ebay_sync_status` to `null`
+   - Remove any pending queue entries for this item
 
-1. Remove the "Resync" button from the `InventoryItemActionsRow` (the card action buttons) — this is where it clutters the UI
-2. Keep it only in the Inspector's **Shopify tab** as a secondary/ghost button labeled "Full Resync" — a power-user tool for troubleshooting
-3. Remove it from the Inspector footer bar (where it currently sits as a primary action)
-
-This cleans up the main UI while preserving the repair capability in a logical place (the Shopify details tab).
-
-### Files to change:
-- **`src/components/inventory-card/InventoryItemActionsRow.tsx`** — Remove the Resync button block
-- **`src/features/inventory/components/inspector/InspectorPanel.tsx`** — Remove Resync from the footer bar
-- **`src/features/inventory/components/inspector/tabs/ShopifyTab.tsx`** — Keep the Resync button here, restyle as ghost/secondary
+The `ebay-sync-processor` cron already runs every 3 minutes and picks up `queued` items from `ebay_sync_queue`, so no other changes are needed — the item will be automatically processed on the next cron cycle.
 
