@@ -355,6 +355,10 @@ Deno.serve(async (req) => {
               .sort((a: any, b: any) => (b.IsFrontImage ? 1 : 0) - (a.IsFrontImage ? 1 : 0));
             const snapshotUrls = sorted.map((img: any) => img.ImageURL).filter(Boolean);
             if (snapshotUrls.length > 0) orderedUrls = snapshotUrls;
+          } else if (isComic && orderedUrls.length === 2) {
+            // Comics without psa_snapshot: PSA pages show back first, front second.
+            // Reverse so front cover is position 1 (featured).
+            orderedUrls = [...orderedUrls].reverse();
           }
           if (orderedUrls.length > 0) {
             return orderedUrls.map((url: string, idx: number) => ({ src: url, alt: title, position: idx + 1 }));
