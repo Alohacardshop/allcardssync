@@ -1,42 +1,38 @@
 
 
-## Fix Image Order and Enforce Graded Quantity = 1
+## Summary
 
-### Problem 1: Wrong Image Order
-PSA returns images as `[back/slab, front]`. The code currently picks only the first image (the back). Shopify should show the front image first.
+Two issues to address:
 
-**Fix**: Send ALL images from `image_urls` to Shopify, but reverse the array so the front image comes first. PSA consistently returns back-of-slab as first image and front as second.
+1. **Quantity editing already works and syncs to Shopify** — the `InlineQuantityEditor` component already updates the DB and calls `v2-shopify-set-inventory` with delta-based adjustments. However, it's currently **blocked** when `isShopifyTruth` is enabled (read-only mode). We need to allow editing even in Shopify-truth mode since the user wants to adjust quantity from the inventory screen.
 
-### Problem 2: Quantity Sent as 2
-Graded items are 1-of-1 per the inventory truth contract. The code blindly uses `item.quantity || 1`, which sent 2 because the DB had quantity=2.
+2. **Delete does not clean up eBay** — the `deleteMutation` in `useInventoryMutations.ts` removes from Shopify but never ends the eBay listing. If the item has an `ebay_offer_id`, we need to call `queue_ebay_end_listing` to end the eBay listing too.
 
-**Fix**: Force `quantity = 1` for graded items regardless of what the database or input says.
+---
 
 ### Changes
 
-**File: `supabase/functions/v2-shopify-send-graded/index.ts`**
+**File: `src/features/inventory/pages/InventoryPage.tsx`**
+- Remove or change `quantityReadOnly={isShopifyTruth}` so quantity is always editable. The `InlineQuantityEditor` already handles Shopify sync via delta adjustments with optimistic locking, so it's safe to allow edits even in truth mode.
 
-1. **Images (lines 349-353)**: Instead of sending a single `imageUrl`, build an images array from `intakeItem.image_urls` (reversed so front is first). Fall back to single `imageUrl` if no array exists.
+**File: `src/features/inventory/hooks/useInventoryMutations.ts`**
+- In the `deleteMutation` (around line 278-325), after successfully removing from Shopify, check if the item has an `ebay_offer_id`. If so, call `supabase.rpc('queue_ebay_end_listing', { p_ebay_offer_id: item.ebay_offer_id, p_sku: item.sku })` to queue ending the eBay listing.
+- Also do the same in the `removeMutation` for consistency — if removing from Shopify, also end the eBay listing.
 
-2. **Quantity (line 341)**: Hard-code `inventory_quantity: 1` — graded items are always 1-of-1.
-
-3. **Inventory write (line 435)**: Change `quantity: item.quantity || 1` to `quantity: 1` for the same reason.
+**File: `src/features/inventory/types.ts`**
+- Ensure `ebay_offer_id` is available on `InventoryListItem` (check if it's already in the type/query).
 
 ### Technical Detail
 
+```typescript
+// In deleteMutation, after Shopify removal succeeds:
+if (item.ebay_offer_id) {
+  await supabase.rpc('queue_ebay_end_listing', {
+    p_ebay_offer_id: item.ebay_offer_id,
+    p_sku: item.sku || ''
+  });
+}
 ```
-// Images: reverse PSA order [back, front] → [front, back]
-const allImages = (intakeItem.image_urls && Array.isArray(intakeItem.image_urls) && intakeItem.image_urls.length > 0)
-  ? [...intakeItem.image_urls].reverse().map(url => ({ src: url, alt: title }))
-  : imageUrl ? [{ src: imageUrl, alt: title }] : []
 
-// In productData:
-images: allImages
-
-// Variant quantity:
-inventory_quantity: 1  // Graded = 1-of-1, always
-
-// writeInventory call:
-quantity: 1  // Graded = 1-of-1, always
-```
+The retry_jobs system will handle the actual eBay API call with exponential backoff, so this is reliable even if eBay is temporarily unavailable.
 
