@@ -346,10 +346,21 @@ Deno.serve(async (req) => {
           weight: intakeItem.product_weight || 3,
           weight_unit: 'oz'
         }],
-        // Reverse so front image is sent last — Shopify features the last-uploaded image
-        images: (intakeItem.image_urls && Array.isArray(intakeItem.image_urls) && intakeItem.image_urls.length > 0)
-          ? [...intakeItem.image_urls].reverse().map((url: string) => ({ src: url, alt: title }))
-          : imageUrl ? [{ src: imageUrl, alt: title }] : []
+        // Re-sort image_urls using psa_snapshot IsFrontImage flags (handles legacy data)
+        // Then assign explicit position so Shopify features the front image (position 1)
+        images: (() => {
+          let orderedUrls: string[] = intakeItem.image_urls || [];
+          if (intakeItem.psa_snapshot?.images && Array.isArray(intakeItem.psa_snapshot.images)) {
+            const sorted = [...intakeItem.psa_snapshot.images]
+              .sort((a: any, b: any) => (b.IsFrontImage ? 1 : 0) - (a.IsFrontImage ? 1 : 0));
+            const snapshotUrls = sorted.map((img: any) => img.ImageURL).filter(Boolean);
+            if (snapshotUrls.length > 0) orderedUrls = snapshotUrls;
+          }
+          if (orderedUrls.length > 0) {
+            return orderedUrls.map((url: string, idx: number) => ({ src: url, alt: title, position: idx + 1 }));
+          }
+          return imageUrl ? [{ src: imageUrl, alt: title, position: 1 }] : [];
+        })()
       }
     }
 
