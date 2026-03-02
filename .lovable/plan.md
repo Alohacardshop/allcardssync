@@ -1,28 +1,33 @@
 
 
-## Findings
+## Problem
+The eBay switch is technically rendering but becomes effectively invisible when the error box appears. The current vertical stack layout means the error box (which can be quite tall with long messages) dominates the small inspector panel, making the switch hard to find. The real fix isn't just contrast — it's the layout itself.
 
-The eBay switch **is rendering** — session replay confirms it was toggled on/off. The likely issue is **visual contrast on the dark theme**: the unchecked Switch uses `bg-input` which blends into the dark background, making it appear invisible.
+## Redesigned EbayTab Layout
 
-The eBay sync itself failed due to the Accept-Language header issue, which was already fixed and deployed.
+Restructure `EbayTab.tsx` into a more compact, always-visible layout:
 
-## Plan
+**Top row — always visible, prominent:**
+- Left: "eBay" label + status badge (Listed / Error / Queued / Off)
+- Right: Switch toggle — always in the same spot, never pushed around
 
-### 1. Make the Switch more visible on dark theme (EbayTab.tsx)
-- Add a visible border/outline to the Switch when unchecked so it stands out on dark backgrounds
-- Add `border border-border` class to the Switch component so it's always visible regardless of theme
+**Error alert — compact, collapsible:**
+- If there's an error, show a single-line summary with the error text truncated
+- Use a small inline destructive badge instead of a full block
+- Keep it to 1-2 lines max so it doesn't dominate
 
-### 2. Make the toggle section more prominent (EbayTab.tsx)
-- Add a stronger background to the toggle container (`bg-muted/50` instead of `bg-muted/30`)
-- Add a border to the container to make the whole section more noticeable
+**Listing details — below, only when listed:**
+- Listing ID + View on eBay link (compact row)
 
-### 3. Reset stale error state when re-enabling (useEbayListing.ts)
-- When toggling `list_on_ebay` back to `true`, also clear `ebay_sync_error` so the old error doesn't persist and confuse the UI
-- Update line 18-21 to include `ebay_sync_error: null` when enabling
+**Remove the "Not enabled for eBay" empty state block** — the switch + status badge already communicate this. The empty state just wastes space.
 
-**Files to change:**
-- `src/features/inventory/components/inspector/tabs/EbayTab.tsx` — add border/contrast to Switch
-- `src/hooks/useEbayListing.ts` — clear error on re-enable
+### File changes
 
-After these changes, toggle the switch back on for item SKU 146094215 to test the fixed eBay sync.
+**`src/features/inventory/components/inspector/tabs/EbayTab.tsx`** — Full rewrite of the template:
+- Move Switch to a single-line header row alongside status badge
+- Replace the tall error block with a compact 1-2 line inline error (truncated with title tooltip for full text)
+- Remove the redundant "Not enabled" empty state
+- Keep listing details compact
+
+This makes the switch always visible at the top regardless of error state, and prevents the error from dominating the small panel.
 
