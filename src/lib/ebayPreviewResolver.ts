@@ -397,7 +397,8 @@ function buildComicAspects(item: PreviewItem): Record<string, string[]> {
     aspects['Grader'] = [item.grading_company];
     aspects['Grade'] = [item.grade];
   }
-  if (item.cgc_cert) aspects['Certification Number'] = [item.cgc_cert];
+  const certNumber = item.psa_cert || item.cgc_cert;
+  if (certNumber) aspects['Certification Number'] = [certNumber];
   aspects['Format'] = ['Single Issue'];
   aspects['Type'] = ['Comic Book'];
   return aspects;
