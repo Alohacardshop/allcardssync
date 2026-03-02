@@ -1,11 +1,15 @@
 import React, { useCallback } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { formatDistanceToNow } from 'date-fns';
+import { AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
 import { getLocationNickname } from '@/lib/locationNicknames';
 import { ImageGallery } from '../../details/ImageGallery';
 import { EditableField } from '../EditableField';
 import { InlineQuantityEditor } from '@/components/inventory-card/InlineQuantityEditor';
+import { useEbayListing } from '@/hooks/useEbayListing';
 import type { InventoryListItem } from '../../../types';
 import type { CachedLocation } from '@/hooks/useLocationNames';
 import { formatGrade } from '@/lib/labelData';
@@ -19,10 +23,14 @@ interface OverviewTabProps {
   } | null;
   locationsMap?: Map<string, CachedLocation>;
   onFieldSave?: (updates: Record<string, string | number>) => void;
+  onResync?: (item: InventoryListItem) => void;
+  isResyncing?: boolean;
   isSaving?: boolean;
 }
 
-export const OverviewTab = React.memo(({ item, detailData, locationsMap, onFieldSave, isSaving }: OverviewTabProps) => {
+export const OverviewTab = React.memo(({ item, detailData, locationsMap, onFieldSave, onResync, isResyncing, isSaving }: OverviewTabProps) => {
+  const { toggleListOnEbay, isToggling } = useEbayListing();
+
   const locationName = item.shopify_location_gid 
     ? locationsMap?.get(item.shopify_location_gid)?.location_name || 'Unknown'
     : 'No location';
@@ -44,6 +52,35 @@ export const OverviewTab = React.memo(({ item, detailData, locationsMap, onField
   const handleSave = useCallback((field: string) => (value: string | number) => {
     onFieldSave?.({ [field]: value });
   }, [onFieldSave]);
+
+  // Shopify sync status
+  const shopifySyncStatus = item.shopify_sync_status as string | null;
+  const getShopifyBadge = () => {
+    if (shopifySyncStatus === 'error') return <Badge variant="destructive" className="text-[10px] h-5 px-1.5">Error</Badge>;
+    if (shopifySyncStatus === 'synced' || item.shopify_product_id) return <Badge variant="default" className="text-[10px] h-5 px-1.5">Synced</Badge>;
+    if (shopifySyncStatus === 'queued' || shopifySyncStatus === 'processing') return <Badge variant="outline" className="text-[10px] h-5 px-1.5 animate-pulse">Syncing</Badge>;
+    if (shopifySyncStatus === 'pending') return <Badge variant="outline" className="text-[10px] h-5 px-1.5">Pending</Badge>;
+    return <Badge variant="outline" className="text-[10px] h-5 px-1.5">Not Synced</Badge>;
+  };
+
+  // eBay status
+  const ebayStatus = item.ebay_sync_status;
+  const ebayError = item.ebay_sync_error;
+  const listOnEbay = item.list_on_ebay;
+  const isListed = ebayStatus === 'synced' && item.ebay_listing_id;
+
+  const getEbayBadge = () => {
+    if (isListed) return <Badge variant="default" className="text-[10px] h-5 px-1.5 bg-blue-600 hover:bg-blue-700 text-white border-blue-600">Listed</Badge>;
+    if (ebayStatus === 'error') return <Badge variant="destructive" className="text-[10px] h-5 px-1.5">Error</Badge>;
+    if (ebayStatus === 'queued' || ebayStatus === 'processing') return <Badge variant="outline" className="text-[10px] h-5 px-1.5 animate-pulse">Syncing</Badge>;
+    if (ebayStatus === 'pending') return <Badge variant="outline" className="text-[10px] h-5 px-1.5">Pending</Badge>;
+    if (listOnEbay) return <Badge variant="outline" className="text-[10px] h-5 px-1.5">Queued</Badge>;
+    return null;
+  };
+
+  const handleEbayToggle = () => {
+    toggleListOnEbay(item.id, listOnEbay || false);
+  };
 
   return (
     <div className="space-y-5">
@@ -197,6 +234,62 @@ export const OverviewTab = React.memo(({ item, detailData, locationsMap, onField
             </div>
           )}
         </div>
+      </div>
+
+      {/* Marketplace Controls — always visible */}
+      <div className="space-y-3">
+        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Marketplace</h4>
+        
+        {/* Shopify row */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-sm font-medium shrink-0">Shopify</span>
+            {getShopifyBadge()}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onResync?.(item)}
+            disabled={isResyncing || isDeleted}
+            className="h-7 px-2 text-xs text-muted-foreground shrink-0"
+          >
+            {isResyncing ? (
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3 mr-1" />
+            )}
+            Resync
+          </Button>
+        </div>
+
+        {/* eBay row */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-sm font-medium shrink-0">eBay</span>
+            {getEbayBadge()}
+          </div>
+          <Switch
+            checked={listOnEbay || false}
+            onCheckedChange={handleEbayToggle}
+            disabled={isToggling === item.id || isDeleted}
+            className="border border-border shrink-0"
+          />
+        </div>
+
+        {/* Compact eBay error */}
+        {ebayError && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-1.5 text-destructive cursor-help pl-1">
+                <AlertCircle className="h-3 w-3 shrink-0" />
+                <p className="text-xs truncate">{ebayError}</p>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-[300px] text-xs">
+              {ebayError}
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
 
       {/* Sync indicator */}

@@ -199,16 +199,10 @@ eBay: ${item.ebay_sync_status || 'Not listed'}
               Overview
             </TabsTrigger>
             <TabsTrigger 
-              value="shopify"
+              value="sync"
               className="text-xs px-3 py-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
             >
-              Shopify
-            </TabsTrigger>
-            <TabsTrigger 
-              value="ebay"
-              className="text-xs px-3 py-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
-            >
-              eBay
+              Sync
             </TabsTrigger>
             <TabsTrigger 
               value="printing"
@@ -238,21 +232,22 @@ eBay: ${item.ebay_sync_status || 'Not listed'}
                   detailData={detailData}
                   locationsMap={locationsMap}
                   onFieldSave={handleFieldSave}
+                  onResync={onResync}
+                  isResyncing={isResyncing}
                   isSaving={isSaving}
                 />
               </TabsContent>
 
-              <TabsContent value="shopify" className="p-4 m-0">
+              <TabsContent value="sync" className="p-4 m-0 space-y-6">
                 <ShopifyTab 
                   item={item}
                   detailData={detailData}
                   onResync={() => onResync(item)}
                   isResyncing={isResyncing}
                 />
-              </TabsContent>
-
-              <TabsContent value="ebay" className="p-4 m-0">
-                <EbayTab item={item} />
+                <div className="border-t border-border pt-4">
+                  <EbayTab item={item} />
+                </div>
               </TabsContent>
 
               <TabsContent value="printing" className="p-4 m-0">
