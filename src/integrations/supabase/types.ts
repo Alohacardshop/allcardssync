@@ -4340,8 +4340,6 @@ export type Database = {
             }
             Returns: undefined
           }
-      show_limit: { Args: never; Returns: number }
-      show_trgm: { Args: { "": string }; Returns: string[] }
       soft_delete_intake_item: {
         Args: { item_id: string; reason_in?: string }
         Returns: {
