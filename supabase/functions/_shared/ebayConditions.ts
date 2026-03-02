@@ -122,6 +122,7 @@ export const EBAY_CATEGORY_IDS = {
 
 // Comic Grader IDs (different from card graders)
 export const EBAY_COMIC_GRADER_IDS: Record<string, string> = {
+  'PSA': '400021',      // PSA
   'CGC': '400022',      // CGC Comics (different from CGC cards)
   'CBCS': '400023',     // CBCS
   'PGX': '400024',      // PGX
@@ -432,6 +433,7 @@ export function buildComicAspects(item: {
   grade?: string | null;
   grading_company?: string | null;
   cgc_cert?: string | null;
+  psa_cert?: string | null;
   variant?: string | null;
 }): Record<string, string[]> {
   const aspects: Record<string, string[]> = {};
@@ -461,8 +463,9 @@ export function buildComicAspects(item: {
     aspects['Grade'] = [item.grade];
   }
   
-  if (item.cgc_cert) {
-    aspects['Certification Number'] = [item.cgc_cert];
+  const certNumber = item.psa_cert || item.cgc_cert;
+  if (certNumber) {
+    aspects['Certification Number'] = [certNumber];
   }
   
   // Comic-specific aspects
