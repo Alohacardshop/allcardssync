@@ -1,57 +1,38 @@
 
 
-## Problem Analysis
+## Problem
 
-The inspector panel's tabbed layout is the root cause. Burying eBay controls in a separate tab means:
-- Users must click to a different tab just to toggle one switch
-- Errors in that tab push content around in a narrow panel
-- The switch keeps "disappearing" because it's hidden behind a tab click
+The eBay Switch is being clipped/hidden in the narrow inspector panel. The `flex justify-between` layout breaks when:
+1. The "Error" badge takes space between the label and switch
+2. The long error text below further disrupts the layout
+3. The panel is too narrow for all three elements on one line
 
-The fix isn't more CSS tweaks on the eBay tab. It's restructuring what goes where.
+## Solution: Rebuild Marketplace section with guaranteed layout
 
-## Proposed Changes
+### Changes to `OverviewTab.tsx` — Marketplace section (lines 239-293)
 
-### 1. Move marketplace toggles into the Overview tab
+Replace the current flex-based marketplace rows with a **card-based layout** using CSS Grid with fixed column widths, so the switch can never be pushed off-screen:
 
-Put both Shopify sync status and eBay toggle directly in the Overview tab under a new "Marketplace" section. This makes the eBay switch always visible when inspecting an item -- no tab switching required.
-
-The new section in `OverviewTab.tsx` will show:
-- **Shopify row**: status badge + "Resync" button (inline)
-- **eBay row**: status badge + Switch toggle (inline) + compact error (if any)
-
-### 2. Merge Shopify + eBay tabs into a single "Sync" tab
-
-Replace the separate Shopify and eBay tabs with one combined "Sync" tab for detailed sync information (IDs, timestamps, error logs). This is the "deep dive" view, while the Overview tab has the quick-action controls.
-
-Changes to `InspectorPanel.tsx`:
-- Remove the "eBay" tab trigger
-- Rename "Shopify" tab to "Sync"
-- Render both ShopifyTab and EbayTab details inside the Sync tab content
-
-### 3. Add marketplace section to OverviewTab
-
-New section in `OverviewTab.tsx` between "Inventory" and the sync indicator:
-
-```text
-┌─ Marketplace ────────────────────────┐
-│ Shopify   [Synced]        [Resync ↻] │
-│ eBay      [Error]         [═══ ON ]  │
-│   ⚠ "Failed to create..." (tooltip)  │
+**Each marketplace row becomes a small card:**
+```
+┌──────────────────────────────────────┐
+│ Shopify  [Synced]         [Resync ↻] │
+├──────────────────────────────────────┤
+│ eBay     [⚠ Error ⓘ]     [═══ ON ]  │
 └──────────────────────────────────────┘
 ```
 
-### 4. Simplify tab bar
+Key changes:
+1. **Use `grid grid-cols-[1fr_auto_auto]`** instead of `flex justify-between` — this guarantees the switch always gets its space on the right regardless of content width
+2. **Merge error into the badge itself** — instead of a separate error line below (which displaces content), show an "Error" badge with a tooltip icon. No separate error block at all. Hover the badge to see the full error message.
+3. **Add `min-h-[40px]` to each row** so they're always tall enough to contain the switch
+4. **Wrap the section in a bordered container** (`border rounded-lg p-3`) so it's visually distinct
 
-Go from 5 tabs → 4 tabs:
-- Overview (now includes marketplace controls)
-- Sync (combined Shopify + eBay details)
-- Printing
-- History
+### Error display strategy
+- When `ebayStatus === 'error'`: Show `<Badge variant="destructive">Error <AlertCircle /></Badge>` — the entire badge is a tooltip trigger showing the full error on hover
+- No separate error text block below the row — this eliminates the layout displacement entirely
+- The error details remain available in the "Sync" tab for deep-dive
 
 ### Files to change
-
-- `src/features/inventory/components/inspector/tabs/OverviewTab.tsx` -- add Marketplace section with eBay switch and Shopify resync
-- `src/features/inventory/components/inspector/InspectorPanel.tsx` -- merge Shopify+eBay tabs, pass onResync/isResyncing to OverviewTab
-- `src/features/inventory/components/inspector/tabs/ShopifyTab.tsx` -- add eBay details below existing Shopify details (combined "Sync" tab)
-- `src/features/inventory/components/inspector/tabs/EbayTab.tsx` -- keep as-is for the detailed view, but also export a compact `EbayQuickToggle` component for use in OverviewTab
+- `src/features/inventory/components/inspector/tabs/OverviewTab.tsx` — rebuild marketplace section with grid layout and inline error tooltip badge
 
