@@ -256,14 +256,14 @@ export function determineFrontImageUrl(intakeItem: any): string {
     if (sorted[0]?.ImageURL) return sorted[0].ImageURL
   }
 
-  // 2. Comics without psa_snapshot: PSA pages show back first, front second
+  // 2. Comics without psa_snapshot: first image is the front cover
   const isComic = intakeItem.main_category === 'comics' ||
                   intakeItem.catalog_snapshot?.type === 'graded_comic' ||
                   intakeItem.catalog_snapshot?.type === 'psa_comic'
   
   const imageUrls = intakeItem.image_urls || []
-  if (isComic && imageUrls.length === 2) {
-    return imageUrls[1] // Second image is the front for comics
+  if (isComic && imageUrls.length >= 1) {
+    return imageUrls[0] // First image is the front for comics
   }
 
   // 3. Default: first image_url
