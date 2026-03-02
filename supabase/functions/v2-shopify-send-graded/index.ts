@@ -354,8 +354,8 @@ Deno.serve(async (req) => {
           taxable: true,
           barcode: generateBarcodeForGradedItem(item, intakeItem),
           inventory_policy: 'deny',
-          weight: intakeItem.product_weight || 3,
-          weight_unit: 'oz'
+          weight: isComic ? 1.5 : (intakeItem.product_weight || 3),
+          weight_unit: isComic ? 'lb' : 'oz'
         }],
         // FRONT-ONLY IMAGE: Send only the front image to Shopify
         // Customers can look up the cert number to see back image if needed
@@ -410,8 +410,8 @@ Deno.serve(async (req) => {
             cost: item.cost ? item.cost.toString() : (intakeItem.cost ? intakeItem.cost.toString() : undefined),
             sku: item.sku,
             barcode: generateBarcodeForGradedItem(item, intakeItem),
-            weight: intakeItem.product_weight || 3,
-            weight_unit: 'oz'
+            weight: isComic ? 1.5 : (intakeItem.product_weight || 3),
+            weight_unit: isComic ? 'lb' : 'oz'
           }
         })
       })
