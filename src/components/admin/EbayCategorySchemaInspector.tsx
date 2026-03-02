@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Accordion,
@@ -22,7 +21,7 @@ import {
 } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Loader2, Search, CheckCircle, AlertCircle, Info } from 'lucide-react';
+import { Loader2, Search, CheckCircle, AlertCircle, Info, FolderTree, Leaf, ArrowRight } from 'lucide-react';
 import { EbayCategorySelect } from './EbayCategorySelect';
 
 interface ConditionInfo {
@@ -52,6 +51,23 @@ interface SchemaResult {
   };
 }
 
+interface SubtreeCategory {
+  categoryId: string;
+  categoryName: string;
+  isLeaf: boolean;
+  childCount: number;
+  parentId: string | null;
+}
+
+interface SubtreeResult {
+  treeId: string;
+  marketplace: string;
+  rootCategoryId: string;
+  categories: SubtreeCategory[];
+  totalCategories: number;
+  leafCategories: number;
+}
+
 interface Props {
   storeKey?: string;
 }
@@ -59,8 +75,12 @@ interface Props {
 export function EbayCategorySchemaInspector({ storeKey }: Props) {
   const [categoryId, setCategoryId] = useState('');
   const [loading, setLoading] = useState(false);
+  const [subtreeLoading, setSubtreeLoading] = useState(false);
   const [schema, setSchema] = useState<SchemaResult | null>(null);
+  const [subtree, setSubtree] = useState<SubtreeResult | null>(null);
+  const [subtreeError, setSubtreeError] = useState<string | null>(null);
   const [aspectFilter, setAspectFilter] = useState('');
+  const [subtreeFilter, setSubtreeFilter] = useState('');
 
   const fetchSchema = async () => {
     if (!categoryId.trim()) {
@@ -73,10 +93,7 @@ export function EbayCategorySchemaInspector({ storeKey }: Props) {
 
     try {
       const { data, error } = await supabase.functions.invoke('ebay-category-schema', {
-        body: {
-          category_id: categoryId.trim(),
-          store_key: storeKey,
-        },
+        body: { category_id: categoryId.trim(), store_key: storeKey },
       });
 
       if (error) throw error;
@@ -91,8 +108,48 @@ export function EbayCategorySchemaInspector({ storeKey }: Props) {
     }
   };
 
+  const fetchSubtree = async () => {
+    if (!categoryId.trim()) {
+      toast.error('Enter a category ID');
+      return;
+    }
+
+    setSubtreeLoading(true);
+    setSubtree(null);
+    setSubtreeError(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('ebay-category-schema', {
+        body: { category_id: categoryId.trim(), store_key: storeKey, action: 'subtree' },
+      });
+
+      if (error) throw error;
+      if (!data?.success) {
+        if (data?.isInvalidCategory) {
+          setSubtreeError(`Category ${categoryId} does NOT exist in eBay's live category tree (error 62005). This ID is invalid.`);
+        } else {
+          setSubtreeError(data?.error || 'Unknown error');
+        }
+        return;
+      }
+
+      setSubtree(data);
+      toast.success(`Found ${data.totalCategories} categories (${data.leafCategories} leaves)`);
+    } catch (err: any) {
+      setSubtreeError(err.message);
+      toast.error('Failed to fetch subtree: ' + err.message);
+    } finally {
+      setSubtreeLoading(false);
+    }
+  };
+
   const handleCategorySelect = (id: string) => {
     setCategoryId(id);
+  };
+
+  const handleLeafClick = (cat: SubtreeCategory) => {
+    setCategoryId(cat.categoryId);
+    toast.info(`Selected category ${cat.categoryId} — "${cat.categoryName}". Click Inspect to view schema.`);
   };
 
   const filteredRequired = schema?.requiredAspects.filter(a =>
@@ -101,6 +158,12 @@ export function EbayCategorySchemaInspector({ storeKey }: Props) {
 
   const filteredOptional = schema?.optionalAspects.filter(a =>
     !aspectFilter || a.name.toLowerCase().includes(aspectFilter.toLowerCase())
+  ) || [];
+
+  const filteredSubtree = subtree?.categories.filter(c =>
+    !subtreeFilter ||
+    c.categoryName.toLowerCase().includes(subtreeFilter.toLowerCase()) ||
+    c.categoryId.includes(subtreeFilter)
   ) || [];
 
   return (
@@ -112,7 +175,7 @@ export function EbayCategorySchemaInspector({ storeKey }: Props) {
             Category Schema Inspector
           </CardTitle>
           <CardDescription>
-            Look up valid conditions and aspects for any eBay category. Results are cached for 24 hours.
+            Look up valid conditions and aspects for any eBay category, or browse the category tree to discover leaf IDs.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -136,15 +199,16 @@ export function EbayCategorySchemaInspector({ storeKey }: Props) {
             </div>
             <Button onClick={fetchSchema} disabled={loading || !categoryId.trim()}>
               {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Fetching...
-                </>
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Fetching...</>
               ) : (
-                <>
-                  <Search className="h-4 w-4 mr-2" />
-                  Inspect
-                </>
+                <><Search className="h-4 w-4 mr-2" />Inspect</>
+              )}
+            </Button>
+            <Button variant="outline" onClick={fetchSubtree} disabled={subtreeLoading || !categoryId.trim()}>
+              {subtreeLoading ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Loading...</>
+              ) : (
+                <><FolderTree className="h-4 w-4 mr-2" />Browse Subtree</>
               )}
             </Button>
           </div>
@@ -156,6 +220,100 @@ export function EbayCategorySchemaInspector({ storeKey }: Props) {
           )}
         </CardContent>
       </Card>
+
+      {/* Subtree Error (invalid category) */}
+      {subtreeError && (
+        <Card className="border-destructive">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
+              <div>
+                <p className="font-medium text-destructive">Invalid Category</p>
+                <p className="text-sm text-muted-foreground mt-1">{subtreeError}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Subtree Browser */}
+      {subtree && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <FolderTree className="h-5 w-5 text-primary" />
+                Subtree: Category {subtree.rootCategoryId}
+                <Badge variant="outline" className="font-mono text-xs">{subtree.marketplace}</Badge>
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">{subtree.totalCategories} total</Badge>
+                <Badge className="bg-primary/10 text-primary">{subtree.leafCategories} leaves</Badge>
+              </div>
+            </div>
+            <Input
+              className="mt-2 w-80"
+              placeholder="Filter by name or ID..."
+              value={subtreeFilter}
+              onChange={(e) => setSubtreeFilter(e.target.value)}
+            />
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="max-h-[500px]">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-28">ID</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead className="w-24">Type</TableHead>
+                    <TableHead className="w-28">Children</TableHead>
+                    <TableHead className="w-20"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredSubtree.map((cat) => (
+                    <TableRow key={cat.categoryId} className={cat.isLeaf ? 'bg-primary/5' : ''}>
+                      <TableCell>
+                        <Badge variant="secondary" className="font-mono">{cat.categoryId}</Badge>
+                      </TableCell>
+                      <TableCell className="font-medium">{cat.categoryName}</TableCell>
+                      <TableCell>
+                        {cat.isLeaf ? (
+                          <Badge className="bg-primary/10 text-primary text-xs">
+                            <Leaf className="h-3 w-3 mr-1" />Leaf
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs">Parent</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">{cat.childCount}</TableCell>
+                      <TableCell>
+                        {cat.isLeaf && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleLeafClick(cat)}
+                            className="h-7 text-xs"
+                          >
+                            <ArrowRight className="h-3 w-3 mr-1" />Use
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredSubtree.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-4">
+                        {subtreeFilter ? 'No matching categories' : 'No categories found'}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
 
       {schema && (
         <>
@@ -214,9 +372,7 @@ export function EbayCategorySchemaInspector({ storeKey }: Props) {
                   {schema.conditions.map((c) => (
                     <TableRow key={c.conditionId}>
                       <TableCell>
-                        <Badge variant="secondary" className="font-mono">
-                          {c.conditionId}
-                        </Badge>
+                        <Badge variant="secondary" className="font-mono">{c.conditionId}</Badge>
                       </TableCell>
                       <TableCell>{c.conditionDescription}</TableCell>
                     </TableRow>
@@ -244,7 +400,6 @@ export function EbayCategorySchemaInspector({ storeKey }: Props) {
             </CardHeader>
             <CardContent>
               <Accordion type="multiple" defaultValue={['required']}>
-                {/* Required Aspects */}
                 <AccordionItem value="required">
                   <AccordionTrigger className="hover:no-underline">
                     <div className="flex items-center gap-2">
@@ -277,14 +432,10 @@ export function EbayCategorySchemaInspector({ storeKey }: Props) {
                                 {a.allowedValues.length > 0 ? (
                                   <div className="flex flex-wrap gap-1 max-w-md">
                                     {a.allowedValues.slice(0, 8).map((v) => (
-                                      <Badge key={v} variant="secondary" className="text-xs">
-                                        {v}
-                                      </Badge>
+                                      <Badge key={v} variant="secondary" className="text-xs">{v}</Badge>
                                     ))}
                                     {a.allowedValues.length > 8 && (
-                                      <Badge variant="outline" className="text-xs">
-                                        +{a.allowedValues.length - 8} more
-                                      </Badge>
+                                      <Badge variant="outline" className="text-xs">+{a.allowedValues.length - 8} more</Badge>
                                     )}
                                   </div>
                                 ) : (
@@ -306,7 +457,6 @@ export function EbayCategorySchemaInspector({ storeKey }: Props) {
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* Optional Aspects */}
                 <AccordionItem value="optional">
                   <AccordionTrigger className="hover:no-underline">
                     <div className="flex items-center gap-2">
@@ -339,14 +489,10 @@ export function EbayCategorySchemaInspector({ storeKey }: Props) {
                                 {a.allowedValues.length > 0 ? (
                                   <div className="flex flex-wrap gap-1 max-w-md">
                                     {a.allowedValues.slice(0, 8).map((v) => (
-                                      <Badge key={v} variant="secondary" className="text-xs">
-                                        {v}
-                                      </Badge>
+                                      <Badge key={v} variant="secondary" className="text-xs">{v}</Badge>
                                     ))}
                                     {a.allowedValues.length > 8 && (
-                                      <Badge variant="outline" className="text-xs">
-                                        +{a.allowedValues.length - 8} more
-                                      </Badge>
+                                      <Badge variant="outline" className="text-xs">+{a.allowedValues.length - 8} more</Badge>
                                     )}
                                   </div>
                                 ) : (

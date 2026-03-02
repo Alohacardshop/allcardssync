@@ -179,7 +179,19 @@ async function fetchConditions(
     return []
   }
 
-  const data = await response.json()
+  const text = await response.text()
+  if (!text || !text.trim()) {
+    console.warn(`[CategorySchema] Empty response body for conditions ${categoryId}`)
+    return []
+  }
+
+  let data: any
+  try {
+    data = JSON.parse(text)
+  } catch (e) {
+    console.warn(`[CategorySchema] Malformed JSON for conditions ${categoryId}: ${e}`)
+    return []
+  }
   const condMap = new Map<string, EbayConditionInfo>()
 
   for (const policy of data.itemConditionPolicies || []) {
@@ -218,7 +230,19 @@ async function fetchAspects(
     return []
   }
 
-  const data = await response.json()
+  const text = await response.text()
+  if (!text || !text.trim()) {
+    console.warn(`[CategorySchema] Empty response body for aspects ${categoryId}`)
+    return []
+  }
+
+  let data: any
+  try {
+    data = JSON.parse(text)
+  } catch (e) {
+    console.warn(`[CategorySchema] Malformed JSON for aspects ${categoryId}: ${e}`)
+    return []
+  }
   const aspects: EbayAspectConstraint[] = []
 
   for (const aspect of data.aspects || []) {
