@@ -347,7 +347,12 @@ Deno.serve(async (req) => {
           weight_unit: 'oz'
         }],
         images: (intakeItem.image_urls && Array.isArray(intakeItem.image_urls) && intakeItem.image_urls.length > 0)
-          ? [...intakeItem.image_urls].reverse().map((url: string) => ({ src: url, alt: title }))
+          // Comics: images already stored front-first after intake normalization — don't reverse
+          // Cards (PSA): images stored back-first from PSA API — reverse to put front first
+          ? (isComic 
+              ? intakeItem.image_urls.map((url: string) => ({ src: url, alt: title }))
+              : [...intakeItem.image_urls].reverse().map((url: string) => ({ src: url, alt: title }))
+            )
           : imageUrl ? [{ src: imageUrl, alt: title }] : []
       }
     }
