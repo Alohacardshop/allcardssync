@@ -36,6 +36,11 @@ export function useEbayListing() {
           }, { onConflict: 'inventory_item_id' });
 
         if (queueError) throw queueError;
+
+        // Immediately trigger the processor (don't await — fire and forget)
+        supabase.functions.invoke('ebay-sync-processor', {
+          body: { batch_size: 1 }
+        }).catch(() => {}) // Silent fail — cron will retry
       } else {
         // Remove any pending queue entries
         await supabase
