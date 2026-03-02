@@ -486,7 +486,7 @@ export type Database = {
         Row: {
           aspects_mapping: Json | null
           auto_accept_price: number | null
-          auto_decline_price: number | null
+          auto_decline_percent: number | null
           best_offer_enabled: boolean | null
           category_id: string
           category_name: string | null
@@ -514,7 +514,7 @@ export type Database = {
         Insert: {
           aspects_mapping?: Json | null
           auto_accept_price?: number | null
-          auto_decline_price?: number | null
+          auto_decline_percent?: number | null
           best_offer_enabled?: boolean | null
           category_id: string
           category_name?: string | null
@@ -542,7 +542,7 @@ export type Database = {
         Update: {
           aspects_mapping?: Json | null
           auto_accept_price?: number | null
-          auto_decline_price?: number | null
+          auto_decline_percent?: number | null
           best_offer_enabled?: boolean | null
           category_id?: string
           category_name?: string | null

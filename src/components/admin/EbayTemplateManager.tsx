@@ -36,7 +36,7 @@ interface ListingTemplate {
   price_markup_percent: number | null;
   best_offer_enabled: boolean;
   auto_accept_price: number | null;
-  auto_decline_price: number | null;
+  auto_decline_percent: number | null;
   tag_match: string[];
   is_default: boolean;
   is_active: boolean;
@@ -220,7 +220,7 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
         price_markup_percent: editingTemplate.price_markup_percent ?? null,
         best_offer_enabled: editingTemplate.best_offer_enabled ?? false,
         auto_accept_price: editingTemplate.best_offer_enabled ? (editingTemplate.auto_accept_price ?? null) : null,
-        auto_decline_price: editingTemplate.best_offer_enabled ? (editingTemplate.auto_decline_price ?? null) : null,
+        auto_decline_percent: editingTemplate.best_offer_enabled ? (editingTemplate.auto_decline_percent ?? null) : null,
         tag_match: editingTemplate.tag_match || [],
         is_default: editingTemplate.is_default ?? false,
         is_active: editingTemplate.is_active ?? true,
@@ -297,7 +297,7 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
       price_markup_percent: null,
       best_offer_enabled: false,
       auto_accept_price: null,
-      auto_decline_price: null,
+      auto_decline_percent: null,
       tag_match: [],
     });
     setSelectedCategoryName('');
@@ -415,7 +415,7 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
                       {template.best_offer_enabled && (
                         <div className="mt-1">
                           <Badge variant="outline" className="text-[10px]">Best Offer
-                            {template.auto_decline_price != null && ` ≥$${template.auto_decline_price}`}
+                            {template.auto_decline_percent != null && ` ≥${template.auto_decline_percent}%`}
                           </Badge>
                         </div>
                       )}
@@ -722,17 +722,18 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
                       <p className="text-[10px] text-muted-foreground">Offers ≥ this amount are automatically accepted</p>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Auto-Decline below ($)</Label>
+                      <Label className="text-xs">Auto-Decline below (% of price)</Label>
                       <Input
                         type="number"
                         min="0"
-                        step="0.01"
-                        value={editingTemplate?.auto_decline_price ?? ''}
-                        onChange={(e) => setEditingTemplate(prev => ({ ...prev, auto_decline_price: e.target.value ? parseFloat(e.target.value) : null }))}
-                        placeholder="e.g. 100.00"
+                        max="100"
+                        step="1"
+                        value={editingTemplate?.auto_decline_percent ?? ''}
+                        onChange={(e) => setEditingTemplate(prev => ({ ...prev, auto_decline_percent: e.target.value ? parseFloat(e.target.value) : null }))}
+                        placeholder="e.g. 80"
                         className="w-full"
                       />
-                      <p className="text-[10px] text-muted-foreground">Offers below this amount are automatically declined</p>
+                      <p className="text-[10px] text-muted-foreground">Offers below this % of listing price are automatically declined</p>
                     </div>
                   </div>
                 )}

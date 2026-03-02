@@ -600,7 +600,7 @@ async function processCreate(
           bestOfferTerms: {
             bestOfferEnabled: true,
             ...(template.auto_accept_price != null ? { autoAcceptPrice: { value: template.auto_accept_price.toFixed(2), currency: 'USD' } } : {}),
-            ...(template.auto_decline_price != null ? { autoDeclinePrice: { value: template.auto_decline_price.toFixed(2), currency: 'USD' } } : {}),
+            ...(template.auto_decline_percent != null ? { autoDeclinePrice: { value: (finalPrice * template.auto_decline_percent / 100).toFixed(2), currency: 'USD' } } : {}),
           },
         } : {}),
       },
@@ -637,7 +637,7 @@ async function processCreate(
           bestOfferTerms: {
             bestOfferEnabled: true,
             ...(template.auto_accept_price != null ? { autoAcceptPrice: { value: template.auto_accept_price.toFixed(2), currency: 'USD' } } : {}),
-            ...(template.auto_decline_price != null ? { autoDeclinePrice: { value: template.auto_decline_price.toFixed(2), currency: 'USD' } } : {}),
+            ...(template.auto_decline_percent != null ? { autoDeclinePrice: { value: (finalPrice * template.auto_decline_percent / 100).toFixed(2), currency: 'USD' } } : {}),
           },
         } : {}),
       },
@@ -880,7 +880,7 @@ async function processUpdate(
           bestOfferTerms: {
             bestOfferEnabled: true,
             ...(template.auto_accept_price != null ? { autoAcceptPrice: { value: template.auto_accept_price.toFixed(2), currency: 'USD' } } : {}),
-            ...(template.auto_decline_price != null ? { autoDeclinePrice: { value: template.auto_decline_price.toFixed(2), currency: 'USD' } } : {}),
+            ...(template.auto_decline_percent != null ? { autoDeclinePrice: { value: (finalPrice * template.auto_decline_percent / 100).toFixed(2), currency: 'USD' } } : {}),
           },
         } : {}),
       },
