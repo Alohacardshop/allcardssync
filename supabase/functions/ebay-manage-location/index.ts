@@ -33,27 +33,70 @@ Deno.serve(async (req) => {
     // Service role client for DB access
     const supabase = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
-    // Get store config
-    const { data: config, error: configError } = await supabase
+    // Parse query params
+    const url = new URL(req.url)
+    const storeKey = url.searchParams.get('store_key')
+    const action = url.searchParams.get('action') || 'verify'
+
+    // Get store config — filter by store_key if provided
+    let configQuery = supabase
       .from('ebay_store_config')
       .select('*')
       .eq('is_active', true)
-      .single()
 
-    if (configError || !config) {
-      throw new Error('No active eBay store config found')
+    if (storeKey) {
+      configQuery = configQuery.eq('store_key', storeKey)
     }
 
+    const { data: configs, error: configError } = await configQuery
+
+    if (configError || !configs || configs.length === 0) {
+      throw new Error(storeKey
+        ? `No active eBay store config found for store_key "${storeKey}"`
+        : 'No active eBay store config found')
+    }
+
+    // Use first matching config
+    const config = configs[0]
     const locationKey = config.location_key
-    if (!locationKey) {
-      throw new Error('No location_key configured in ebay_store_config')
-    }
-
     const environment = (config.environment || 'production') as 'sandbox' | 'production'
     const accessToken = await getValidAccessToken(supabase, config.store_key, environment)
 
     if (req.method === 'GET') {
-      // Verify configured location_key exists on eBay
+      // action=list → return ALL registered merchant locations
+      if (action === 'list') {
+        const response = await ebayApiRequest(
+          accessToken, environment, 'GET',
+          '/sell/inventory/v1/location?limit=100'
+        )
+
+        if (response.ok) {
+          const body = await response.json()
+          return new Response(JSON.stringify({
+            success: true,
+            store_key: config.store_key,
+            locations: body.locations || [],
+            total: body.total ?? (body.locations?.length ?? 0),
+          }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        }
+
+        const errorText = await response.text()
+        let errorBody: any = {}
+        try { errorBody = JSON.parse(errorText) } catch {}
+
+        return new Response(JSON.stringify({
+          success: false,
+          store_key: config.store_key,
+          status: response.status,
+          error: errorBody,
+        }), { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+
+      // action=verify (default) → check specific location_key
+      if (!locationKey) {
+        throw new Error('No location_key configured in ebay_store_config')
+      }
+
       const response = await ebayApiRequest(
         accessToken, environment, 'GET',
         `/sell/inventory/v1/location/${encodeURIComponent(locationKey)}`
@@ -81,6 +124,10 @@ Deno.serve(async (req) => {
     }
 
     if (req.method === 'POST') {
+      if (!locationKey) {
+        throw new Error('No location_key configured in ebay_store_config')
+      }
+
       const body = await req.json()
       const { addressLine1, addressLine2, city, stateOrProvince, postalCode, country,
               name, locationTypes, merchantLocationStatus } = body
