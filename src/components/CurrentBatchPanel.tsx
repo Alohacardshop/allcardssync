@@ -700,6 +700,16 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                      (editingItem.catalog_snapshot?.image_url) || 
                      (editingItem.catalog_snapshot?.imageUrl) || 
                      (editingItem.catalog_snapshot?.image_urls?.[0]) || '',
+            imageUrls: (() => {
+              const urls = Array.isArray(editingItem.image_urls) ? editingItem.image_urls : [];
+              if (urls.length === 0) {
+                const fallback = editingItem.catalog_snapshot?.photo_url || 
+                                 editingItem.catalog_snapshot?.image_url || 
+                                 editingItem.catalog_snapshot?.imageUrl || '';
+                return fallback ? [fallback] : [];
+              }
+              return urls;
+            })(),
             mainCategory: editingItem.main_category,
             subCategory: editingItem.sub_category
           }}
@@ -728,7 +738,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                   cost: values.cost ? parseFloat(values.cost) : null,
                   sku: values.sku,
                   quantity: values.quantity,
-                  image_urls: values.imageUrl ? [values.imageUrl] : null,
+                  image_urls: values.imageUrls?.filter(Boolean).length ? values.imageUrls.filter(Boolean) : (values.imageUrl ? [values.imageUrl] : null),
                   main_category: values.mainCategory,
                   sub_category: values.subCategory,
                   // Update catalog_snapshot with new values to preserve TCGPlayer data
@@ -741,8 +751,8 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                     foil: values.variant?.toLowerCase().includes('foil') || editingItem.catalog_snapshot.foil,
                     entered_price: values.price ? parseFloat(values.price) : editingItem.catalog_snapshot.entered_price,
                     calculated_cost: values.cost ? parseFloat(values.cost) : editingItem.catalog_snapshot.calculated_cost,
-                    photo_url: values.imageUrl || editingItem.catalog_snapshot.photo_url,
-                    image_urls: values.imageUrl ? [values.imageUrl] : editingItem.catalog_snapshot.image_urls
+                    photo_url: values.imageUrls?.[0] || values.imageUrl || editingItem.catalog_snapshot.photo_url,
+                    image_urls: values.imageUrls?.filter(Boolean).length ? values.imageUrls.filter(Boolean) : (values.imageUrl ? [values.imageUrl] : editingItem.catalog_snapshot.image_urls)
                   } : null,
                   updated_at: new Date().toISOString()
                 })
