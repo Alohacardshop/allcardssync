@@ -2,13 +2,22 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { PSACertificateData, PSA_GRADE_COLORS } from "@/types/psa";
-import { ExternalLink, Shield, Calendar, Trophy, User, Hash, Tag, Globe, BookOpen, FileText } from "lucide-react";
+import { ExternalLink, Shield } from "lucide-react";
 import { formatGrade } from "@/lib/labelData";
 import noImagePlaceholder from "@/assets/no-image-available.png";
 
 interface PSACertificateDisplayProps {
   psaData: PSACertificateData;
   className?: string;
+}
+
+function InfoRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex border-b border-border/50 py-2.5">
+      <span className="text-muted-foreground w-40 shrink-0 text-sm">{label}</span>
+      <span className={`font-semibold text-sm ${mono ? 'font-mono' : ''}`}>{value}</span>
+    </div>
+  );
 }
 
 export function PSACertificateDisplay({ psaData, className }: PSACertificateDisplayProps) {
@@ -30,13 +39,10 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
     );
   }
 
-  const gradeColor = PSA_GRADE_COLORS[psaData.grade || ''] || 'hsl(var(--muted))';
-  
   const handleImageError = (index: number) => {
     setImageErrors(prev => ({ ...prev, [index]: true }));
   };
 
-  // Build image list
   const images: string[] = [];
   if (psaData.imageUrls && psaData.imageUrls.length > 0) {
     images.push(...psaData.imageUrls);
@@ -44,9 +50,13 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
     images.push(psaData.imageUrl);
   }
 
+  const gradeDisplay = psaData.gradeLabel 
+    ? psaData.gradeLabel.replace(/(\d+)\.0\b/g, '$1')
+    : psaData.grade ? `Grade ${formatGrade(psaData.grade)}` : null;
+
   return (
-    <Card className={`p-4 border-success bg-success/5 ${className || ''}`}>
-      <div className="space-y-3">
+    <Card className={`p-5 ${className || ''}`}>
+      <div className="space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -57,33 +67,6 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
             {psaData.source === 'database_cache' ? 'Cached' : 'Fresh'}
           </Badge>
         </div>
-
-        {/* Grade Badge */}
-        {psaData.grade && (
-          <div className="flex flex-col items-center gap-1">
-            <Badge 
-              style={{ 
-                backgroundColor: '#dc2626', 
-                color: 'white' 
-              }}
-              className="font-bold text-lg px-4 py-2"
-            >
-              <Trophy className="h-4 w-4 mr-2" />
-              {psaData.gradeLabel 
-                ? psaData.gradeLabel.replace(/(\d+)\.0\b/g, '$1')
-                : `Grade ${formatGrade(psaData.grade)}`}
-            </Badge>
-          </div>
-        )}
-
-        {/* Title / Card Name */}
-        {(psaData.subject || psaData.brandTitle) && (
-          <div className="text-center">
-            <h3 className="font-bold text-base">
-              {[psaData.brandTitle, psaData.subject, psaData.cardNumber && `#${psaData.cardNumber}`, psaData.year].filter(Boolean).join(' ')}
-            </h3>
-          </div>
-        )}
 
         {/* Images */}
         <div className={`flex justify-center ${images.length >= 2 ? 'gap-2' : ''}`}>
@@ -109,131 +92,36 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
           )}
         </div>
 
-        {/* Certificate Number */}
-        <div className="flex justify-center">
-          <div className="flex items-center gap-2">
-            <Hash className="h-4 w-4 text-muted-foreground" />
-            <span className="font-mono text-lg font-medium">{psaData.certNumber}</span>
+        {/* Item Information - Table Layout */}
+        <div>
+          <h3 className="font-semibold text-base mb-2 text-foreground">Item Information</h3>
+          <div className="flex flex-col">
+            <InfoRow label="Cert Number" value={psaData.certNumber} mono />
+            <InfoRow label="SKU / Barcode" value={psaData.certNumber} mono />
+            {gradeDisplay && <InfoRow label="Item Grade" value={gradeDisplay} />}
+            {psaData.subject && <InfoRow label="Name" value={psaData.subject} />}
+            {psaData.cardNumber && (
+              <InfoRow label={isComic ? "Volume Number" : "Card Number"} value={psaData.cardNumber} />
+            )}
+            {psaData.publicationDate && <InfoRow label="Publication Date" value={psaData.publicationDate} />}
+            {psaData.year && !psaData.publicationDate && <InfoRow label="Year" value={psaData.year} />}
+            {psaData.brandTitle && (
+              <InfoRow label={isComic ? "Publisher" : "Brand"} value={psaData.brandTitle} />
+            )}
+            {psaData.varietyPedigree && <InfoRow label="Variant" value={psaData.varietyPedigree} />}
+            {psaData.language && <InfoRow label="Language" value={psaData.language.toUpperCase()} />}
+            {psaData.country && <InfoRow label="Country" value={psaData.country.toUpperCase()} />}
+            {psaData.pageQuality && <InfoRow label="Page Quality" value={psaData.pageQuality.toUpperCase()} />}
+            {psaData.category && <InfoRow label="Category" value={psaData.category} />}
+            {psaData.gameSport && <InfoRow label="Game / Sport" value={psaData.gameSport} />}
           </div>
         </div>
 
-        {/* Card Details */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-          {psaData.subject && (
-            <div className="flex items-center gap-2">
-              <User className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <span className="text-muted-foreground">Name: </span>
-                <span className="font-medium">{psaData.subject}</span>
-              </div>
-            </div>
-          )}
-
-          {psaData.cardNumber && (
-            <div className="flex items-center gap-2">
-              <Hash className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <span className="text-muted-foreground">{isComic ? 'Volume #' : 'Card #'}: </span>
-                <span className="font-medium font-mono">{psaData.cardNumber}</span>
-              </div>
-            </div>
-          )}
-
-          {psaData.publicationDate && (
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <span className="text-muted-foreground">Publication Date: </span>
-                <span className="font-medium">{psaData.publicationDate}</span>
-              </div>
-            </div>
-          )}
-
-          {psaData.year && !psaData.publicationDate && (
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <span className="text-muted-foreground">Year: </span>
-                <span className="font-medium">{psaData.year}</span>
-              </div>
-            </div>
-          )}
-
-          {psaData.brandTitle && (
-            <div className="flex items-center gap-2">
-              <Tag className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <span className="text-muted-foreground">{isComic ? 'Publisher' : 'Brand'}: </span>
-                <span className="font-medium">{psaData.brandTitle}</span>
-              </div>
-            </div>
-          )}
-
-          {psaData.language && (
-            <div className="flex items-center gap-2">
-              <Globe className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <span className="text-muted-foreground">Language: </span>
-                <span className="font-medium uppercase">{psaData.language}</span>
-              </div>
-            </div>
-          )}
-
-          {psaData.country && (
-            <div className="flex items-center gap-2">
-              <Globe className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <span className="text-muted-foreground">Country: </span>
-                <span className="font-medium uppercase">{psaData.country}</span>
-              </div>
-            </div>
-          )}
-
-          {psaData.pageQuality && (
-            <div className="flex items-center gap-2">
-              <BookOpen className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <span className="text-muted-foreground">Page Quality: </span>
-                <span className="font-medium capitalize">{psaData.pageQuality}</span>
-              </div>
-            </div>
-          )}
-
-          {psaData.category && (
-            <div className="flex items-center gap-2">
-              <Tag className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <span className="text-muted-foreground">Category: </span>
-                <span className="font-medium">{psaData.category}</span>
-              </div>
-            </div>
-          )}
-
-          {psaData.gameSport && (
-            <div className="flex items-center gap-2">
-              <Trophy className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <span className="text-muted-foreground">Game: </span>
-                <span className="font-medium capitalize">{psaData.gameSport}</span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {psaData.varietyPedigree && (
-          <div className="text-sm text-center">
-            <span className="text-muted-foreground">Variety: </span>
-            <span className="font-medium">{psaData.varietyPedigree}</span>
-          </div>
-        )}
-
+        {/* Grader Notes */}
         {psaData.graderNotes && (
           <div className="text-sm p-2 rounded bg-muted/50">
-            <div className="flex items-center gap-1 text-muted-foreground mb-1">
-              <FileText className="h-3 w-3" />
-              <span className="font-medium">Grader Notes</span>
-            </div>
-            <p>{psaData.graderNotes}</p>
+            <span className="font-medium text-muted-foreground">Grader Notes: </span>
+            <span>{psaData.graderNotes}</span>
           </div>
         )}
 
