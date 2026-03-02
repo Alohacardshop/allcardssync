@@ -29,15 +29,19 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
-    );
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data, error: claimsError } = await supabase.auth.getClaims(token);
-    if (claimsError || !data?.claims) {
+    // User-scoped client for auth validation and reading intake_items
+    const supabaseUser = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY') ?? '', {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    // Service-role client for reading system_settings (bypasses RLS)
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+    const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
+    if (authError || !user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -54,7 +58,7 @@ Deno.serve(async (req) => {
     }
 
     // Get the intake item to find Shopify IDs
-    const { data: item, error: itemError } = await supabase
+    const { data: item, error: itemError } = await supabaseUser
       .from('intake_items')
       .select('shopify_product_id, shopify_variant_id, store_key')
       .eq('id', itemId)
@@ -77,18 +81,25 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get Shopify credentials
-    const { data: shopifyToken } = await supabase.rpc('get_decrypted_secret', {
-      secret_name: `SHOPIFY_${storeKey.toUpperCase()}_ACCESS_TOKEN`
-    });
+    // Get Shopify credentials from system_settings table
+    const storeUpper = storeKey.toUpperCase();
 
-    const { data: shopifyDomain } = await supabase
-      .from('shopify_stores')
-      .select('domain')
-      .eq('key', storeKey)
+    const { data: domainSetting } = await supabaseAdmin
+      .from('system_settings')
+      .select('key_value')
+      .eq('key_name', `SHOPIFY_${storeUpper}_STORE_DOMAIN`)
       .single();
 
-    if (!shopifyToken || !shopifyDomain) {
+    const { data: tokenSetting } = await supabaseAdmin
+      .from('system_settings')
+      .select('key_value')
+      .eq('key_name', `SHOPIFY_${storeUpper}_ACCESS_TOKEN`)
+      .single();
+
+    const domain = domainSetting?.key_value;
+    const shopifyToken = tokenSetting?.key_value;
+
+    if (!shopifyToken || !domain) {
       return new Response(JSON.stringify({ error: 'Shopify credentials not found' }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -124,7 +135,7 @@ Deno.serve(async (req) => {
 
     // Update product in Shopify
     const updateResponse = await fetch(
-      `https://${shopifyDomain.domain}/admin/api/2024-01/products/${productId}.json`,
+      `https://${domain}/admin/api/2024-07/products/${productId}.json`,
       {
         method: 'PUT',
         headers: {
@@ -144,7 +155,7 @@ Deno.serve(async (req) => {
     const updatedProduct = await updateResponse.json();
 
     // Update local database to track sync
-    await supabase
+    await supabaseAdmin
       .from('intake_items')
       .update({
         last_shopify_synced_at: new Date().toISOString(),
