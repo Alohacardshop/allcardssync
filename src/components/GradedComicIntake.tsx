@@ -43,6 +43,10 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
     issueNumber: "",
     publisher: "",
     year: "",
+    publicationDate: "",
+    language: "",
+    country: "",
+    pageQuality: "",
     certNumber: "",
     grade: "",
     price: "",
@@ -98,6 +102,10 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
       issueNumber: "",
       publisher: "",
       year: "",
+      publicationDate: "",
+      language: "",
+      country: "",
+      pageQuality: "",
       certNumber: "",
       grade: "",
       price: "",
@@ -163,6 +171,10 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
           issueNumber: psaCertData.issueNumber || psaCertData.cardNumber || "",
           publisher: psaCertData.brandTitle || "",
           year: psaCertData.year || "",
+          publicationDate: psaCertData.publicationDate || "",
+          language: psaCertData.language || "",
+          country: psaCertData.country || "",
+          pageQuality: psaCertData.pageQuality || "",
           grade: psaCertData.grade || "",
         }));
 
@@ -252,14 +264,18 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
             psa_cert: formData.certNumber,
             grading_company: 'PSA',
             type: 'psa_comic',
-            year: formData.year
+            year: formData.year,
+            publicationDate: formData.publicationDate,
+            language: formData.language,
+            country: formData.country,
+            pageQuality: formData.pageQuality,
           }
         : {
             ...cgcData,
             cgc_cert: formData.certNumber,
             grading_company: 'CGC',
             type: 'cgc_comic',
-            year: formData.year
+            year: formData.year,
           };
 
       const gradingCompanyUpper = gradingService.toUpperCase();
@@ -268,6 +284,9 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
       const variant = gradingService === 'psa' 
         ? (psaData?.varietyPedigree || '') 
         : (cgcData?.variety || '');
+
+      // Use publicationDate (e.g. "2018-06") if available, otherwise fall back to year
+      const yearValue = formData.publicationDate || formData.year || null;
 
       await addItem({
         store_key_in: assignedStore,
@@ -284,7 +303,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
         sku_in: formData.certNumber,
         main_category_in: formData.mainCategory,
         sub_category_in: 'graded_comics',
-        year_in: formData.year || null,
+        year_in: yearValue,
         grading_company_in: gradingCompanyUpper,
         catalog_snapshot_in: catalogSnapshot
       });
@@ -298,6 +317,10 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
         issueNumber: "",
         publisher: "",
         year: "",
+        publicationDate: "",
+        language: "",
+        country: "",
+        pageQuality: "",
         certNumber: "",
         grade: "",
         price: "",
@@ -458,12 +481,52 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
             </div>
 
             <div>
+              <Label htmlFor="publicationDate">Publication Date</Label>
+              <Input
+                id="publicationDate"
+                placeholder="e.g. 2018-06"
+                value={formData.publicationDate}
+                onChange={(e) => updateFormField('publicationDate', e.target.value)}
+              />
+            </div>
+
+            <div>
               <Label htmlFor="grade">Grade <span className="text-destructive">*</span></Label>
               <Input
                 id="grade"
-                placeholder="CGC Grade"
+                placeholder="Grade"
                 value={formData.grade}
                 onChange={(e) => updateFormField('grade', e.target.value)}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="pageQuality">Page Quality</Label>
+              <Input
+                id="pageQuality"
+                placeholder="e.g. WHITE"
+                value={formData.pageQuality}
+                onChange={(e) => updateFormField('pageQuality', e.target.value)}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="language">Language</Label>
+              <Input
+                id="language"
+                placeholder="e.g. ENG"
+                value={formData.language}
+                onChange={(e) => updateFormField('language', e.target.value)}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="country">Country</Label>
+              <Input
+                id="country"
+                placeholder="e.g. US"
+                value={formData.country}
+                onChange={(e) => updateFormField('country', e.target.value)}
               />
             </div>
 
