@@ -56,7 +56,7 @@ export const useAddIntakeItem = () => {
       if (params.sku_in && params.store_key_in) {
         let duplicateQuery = supabase
           .from('intake_items')
-          .select('id, quantity, sku, removed_from_batch_at, lot_id, subject, variant, catalog_snapshot, brand_title, year, grade')
+          .select('id, quantity, sku, removed_from_batch_at, lot_id, subject, variant, catalog_snapshot, brand_title, year, grade, grading_company')
           .eq('sku', params.sku_in)
           .eq('store_key', params.store_key_in)
           .is('deleted_at', null);
@@ -76,7 +76,8 @@ export const useAddIntakeItem = () => {
 
         if (existing) {
           // Graded items are 1-of-1 — never allow quantity increment
-          if (params.grading_company_in) {
+          // Check BOTH the incoming params AND the existing item's grading status
+          if (params.grading_company_in || existing.grading_company) {
             logger.logInfo('Duplicate graded item detected, skipping', { sku: params.sku_in });
             toast.warning(`Cert ${params.sku_in} already exists in the batch.`);
             return {
@@ -163,7 +164,7 @@ export const useAddIntakeItem = () => {
           // Query for the existing item - must match uniq_store_sku_location constraint
           let fallbackQuery = supabase
             .from('intake_items')
-            .select('id, quantity, sku, removed_from_batch_at, lot_id, subject, variant, catalog_snapshot, brand_title, year, grade')
+            .select('id, quantity, sku, removed_from_batch_at, lot_id, subject, variant, catalog_snapshot, brand_title, year, grade, grading_company')
             .eq('sku', params.sku_in)
             .eq('store_key', params.store_key_in)
             .is('deleted_at', null);
@@ -184,7 +185,8 @@ export const useAddIntakeItem = () => {
 
           if (existing) {
             // Graded items are 1-of-1 — never allow quantity increment
-            if (params.grading_company_in) {
+            // Check BOTH the incoming params AND the existing item's grading status
+            if (params.grading_company_in || existing.grading_company) {
               logger.logInfo('Duplicate graded item detected (race condition path), skipping', { sku: params.sku_in });
               toast.warning(`Cert ${params.sku_in} already exists in the batch.`);
               return {
