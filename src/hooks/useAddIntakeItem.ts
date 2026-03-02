@@ -125,6 +125,10 @@ export const useAddIntakeItem = () => {
 
           const activeLotId = Array.isArray(lotData) ? lotData[0]?.id : (lotData as any)?.id;
 
+          if (!activeLotId) {
+            throw new Error('Failed to get or create active lot');
+          }
+
           // Update existing item's quantity and move to current batch
           // Graded items are always 1-of-1 — never increment
           const isGraded = !!(params.grading_company_in && params.grading_company_in !== 'none') || !!(existing.grading_company && existing.grading_company !== 'none');
@@ -250,6 +254,10 @@ export const useAddIntakeItem = () => {
             }
 
             const activeLotId = Array.isArray(lotData) ? lotData[0]?.id : (lotData as any)?.id;
+
+            if (!activeLotId) {
+              throw new Error('Failed to get or create active lot');
+            }
 
             // Update existing item's quantity and move to current batch
             // Graded items are always 1-of-1 — never increment
