@@ -337,7 +337,7 @@ Deno.serve(async (req) => {
           sku: item.sku,
           price: item.price?.toString() || '0.00',
           cost: item.cost ? item.cost.toString() : (intakeItem.cost ? intakeItem.cost.toString() : undefined),
-          inventory_quantity: item.quantity || 1,
+          inventory_quantity: 1, // Graded = 1-of-1, always
           inventory_management: 'shopify',
           requires_shipping: true,
           taxable: true,
@@ -346,10 +346,9 @@ Deno.serve(async (req) => {
           weight: intakeItem.product_weight || 3,
           weight_unit: 'oz'
         }],
-        images: imageUrl ? [{
-          src: imageUrl,
-          alt: title
-        }] : []
+        images: (intakeItem.image_urls && Array.isArray(intakeItem.image_urls) && intakeItem.image_urls.length > 0)
+          ? [...intakeItem.image_urls].reverse().map((url: string) => ({ src: url, alt: title }))
+          : imageUrl ? [{ src: imageUrl, alt: title }] : []
       }
     }
 
@@ -431,7 +430,7 @@ Deno.serve(async (req) => {
       inventory_item_id: String(variant.inventory_item_id),
       location_id: locationId,
       action: 'initial_set',
-      quantity: item.quantity || 1,
+      quantity: 1, // Graded = 1-of-1, always
       request_id: requestId,
       store_key: storeKey,
       item_id: item.id,
