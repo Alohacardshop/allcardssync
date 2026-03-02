@@ -29,7 +29,7 @@ interface OverviewTabProps {
 }
 
 export const OverviewTab = React.memo(({ item, detailData, locationsMap, onFieldSave, onResync, isResyncing, isSaving }: OverviewTabProps) => {
-  const { toggleListOnEbay, isToggling } = useEbayListing();
+  const { toggleListOnEbay, isToggling, resyncToEbay, isResyncing: isEbayResyncing } = useEbayListing();
 
   const locationName = item.shopify_location_gid 
     ? locationsMap?.get(item.shopify_location_gid)?.location_name || 'Unknown'
@@ -262,7 +262,7 @@ export const OverviewTab = React.memo(({ item, detailData, locationsMap, onField
           </div>
 
           {/* eBay row */}
-          <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2 min-h-[40px] px-3 py-2">
+          <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-2 min-h-[40px] px-3 py-2">
             <span className="text-sm font-medium">eBay</span>
             <div className="flex items-center">
               {ebayStatus === 'error' && ebayError ? (
@@ -281,6 +281,22 @@ export const OverviewTab = React.memo(({ item, detailData, locationsMap, onField
                 getEbayBadge()
               )}
             </div>
+            {isListed && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => resyncToEbay(item.id)}
+                disabled={isEbayResyncing === item.id || isDeleted}
+                className="h-7 px-2 text-xs text-muted-foreground"
+              >
+                {isEbayResyncing === item.id ? (
+                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                )}
+                Resync
+              </Button>
+            )}
             <Switch
               checked={listOnEbay || false}
               onCheckedChange={handleEbayToggle}

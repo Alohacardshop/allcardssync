@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 export function useEbayListing() {
   const [isCreating, setIsCreating] = useState(false);
   const [isToggling, setIsToggling] = useState<string | null>(null);
+  const [isResyncing, setIsResyncing] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const toggleListOnEbay = async (itemId: string, currentValue: boolean) => {
@@ -165,13 +166,53 @@ export function useEbayListing() {
     }
   };
 
+  const resyncToEbay = async (itemId: string) => {
+    setIsResyncing(itemId);
+    try {
+      const { error: queueError } = await supabase
+        .from('ebay_sync_queue')
+        .upsert({
+          inventory_item_id: itemId,
+          action: 'update',
+          status: 'queued',
+          queue_position: 1,
+          retry_count: 0,
+          error_message: null,
+        }, { onConflict: 'inventory_item_id' });
+
+      if (queueError) throw queueError;
+
+      await supabase
+        .from('intake_items')
+        .update({
+          ebay_sync_status: 'queued',
+          ebay_sync_error: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', itemId);
+
+      supabase.functions.invoke('ebay-sync-processor', {
+        body: { batch_size: 1 }
+      }).catch(() => {});
+
+      toast.success('Queued for eBay resync');
+      queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
+    } catch (error: any) {
+      toast.error('Failed to queue eBay resync: ' + error.message);
+    } finally {
+      setIsResyncing(null);
+    }
+  };
+
   return {
     isCreating,
     isToggling,
+    isResyncing,
     toggleListOnEbay,
     createEbayListing,
     bulkToggleEbay,
     queueForEbaySync,
-    updateEbayInventory
+    updateEbayInventory,
+    resyncToEbay
   };
 }
