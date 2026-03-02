@@ -49,24 +49,25 @@
    onApplyView,
    onViewChange,
  }: SavedViewsDropdownProps) {
-   const { 
-     views, 
-     isLoading, 
-     createView, 
-     deleteView, 
-     setDefaultView,
-     initializeSystemViews,
-   } = useInventoryViews();
+  const { 
+    views, 
+    isLoading, 
+    createView, 
+    deleteView, 
+    setDefaultView,
+    initializeSystemViews,
+    isAuthenticated,
+  } = useInventoryViews();
    
    const [showSaveDialog, setShowSaveDialog] = useState(false);
    const [newViewName, setNewViewName] = useState('');
    
-   // Initialize system views on first load if user has none
-   useEffect(() => {
-     if (!isLoading && views.length === 0) {
-       initializeSystemViews.mutate();
-     }
-   }, [isLoading, views.length]);
+    // Initialize system views on first load if user has none
+    useEffect(() => {
+      if (!isLoading && views.length === 0 && isAuthenticated) {
+        initializeSystemViews.mutate();
+      }
+    }, [isLoading, views.length, isAuthenticated]);
  
    const activeView = views.find(v => v.id === activeViewId);
    

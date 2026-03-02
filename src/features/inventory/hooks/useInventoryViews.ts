@@ -222,11 +222,12 @@
      defaultView,
      isLoading,
      createView,
-     updateView,
-     deleteView,
-     setDefaultView,
-     initializeSystemViews,
-   };
+    updateView,
+    deleteView,
+    setDefaultView,
+    initializeSystemViews,
+    isAuthenticated: !!userId,
+  };
  }
  
  /**
