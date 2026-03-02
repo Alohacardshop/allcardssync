@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Settings, Upload, Zap } from "lucide-react"
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Send, Upload, Zap, ChevronDown, Settings } from "lucide-react"
 import { BatchConfig } from "@/hooks/useBatchSendToShopify"
 import { supabase } from "@/integrations/supabase/client"
 import { useToast } from "@/hooks/use-toast"
@@ -132,11 +133,11 @@ export function BatchConfigDialog({
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Settings className="w-5 h-5" />
-            Batch Send Configuration
+            <Send className="w-5 h-5" />
+            Send to Inventory
           </DialogTitle>
           <DialogDescription>
-            Configure batch processing settings to optimize Shopify API usage and reliability.
+            Items will be added to inventory and automatically synced to Shopify.
           </DialogDescription>
         </DialogHeader>
         
@@ -146,90 +147,75 @@ export function BatchConfigDialog({
               <CardTitle className="text-sm">Processing Summary</CardTitle>
               <CardDescription>
                 {itemCount} items • {Math.ceil(itemCount / config.batchSize)} chunks • Estimated time: {estimateTime()}
+                {config.vendor && <> • Vendor: <span className="font-medium">{config.vendor}</span></>}
               </CardDescription>
             </CardHeader>
           </Card>
 
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="vendor">Vendor</Label>
-              <Select 
-                value={config.vendor || ''} 
-                onValueChange={(value) => setConfig({ ...config, vendor: value })}
-                disabled={loadingVendors || vendors.length === 0}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={loadingVendors ? "Loading vendors..." : "Select vendor"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {vendors.map((vendor) => (
-                    <SelectItem key={vendor.vendor_name} value={vendor.vendor_name}>
-                      {vendor.vendor_name} {vendor.is_default && "(default)"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Products will be tagged with this vendor in Shopify
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="batch-size">Batch Size</Label>
-              <Select 
-                value={config.batchSize.toString()} 
-                onValueChange={(value) => setConfig({ ...config, batchSize: parseInt(value) })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">1 item per chunk</SelectItem>
-                  <SelectItem value="5">5 items per chunk (recommended)</SelectItem>
-                  <SelectItem value="10">10 items per chunk</SelectItem>
-                  <SelectItem value="20">20 items per chunk</SelectItem>
-                  <SelectItem value="50">50 items per chunk</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Smaller batches are more reliable but take longer. Start with 5 items.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="delay">Delay Between Chunks</Label>
-              <Select 
-                value={config.delayBetweenChunks.toString()} 
-                onValueChange={(value) => setConfig({ ...config, delayBetweenChunks: parseInt(value) })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="500">0.5 seconds</SelectItem>
-                  <SelectItem value="1000">1 second (recommended)</SelectItem>
-                  <SelectItem value="2000">2 seconds</SelectItem>
-                  <SelectItem value="5000">5 seconds</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Longer delays reduce API rate limit issues but increase total time.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="fail-fast">Fail Fast Mode</Label>
+          <Collapsible>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="flex items-center gap-2 text-muted-foreground w-full justify-start px-0">
+                <Settings className="w-4 h-4" />
+                Advanced Settings
+                <ChevronDown className="w-4 h-4 ml-auto transition-transform [[data-state=open]>&]:rotate-180" />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-4 pt-2">
+              <div className="space-y-2">
+                <Label htmlFor="batch-size">Batch Size</Label>
+                <Select 
+                  value={config.batchSize.toString()} 
+                  onValueChange={(value) => setConfig({ ...config, batchSize: parseInt(value) })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1 item per chunk</SelectItem>
+                    <SelectItem value="5">5 items per chunk (recommended)</SelectItem>
+                    <SelectItem value="10">10 items per chunk</SelectItem>
+                    <SelectItem value="20">20 items per chunk</SelectItem>
+                    <SelectItem value="50">50 items per chunk</SelectItem>
+                  </SelectContent>
+                </Select>
                 <p className="text-xs text-muted-foreground">
-                  Stop processing if a chunk fails, or continue with remaining items
+                  Smaller batches are more reliable but take longer.
                 </p>
               </div>
-              <Switch
-                id="fail-fast"
-                checked={config.failFast}
-                onCheckedChange={(checked) => setConfig({ ...config, failFast: checked })}
-              />
-            </div>
-          </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="delay">Delay Between Chunks</Label>
+                <Select 
+                  value={config.delayBetweenChunks.toString()} 
+                  onValueChange={(value) => setConfig({ ...config, delayBetweenChunks: parseInt(value) })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="500">0.5 seconds</SelectItem>
+                    <SelectItem value="1000">1 second (recommended)</SelectItem>
+                    <SelectItem value="2000">2 seconds</SelectItem>
+                    <SelectItem value="5000">5 seconds</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="fail-fast">Fail Fast Mode</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Stop processing if a chunk fails
+                  </p>
+                </div>
+                <Switch
+                  id="fail-fast"
+                  checked={config.failFast}
+                  onCheckedChange={(checked) => setConfig({ ...config, failFast: checked })}
+                />
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
 
           <div className="flex justify-end space-x-2">
             <Button variant="outline" onClick={() => setOpen(false)}>
@@ -248,7 +234,8 @@ export function BatchConfigDialog({
               </Button>
             )}
             <Button onClick={handleStart}>
-              Manual Configure
+              <Send className="w-4 h-4 mr-2" />
+              Send {itemCount} Items
             </Button>
           </div>
         </div>
