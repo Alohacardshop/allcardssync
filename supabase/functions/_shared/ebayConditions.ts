@@ -110,7 +110,7 @@ export const EBAY_CATEGORY_IDS = {
   
   // Comics
   COMIC_BOOKS: '63',
-  GRADED_COMIC_BOOKS: '259061',
+  GRADED_COMIC_BOOKS: '63',  // Temporary: was 259061 (invalid). Will be updated after leaf discovery.
   BRONZE_AGE_COMICS: '260',
   SILVER_AGE_COMICS: '137939',
   MODERN_AGE_COMICS: '138973',
