@@ -347,8 +347,7 @@ Deno.serve(async (req) => {
           weight: intakeItem.product_weight || 3,
           weight_unit: 'oz'
         }],
-        // Re-sort image_urls using psa_snapshot IsFrontImage flags (handles legacy data)
-        // Then assign explicit position so Shopify features the front image (position 1)
+        // TWO-STEP IMAGE UPLOAD: Send back image(s) first, front added after delay
         images: (() => {
           let orderedUrls: string[] = intakeItem.image_urls || [];
           if (intakeItem.psa_snapshot?.images && Array.isArray(intakeItem.psa_snapshot.images)) {
@@ -357,9 +356,14 @@ Deno.serve(async (req) => {
             const snapshotUrls = sorted.map((img: any) => img.ImageURL).filter(Boolean);
             if (snapshotUrls.length > 0) orderedUrls = snapshotUrls;
           } else if (isComic && orderedUrls.length === 2) {
-            // Comics without psa_snapshot: PSA pages show back first, front second.
-            // Reverse so front cover is position 1 (featured).
             orderedUrls = [...orderedUrls].reverse();
+          }
+          // For two-step: only include back image(s) in initial create
+          // Front image will be added after delay
+          const frontUrl = determineFrontImageUrl(intakeItem);
+          if (orderedUrls.length >= 2 && frontUrl) {
+            const backImages = orderedUrls.filter((url: string) => url !== frontUrl);
+            return backImages.map((url: string, idx: number) => ({ src: url, alt: title, position: idx + 1 }));
           }
           if (orderedUrls.length > 0) {
             return orderedUrls.map((url: string, idx: number) => ({ src: url, alt: title, position: idx + 1 }));
@@ -437,7 +441,47 @@ Deno.serve(async (req) => {
       variant = product.variants[0]
     }
 
-    // Ensure front image is featured using shared helper
+    // TWO-STEP: Add the front image after a delay so it becomes the primary/featured image
+    const deferredFrontUrl = determineFrontImageUrl(intakeItem)
+    if (deferredFrontUrl) {
+      // Check if the front image was excluded from initial create (2+ images)
+      const allImageUrls = intakeItem.image_urls || []
+      const hasPsaImages = intakeItem.psa_snapshot?.images && Array.isArray(intakeItem.psa_snapshot.images)
+      const hasMultipleImages = allImageUrls.length >= 2 || (hasPsaImages && intakeItem.psa_snapshot.images.length >= 2)
+      
+      if (hasMultipleImages) {
+        console.log(`[TWO-STEP] Waiting 1.5s before adding front image...`)
+        await new Promise(r => setTimeout(r, 1500))
+        
+        try {
+          const addImageResponse = await fetch(`https://${domain}/admin/api/2024-07/products/${product.id}/images.json`, {
+            method: 'POST',
+            headers: {
+              'X-Shopify-Access-Token': token,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              image: {
+                src: deferredFrontUrl,
+                alt: `${title} - Front`,
+                position: 1
+              }
+            })
+          })
+          if (addImageResponse.ok) {
+            const imgResult = await addImageResponse.json()
+            console.log(`[TWO-STEP] ✅ Front image added with position 1, image ID: ${imgResult?.image?.id}`)
+          } else {
+            const errText = await addImageResponse.text()
+            console.error(`[TWO-STEP] ❌ Failed to add front image: ${errText}`)
+          }
+        } catch (imgErr) {
+          console.error(`[TWO-STEP] ❌ Failed to add front image:`, imgErr)
+        }
+      }
+    }
+
+    // Ensure front image is featured using shared helper (verification/safety net)
     const frontUrl = determineFrontImageUrl(intakeItem)
     if (frontUrl) {
       const mediaResult = await ensureMediaOrder({
