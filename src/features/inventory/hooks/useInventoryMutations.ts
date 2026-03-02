@@ -226,6 +226,14 @@ export function useInventoryMutations({
             throw new Error(`Failed to remove ${item.sku}: ${data?.error || 'Unknown error'}`);
           }
 
+          // End eBay listing if active
+          if (item.ebay_offer_id) {
+            await supabase.rpc('queue_ebay_end_listing', {
+              p_ebay_offer_id: item.ebay_offer_id,
+              p_sku: item.sku || ''
+            });
+          }
+
           await supabase
             .from('intake_items')
             .update({ 
@@ -300,9 +308,17 @@ export function useInventoryMutations({
                 throw new Error(`Failed to remove ${item.sku} from Shopify: ${error.message}`);
               }
 
-              if (!data?.ok) {
+            if (!data?.ok) {
                 throw new Error(`Failed to remove ${item.sku} from Shopify: ${data?.error || 'Unknown error'}`);
               }
+            }
+
+            // End eBay listing if active
+            if (item.ebay_offer_id) {
+              await supabase.rpc('queue_ebay_end_listing', {
+                p_ebay_offer_id: item.ebay_offer_id,
+                p_sku: item.sku || ''
+              });
             }
 
             const { error: deleteError } = await supabase

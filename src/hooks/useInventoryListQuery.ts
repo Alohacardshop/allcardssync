@@ -102,6 +102,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
           ebay_price_check,
           shopify_snapshot,
           ebay_listing_id,
+          ebay_offer_id,
           ebay_listing_url,
           ebay_sync_status,
           ebay_sync_error,
