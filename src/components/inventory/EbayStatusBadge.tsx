@@ -1,7 +1,7 @@
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { ExternalLink, Loader2, AlertCircle, CheckCircle, Clock } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface EbayStatusBadgeProps {
   syncStatus?: string | null;
@@ -18,41 +18,43 @@ export const EbayStatusBadge = React.memo(({
   syncError,
   listOnEbay
 }: EbayStatusBadgeProps) => {
-  // Not marked for eBay - show explicit status for clarity
+  // Not marked for eBay
   if (!listOnEbay) {
-    return (
-      <Badge variant="outline" className="text-muted-foreground border-muted">
-        eBay Off
-      </Badge>
-    );
+    return null;
   }
 
-  // Has active listing
+  // Has active listing - blue "synced" style matching Shopify badge
   if (syncStatus === 'synced' && listingId) {
     return (
-      <Badge 
-        variant="default" 
-        className="bg-blue-100 text-blue-800 border-blue-300 cursor-pointer hover:bg-blue-200"
-        onClick={(e) => {
-          e.stopPropagation();
-          if (listingUrl) {
-            window.open(listingUrl, '_blank');
-          }
-        }}
-      >
-        <CheckCircle className="h-3 w-3 mr-1" />
-        eBay Live
-        {listingUrl && <ExternalLink className="h-3 w-3 ml-1" />}
-      </Badge>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge 
+            variant="default" 
+            className="text-[10px] h-5 px-1.5 font-medium whitespace-nowrap cursor-pointer bg-blue-600 hover:bg-blue-700 text-white border-blue-600"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (listingUrl) {
+                window.open(listingUrl, '_blank');
+              }
+            }}
+          >
+            Listed
+            {listingUrl && <ExternalLink className="h-2.5 w-2.5 ml-1" />}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          Live on eBay{listingUrl ? ' — click to view' : ''}
+        </TooltipContent>
+      </Tooltip>
     );
   }
 
   // Sync in progress
   if (syncStatus === 'pending' || syncStatus === 'processing') {
     return (
-      <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
-        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-        eBay Syncing
+      <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-medium whitespace-nowrap animate-pulse">
+        <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />
+        Syncing
       </Badge>
     );
   }
@@ -60,33 +62,39 @@ export const EbayStatusBadge = React.memo(({
   // Queued for sync
   if (syncStatus === 'queued') {
     return (
-      <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-300">
-        <Clock className="h-3 w-3 mr-1" />
-        eBay Queued
+      <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-medium whitespace-nowrap">
+        <Clock className="h-2.5 w-2.5 mr-1" />
+        Queued
       </Badge>
     );
   }
 
-  // Sync error
+  // Sync error - red
   if (syncStatus === 'error') {
     return (
-      <Badge 
-        variant="destructive" 
-        className="cursor-help"
-        title={syncError || 'Unknown error'}
-      >
-        <AlertCircle className="h-3 w-3 mr-1" />
-        eBay Error
-      </Badge>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge 
+            variant="destructive" 
+            className="text-[10px] h-5 px-1.5 font-medium whitespace-nowrap cursor-help"
+          >
+            <AlertCircle className="h-2.5 w-2.5 mr-1" />
+            Error
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs max-w-[200px]">
+          {syncError || 'Unknown sync error'}
+        </TooltipContent>
+      </Tooltip>
     );
   }
 
-  // Marked for eBay but not yet synced
+  // Marked for eBay but not yet synced - outline pending
   if (listOnEbay && !listingId) {
     return (
-      <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-200">
-        <Clock className="h-3 w-3 mr-1" />
-        eBay Pending
+      <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-medium whitespace-nowrap">
+        <Clock className="h-2.5 w-2.5 mr-1" />
+        Pending
       </Badge>
     );
   }
