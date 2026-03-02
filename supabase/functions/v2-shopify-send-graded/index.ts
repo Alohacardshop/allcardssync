@@ -437,29 +437,14 @@ Deno.serve(async (req) => {
     }
 
     // === Reorder media via GraphQL to guarantee front image is featured ===
+    // Wait for Shopify to finish processing uploaded images
+    await new Promise(r => setTimeout(r, 3000))
     try {
-      // 1. Fetch product media via GraphQL
       const mediaQueryResponse = await fetch(`https://${domain}/admin/api/2024-07/graphql.json`, {
         method: 'POST',
-        headers: {
-          'X-Shopify-Access-Token': token,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query: `query productMedia($id: ID!) {
-            product(id: $id) {
-              media(first: 10) {
-                edges {
-                  node {
-                    id
-                    ... on MediaImage {
-                      image { url }
-                    }
-                  }
-                }
-              }
-            }
-          }`,
+          query: `query($id:ID!){product(id:$id){media(first:10){edges{node{id ... on MediaImage{image{url}}}}}}}`,
           variables: { id: `gid://shopify/Product/${product.id}` }
         })
       })
@@ -467,67 +452,55 @@ Deno.serve(async (req) => {
       if (mediaQueryResponse.ok) {
         const mediaResult = await mediaQueryResponse.json()
         const mediaEdges = mediaResult?.data?.product?.media?.edges || []
+        console.log(`[MEDIA REORDER] Found ${mediaEdges.length} media items for product ${product.id}`)
 
         if (mediaEdges.length >= 2) {
-          // Build a URL-to-IsFrontImage map from psa_snapshot
-          const frontImageUrls = new Set<string>()
-          if (intakeItem.psa_snapshot?.images && Array.isArray(intakeItem.psa_snapshot.images)) {
-            for (const img of intakeItem.psa_snapshot.images) {
-              if (img.IsFrontImage) frontImageUrls.add(img.ImageURL)
+          // Determine front image URL from our sorted order
+          // orderedUrls[0] should be the front image (sorted earlier in the images IIFE)
+          const orderedUrls: string[] = (() => {
+            let urls: string[] = intakeItem.image_urls || [];
+            if (intakeItem.psa_snapshot?.images && Array.isArray(intakeItem.psa_snapshot.images)) {
+              const sorted = [...intakeItem.psa_snapshot.images]
+                .sort((a: any, b: any) => (b.IsFrontImage ? 1 : 0) - (a.IsFrontImage ? 1 : 0));
+              const snapshotUrls = sorted.map((img: any) => img.ImageURL).filter(Boolean);
+              if (snapshotUrls.length > 0) return snapshotUrls;
+            }
+            if (isComic && urls.length === 2) return [...urls].reverse();
+            return urls;
+          })()
+          
+          const frontFilename = (orderedUrls[0] || '').split('/').pop() || ''
+          
+          // Find which Shopify media node matches the front image
+          let frontMediaIdx = -1
+          for (let i = 0; i < mediaEdges.length; i++) {
+            const mediaUrl = mediaEdges[i].node?.image?.url || ''
+            if (frontFilename && mediaUrl.includes(frontFilename)) {
+              frontMediaIdx = i
+              break
             }
           }
+          
+          console.log(`[MEDIA REORDER] Front filename: ${frontFilename}, matched at Shopify index: ${frontMediaIdx}`)
 
-          // Match Shopify media nodes to front/back by comparing URLs
-          let frontMediaId: string | null = null
-          const otherMediaIds: string[] = []
-
-          for (const edge of mediaEdges) {
-            const node = edge.node
-            const mediaUrl = node?.image?.url || ''
-            // Check if this media URL matches any known front image URL
-            const isFront = [...frontImageUrls].some(fUrl => mediaUrl.includes(fUrl.split('/').pop() || '___none___'))
-            if (isFront && !frontMediaId) {
-              frontMediaId = node.id
-            } else {
-              otherMediaIds.push(node.id)
-            }
+          let moves: { id: string; newPosition: string }[]
+          if (frontMediaIdx >= 0) {
+            const frontId = mediaEdges[frontMediaIdx].node.id
+            const otherIds = mediaEdges.filter((_: any, i: number) => i !== frontMediaIdx).map((e: any) => e.node.id)
+            moves = [
+              { id: frontId, newPosition: "0" },
+              ...otherIds.map((id: string, i: number) => ({ id, newPosition: String(i + 1) }))
+            ]
+          } else {
+            moves = mediaEdges.map((e: any, i: number) => ({ id: e.node.id, newPosition: String(i) }))
           }
-
-          // If no URL match, fall back: first media from our sorted order is front
-          if (!frontMediaId) {
-            frontMediaId = mediaEdges[0].node.id
-            otherMediaIds.length = 0
-            for (let i = 1; i < mediaEdges.length; i++) {
-              otherMediaIds.push(mediaEdges[i].node.id)
-            }
-          }
-
-          // 2. Reorder: front at position 0, rest follow
-          const moves = [
-            { id: frontMediaId, newPosition: "0" },
-            ...otherMediaIds.map((id, idx) => ({ id, newPosition: String(idx + 1) }))
-          ]
 
           const reorderResponse = await fetch(`https://${domain}/admin/api/2024-07/graphql.json`, {
             method: 'POST',
-            headers: {
-              'X-Shopify-Access-Token': token,
-              'Content-Type': 'application/json'
-            },
+            headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              query: `mutation productReorderMedia($id: ID!, $moves: [MoveInput!]!) {
-                productReorderMedia(id: $id, moves: $moves) {
-                  job { id }
-                  mediaUserErrors {
-                    field
-                    message
-                  }
-                }
-              }`,
-              variables: {
-                id: `gid://shopify/Product/${product.id}`,
-                moves
-              }
+              query: `mutation($id:ID!,$moves:[MoveInput!]!){productReorderMedia(id:$id,moves:$moves){job{id}mediaUserErrors{field message}}}`,
+              variables: { id: `gid://shopify/Product/${product.id}`, moves }
             })
           })
 
@@ -537,7 +510,7 @@ Deno.serve(async (req) => {
             if (userErrors.length > 0) {
               console.warn(`[MEDIA REORDER] userErrors:`, JSON.stringify(userErrors))
             } else {
-              console.log(`[MEDIA REORDER] Successfully reordered media for product ${product.id}. Front: ${frontMediaId}`)
+              console.log(`[MEDIA REORDER] ✅ Reordered media for product ${product.id}. Front=${moves[0]?.id}`)
             }
           } else {
             console.warn(`[MEDIA REORDER] HTTP ${reorderResponse.status}: ${await reorderResponse.text()}`)
