@@ -88,6 +88,41 @@ export function useSendToInventory() {
       await new Promise((resolve) => setTimeout(resolve, 120));
       await queryClient.invalidateQueries({ queryKey });
       
+      // Auto-close lots that have no remaining active items
+      try {
+        const { data: activeLots } = await supabase
+          .from('intake_lots')
+          .select('id, lot_number')
+          .eq('status', 'active')
+          .eq('store_key', storeKey)
+          .eq('shopify_location_gid', locationGid);
+
+        if (activeLots) {
+          for (const lot of activeLots) {
+            const { count } = await supabase
+              .from('intake_items')
+              .select('id', { count: 'exact', head: true })
+              .eq('lot_id', lot.id)
+              .is('deleted_at', null)
+              .is('removed_from_batch_at', null);
+
+            if (count === 0) {
+              await supabase
+                .from('intake_lots')
+                .update({ status: 'closed' })
+                .eq('id', lot.id);
+              console.log(`[useSendToInventory] Auto-closed empty lot ${lot.lot_number}`);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to auto-close empty lots', e);
+      }
+
+      // Invalidate dashboard stats to reflect closed lots
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['active-lots-detail'] });
+      
       // Trigger the sync processor to pick up queued items
       try {
         await supabase.functions.invoke('shopify-sync', { body: {} });
