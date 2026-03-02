@@ -373,7 +373,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    let product, variant
+    let product: any, variant: any, shopifyResponse: any
 
     if (isUpdate) {
       // UPDATE existing product
@@ -392,6 +392,7 @@ Deno.serve(async (req) => {
       }
 
       const updateResult = await updateResponse.json()
+      shopifyResponse = updateResult
       product = updateResult.product
       variant = product.variants.find((v: any) => v.id.toString() === existingVariantId) || product.variants[0]
       
@@ -437,6 +438,7 @@ Deno.serve(async (req) => {
       }
 
       const result = await createResponse.json()
+      shopifyResponse = result
       product = result.product
       variant = product.variants[0]
     }
@@ -517,7 +519,7 @@ Deno.serve(async (req) => {
     // Update intake item with Shopify IDs and preserve all raw data
     const shopifySnapshot = {
       product_data: productData,
-      shopify_response: result,
+      shopify_response: shopifyResponse,
       sync_timestamp: new Date().toISOString(),
       graded: true
     }
