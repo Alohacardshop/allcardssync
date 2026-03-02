@@ -82,7 +82,7 @@ export const EbayStatusBadge = React.memo(({
             Error
           </Badge>
         </TooltipTrigger>
-        <TooltipContent side="top" className="text-xs max-w-[200px]">
+        <TooltipContent side="bottom" sideOffset={6} className="text-xs max-w-[300px] z-50">
           {syncError || 'Unknown sync error'}
         </TooltipContent>
       </Tooltip>
