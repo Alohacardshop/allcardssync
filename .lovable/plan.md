@@ -1,25 +1,28 @@
 
 
-## Two Issues Found
+## Findings
 
-### 1. Tooltip clipped by overflow
-The error tooltip on `EbayStatusBadge` uses `side="top"` with `max-w-[200px]`. When rendered near the top of the inventory list, it gets clipped by the parent container's `overflow: hidden`. Fix: increase `max-w` for readability, and add `z-50` + `sideOffset` to ensure it floats above. Also switch to `side="bottom"` so it doesn't clip under the header row.
+The eBay switch **is rendering** — session replay confirms it was toggled on/off. The likely issue is **visual contrast on the dark theme**: the unchecked Switch uses `bg-input` which blends into the dark background, making it appear invisible.
 
-**File:** `src/components/inventory/EbayStatusBadge.tsx` (line 85)
-- Change `side="top"` to `side="bottom"` 
-- Add `className="z-50 ..."` and `sideOffset={6}` so it clears the row
-- Widen `max-w` to `300px` so error messages aren't truncated
+The eBay sync itself failed due to the Accept-Language header issue, which was already fixed and deployed.
 
-### 2. eBay API: "Invalid value for header Accept-Language"
-The `ebayApiRequest` function in `_shared/ebayApi.ts` does not send an `Accept-Language` header. The eBay Inventory API (production) requires a valid one. The error is `errorId: 25709`.
+## Plan
 
-**File:** `supabase/functions/_shared/ebayApi.ts` (line 160-164)
-- Add `'Accept-Language': 'en-US'` to the headers object
-- Add `'Content-Language': 'en-US'` as well (required by some eBay sell APIs)
+### 1. Make the Switch more visible on dark theme (EbayTab.tsx)
+- Add a visible border/outline to the Switch when unchecked so it stands out on dark backgrounds
+- Add `border border-border` class to the Switch component so it's always visible regardless of theme
 
-After this fix, redeploy `ebay-sync-processor` and `ebay-create-listing`.
+### 2. Make the toggle section more prominent (EbayTab.tsx)
+- Add a stronger background to the toggle container (`bg-muted/50` instead of `bg-muted/30`)
+- Add a border to the container to make the whole section more noticeable
 
-### Technical Details
-- The `Accept-Language` header tells eBay which locale to use for response messages. Production eBay enforces it on inventory endpoints; sandbox was lenient.
-- The tooltip z-index issue is a common Radix UI pattern where `TooltipContent` portals to `<body>` but visually appears under sticky/fixed headers due to stacking context.
+### 3. Reset stale error state when re-enabling (useEbayListing.ts)
+- When toggling `list_on_ebay` back to `true`, also clear `ebay_sync_error` so the old error doesn't persist and confuse the UI
+- Update line 18-21 to include `ebay_sync_error: null` when enabling
+
+**Files to change:**
+- `src/features/inventory/components/inspector/tabs/EbayTab.tsx` — add border/contrast to Switch
+- `src/hooks/useEbayListing.ts` — clear error on re-enable
+
+After these changes, toggle the switch back on for item SKU 146094215 to test the fixed eBay sync.
 
