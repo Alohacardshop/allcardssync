@@ -101,7 +101,7 @@ Deno.serve(async (req) => {
     const subject = item.subject || intakeItem.subject || ''
     const grade = item.grade || intakeItem.grade || ''
     const cardNumber = item.card_number || intakeItem.card_number || ''
-    const variant = item.variant || intakeItem.variant || ''
+    const cardVariant = item.variant || intakeItem.variant || ''
     const category = item.category_tag || intakeItem.category || ''
     const gradingCompany = intakeItem.grading_company || 'PSA'
     
@@ -117,7 +117,7 @@ Deno.serve(async (req) => {
       if (brandTitle) parts.push(brandTitle.toUpperCase())
       if (subject) parts.push(subject.toUpperCase())
       if (cardNumber) parts.push(`#${cardNumber}`)
-      if (variant && variant !== 'Normal') parts.push(variant.toLowerCase())
+      if (cardVariant && cardVariant !== 'Normal') parts.push(cardVariant.toLowerCase())
       if (category && category !== 'Normal') parts.push(category.toLowerCase())
       if (grade) parts.push(`${gradingCompany} ${grade}`)
       
@@ -251,12 +251,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (variant) {
+    if (cardVariant) {
       metafields.push({
         namespace: 'acs.sync',
         key: 'variant',
         type: 'single_line_text_field',
-        value: variant
+        value: cardVariant
       });
     }
 
