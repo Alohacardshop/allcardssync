@@ -23,6 +23,7 @@ import { EbayCategoryManager } from '@/components/admin/EbayCategoryManager';
 import { EbayCategorySelect } from '@/components/admin/EbayCategorySelect';
 import { EbayRoutingRules } from '@/components/admin/EbayRoutingRules';
 import { EbayCategorySchemaInspector } from '@/components/admin/EbayCategorySchemaInspector';
+import { EbayMerchantLocation } from '@/components/admin/EbayMerchantLocation';
 import { Link, useLocation } from 'react-router-dom';
 import { useStore } from '@/contexts/StoreContext';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -1018,6 +1019,8 @@ export default function EbayApp() {
                   </CardContent>
                 </Card>
 
+                {/* Merchant Location */}
+                <EbayMerchantLocation locationKey={selectedConfig.location_key} />
 
                 {/* Auto-save status indicator */}
                 <div className="flex justify-end items-center gap-2 text-sm text-muted-foreground">
