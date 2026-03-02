@@ -341,7 +341,8 @@ export function useBatchSendToShopify() {
           }
           
           processedItems += chunk.length
-          toast.success(`Chunk ${chunkIndex + 1}/${totalChunks} completed: ${processedIds.length} items moved to inventory & queued`)
+          // Only log chunk progress, no per-chunk toast
+          logger.info(`Chunk ${chunkIndex + 1}/${totalChunks} completed: ${processedIds.length} items`, {}, 'useBatchSendToShopify')
           
           // Invalidate batch query to update UI across all components
           await queryClient.invalidateQueries({ 

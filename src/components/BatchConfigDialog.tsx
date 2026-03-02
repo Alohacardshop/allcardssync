@@ -146,7 +146,10 @@ export function BatchConfigDialog({
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">Processing Summary</CardTitle>
               <CardDescription>
-                {itemCount} items • {Math.ceil(itemCount / config.batchSize)} chunks • Estimated time: {estimateTime()}
+                {itemCount} item{itemCount !== 1 ? 's' : ''}
+                {Math.ceil(itemCount / config.batchSize) > 1 && (
+                  <> • {Math.ceil(itemCount / config.batchSize)} chunks • Estimated time: {estimateTime()}</>
+                )}
                 {config.vendor && <> • Vendor: <span className="font-medium">{config.vendor}</span></>}
               </CardDescription>
             </CardHeader>
