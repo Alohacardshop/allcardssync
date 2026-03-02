@@ -70,8 +70,15 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
     if (psaSnapshot && typeof psaSnapshot === 'object' && psaSnapshot !== null) {
       const psaTitle = psaSnapshot.cardName || psaSnapshot.subject || psaSnapshot.title;
       if (psaTitle) {
-        const gradePart = item.grade ? ` PSA ${formatGrade(item.grade)}` : (psaSnapshot.grade ? ` PSA ${formatGrade(psaSnapshot.grade)}` : '');
-        return `${psaTitle}${gradePart}`;
+        // Strip trailing .0 from grades in the snapshot title (e.g., "10.0" → "10")
+        let cleanTitle = String(psaTitle).replace(/(\d+)\.0\b/g, '$1');
+        // Only append grade if title doesn't already contain "PSA" grade info
+        const alreadyHasGrade = /\bPSA\b/i.test(cleanTitle) || /\bCGC\b/i.test(cleanTitle);
+        if (!alreadyHasGrade) {
+          const gradePart = item.grade ? ` PSA ${formatGrade(item.grade)}` : (psaSnapshot.grade ? ` PSA ${formatGrade(psaSnapshot.grade)}` : '');
+          cleanTitle += gradePart;
+        }
+        return cleanTitle;
       }
     }
 
@@ -487,8 +494,8 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                           `${item.sku} • $${item.price} ${item.cost && `• Cost: $${Number(item.cost).toFixed(2)}`} • Qty: ${item.quantity}`
                         )}
                       </div>
-                      {/* Show condition for raw cards only */}
-                      {getCondition(item) && (
+                      {/* Show condition for raw cards only - skip for graded items */}
+                      {!(item.grade && (item.psa_cert || item.cgc_cert)) && getCondition(item) && (
                         <div className="text-xs">
                           <span className="font-medium">Condition:</span> {getCondition(item)}
                         </div>
@@ -504,7 +511,10 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                           )}
                           {item.sub_category && (
                             <Badge variant="outline" className="text-xs h-5">
-                              {item.sub_category}
+                              {item.sub_category
+                                .replace(/_/g, ' ')
+                                .replace(/\b\w/g, c => c.toUpperCase())
+                                .replace(/^Graded\s+\w+$/i, 'Graded')}
                             </Badge>
                           )}
                         </div>
