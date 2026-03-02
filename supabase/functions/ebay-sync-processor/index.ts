@@ -84,7 +84,8 @@ serve(async (req) => {
           primary_category,
           condition_type,
           cgc_cert,
-          psa_snapshot
+          psa_snapshot,
+          normalized_tags
         )
       `)
       .eq('status', 'queued')

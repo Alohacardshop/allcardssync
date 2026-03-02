@@ -130,6 +130,34 @@ export async function resolveTemplate(
 ): Promise<any | null> {
   const detectedCategory = item.primary_category || item.main_category || (await detectCategoryFromBrandDB(supabase, item.brand_title))
   const isGraded = !!item.grade
+  const itemTags = (item.normalized_tags || []).map((t: string) => t.toLowerCase())
+
+  // 0. Tag-matched templates (highest priority — most specific match wins)
+  if (itemTags.length > 0) {
+    const { data: tagTemplates } = await supabase
+      .from('ebay_listing_templates')
+      .select('*')
+      .eq('store_key', storeKey)
+      .eq('is_active', true)
+      .not('tag_match', 'is', null)
+
+    if (tagTemplates && tagTemplates.length > 0) {
+      const matched = tagTemplates
+        .filter((t: any) => t.tag_match && t.tag_match.length > 0)
+        .map((t: any) => ({
+          template: t,
+          totalRequired: t.tag_match.length,
+          allMatch: t.tag_match.every((tag: string) => itemTags.includes(tag.toLowerCase())),
+        }))
+        .filter((m: any) => m.allMatch)
+        .sort((a: any, b: any) => b.totalRequired - a.totalRequired)
+
+      if (matched.length > 0) {
+        console.log(`[ebayTemplateResolver] Tag-matched template: ${matched[0].template.name} (${matched[0].totalRequired} tags)`)
+        return matched[0].template
+      }
+    }
+  }
 
   // 1. Check category mappings for a linked template
   const { data: mappings } = await supabase
