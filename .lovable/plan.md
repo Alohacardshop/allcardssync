@@ -1,33 +1,57 @@
 
 
-## Problem
-The eBay switch is technically rendering but becomes effectively invisible when the error box appears. The current vertical stack layout means the error box (which can be quite tall with long messages) dominates the small inspector panel, making the switch hard to find. The real fix isn't just contrast — it's the layout itself.
+## Problem Analysis
 
-## Redesigned EbayTab Layout
+The inspector panel's tabbed layout is the root cause. Burying eBay controls in a separate tab means:
+- Users must click to a different tab just to toggle one switch
+- Errors in that tab push content around in a narrow panel
+- The switch keeps "disappearing" because it's hidden behind a tab click
 
-Restructure `EbayTab.tsx` into a more compact, always-visible layout:
+The fix isn't more CSS tweaks on the eBay tab. It's restructuring what goes where.
 
-**Top row — always visible, prominent:**
-- Left: "eBay" label + status badge (Listed / Error / Queued / Off)
-- Right: Switch toggle — always in the same spot, never pushed around
+## Proposed Changes
 
-**Error alert — compact, collapsible:**
-- If there's an error, show a single-line summary with the error text truncated
-- Use a small inline destructive badge instead of a full block
-- Keep it to 1-2 lines max so it doesn't dominate
+### 1. Move marketplace toggles into the Overview tab
 
-**Listing details — below, only when listed:**
-- Listing ID + View on eBay link (compact row)
+Put both Shopify sync status and eBay toggle directly in the Overview tab under a new "Marketplace" section. This makes the eBay switch always visible when inspecting an item -- no tab switching required.
 
-**Remove the "Not enabled for eBay" empty state block** — the switch + status badge already communicate this. The empty state just wastes space.
+The new section in `OverviewTab.tsx` will show:
+- **Shopify row**: status badge + "Resync" button (inline)
+- **eBay row**: status badge + Switch toggle (inline) + compact error (if any)
 
-### File changes
+### 2. Merge Shopify + eBay tabs into a single "Sync" tab
 
-**`src/features/inventory/components/inspector/tabs/EbayTab.tsx`** — Full rewrite of the template:
-- Move Switch to a single-line header row alongside status badge
-- Replace the tall error block with a compact 1-2 line inline error (truncated with title tooltip for full text)
-- Remove the redundant "Not enabled" empty state
-- Keep listing details compact
+Replace the separate Shopify and eBay tabs with one combined "Sync" tab for detailed sync information (IDs, timestamps, error logs). This is the "deep dive" view, while the Overview tab has the quick-action controls.
 
-This makes the switch always visible at the top regardless of error state, and prevents the error from dominating the small panel.
+Changes to `InspectorPanel.tsx`:
+- Remove the "eBay" tab trigger
+- Rename "Shopify" tab to "Sync"
+- Render both ShopifyTab and EbayTab details inside the Sync tab content
+
+### 3. Add marketplace section to OverviewTab
+
+New section in `OverviewTab.tsx` between "Inventory" and the sync indicator:
+
+```text
+┌─ Marketplace ────────────────────────┐
+│ Shopify   [Synced]        [Resync ↻] │
+│ eBay      [Error]         [═══ ON ]  │
+│   ⚠ "Failed to create..." (tooltip)  │
+└──────────────────────────────────────┘
+```
+
+### 4. Simplify tab bar
+
+Go from 5 tabs → 4 tabs:
+- Overview (now includes marketplace controls)
+- Sync (combined Shopify + eBay details)
+- Printing
+- History
+
+### Files to change
+
+- `src/features/inventory/components/inspector/tabs/OverviewTab.tsx` -- add Marketplace section with eBay switch and Shopify resync
+- `src/features/inventory/components/inspector/InspectorPanel.tsx` -- merge Shopify+eBay tabs, pass onResync/isResyncing to OverviewTab
+- `src/features/inventory/components/inspector/tabs/ShopifyTab.tsx` -- add eBay details below existing Shopify details (combined "Sync" tab)
+- `src/features/inventory/components/inspector/tabs/EbayTab.tsx` -- keep as-is for the detailed view, but also export a compact `EbayQuickToggle` component for use in OverviewTab
 
