@@ -104,6 +104,9 @@ verify_jwt = true
 verify_jwt = true
 
 # Shopify sync operations
+[functions.shopify-update-product]
+verify_jwt = false
+
 [functions.shopify-sync]
 verify_jwt = true
 
