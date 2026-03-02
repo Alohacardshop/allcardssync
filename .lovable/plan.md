@@ -1,47 +1,38 @@
 
 
-## Problem Analysis
+## Plan: Send Only the Front Image to Shopify (Skip Back Image)
 
-From the logs, our code reports `✅ PASSED` — Shopify's GraphQL says `uooA2qS1wUGojEweOijfpw.jpg` is featured. But the storefront still shows the wrong image. This means either:
-1. Our front/back identification is inverted for this comic
-2. Shopify's `productReorderMedia` mutation and `position` field don't actually control what the theme displays
-3. There's a caching layer we can't bust
+### Problem
+Despite multiple reordering strategies, Shopify continues showing the back image as featured for comics. None of the approaches (GraphQL reorder, two-step upload, variant media fix) have reliably worked.
 
-Your idea bypasses all of this by exploiting Shopify's behavior: **the last image uploaded tends to become the primary/featured image**.
+### Solution
+Simplify drastically: only send the front image to Shopify. Customers can look up the cert number to see the back image if needed.
 
-## Plan: Two-Step Image Upload
+### Changes
 
-### Changes to `shopify-sync/index.ts` — `createShopifyProduct()`
+**1. `supabase/functions/shopify-sync/index.ts`** — `createShopifyProduct()`
+- Remove the two-step upload logic entirely
+- Replace image array construction with: send only the front image (from `determineFrontImageUrl()`)
+- If no front image identified, fall back to `image_urls[0]` or `image_url`
+- Result: product always created with exactly 1 image — the front
+- Remove the deferred front image upload block (the `sleep(1500)` + POST section)
+- Keep `ensureMediaOrder()` call but it will be a no-op with single images
 
-1. **Step 1: Create product with ONLY the back image** (the one we do NOT want as featured)
-   - For comics with 2 images: send only `image_urls[0]` (the back) in the initial `products.json` POST
-   - For non-comics or items with `psa_snapshot`: use existing logic
+**2. `supabase/functions/v2-shopify-send-graded/index.ts`**
+- Same change: in the `images` builder (the IIFE around line 231), return only the front image
+- Remove the two-step deferred front image upload block
 
-2. **Step 2: Wait 1-2 seconds, then add the front image via a separate API call**
-   - Use `POST /products/{id}/images.json` to add the front image after creation
-   - Set `position: 1` on this second image to explicitly make it the primary
+**3. `supabase/functions/_shared/shopify-media-order.ts`**
+- No changes needed — `ensureMediaOrder()` already short-circuits when `mediaNodes.length < 2`
 
-3. **Still run `ensureMediaOrder()` afterward** as a verification/safety net, but the two-step upload should make it unnecessary
-
-### Changes to `_shared/shopify-media-order.ts` — `determineFrontImageUrl()`
-
-4. **Flip the comic logic**: Currently returns `imageUrls[1]` for comics. Based on the DB data and the user's feedback, `imageUrls[0]` (`aUqBDKB97kG9I7fq4MKSZQ.jpg`) is actually the front cover. We need to verify this with the user — but the two-step approach makes this less critical since position is controlled by upload order.
-
-### Also apply same logic to `v2-shopify-send-graded/index.ts`
-
-5. Port the two-step upload to the graded send function for consistency.
-
-### Technical Details
-
+### Technical Detail
 ```text
-Current flow:
-  POST /products.json  { images: [front, back] }  →  Shopify picks its own order
-  POST GraphQL reorder  →  sometimes ignored by theme
+Current: POST /products.json { images: [back] } → sleep → POST images.json { front }
+New:     POST /products.json { images: [front_only] }
 
-New flow:
-  POST /products.json  { images: [back_only] }     →  back uploaded first
-  sleep(1500ms)
-  POST /products/{id}/images.json  { src: front, position: 1 }  →  front becomes primary
-  (optional) GraphQL reorder verification
+Front image selection (determineFrontImageUrl):
+  - PSA snapshot with IsFrontImage flag → that image
+  - Comics with 2 images → image_urls[1]  
+  - Default → image_urls[0]
 ```
 
