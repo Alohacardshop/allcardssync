@@ -22,10 +22,11 @@ import { EbaySyncRulesEditor } from '@/components/admin/EbaySyncRulesEditor';
 import { EbayCategoryManager } from '@/components/admin/EbayCategoryManager';
 import { EbayCategorySelect } from '@/components/admin/EbayCategorySelect';
 import { EbayRoutingRules } from '@/components/admin/EbayRoutingRules';
+import { EbayCategorySchemaInspector } from '@/components/admin/EbayCategorySchemaInspector';
 import { Link, useLocation } from 'react-router-dom';
 import { useStore } from '@/contexts/StoreContext';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { FileText, ClipboardList, Filter, FolderTree, Tags } from 'lucide-react';
+import { FileText, ClipboardList, Filter, FolderTree, Tags, Microscope } from 'lucide-react';
 import { DeleteConfirmationDialog } from '@/components/ConfirmationDialog';
 
 // Token health status helper
@@ -637,7 +638,7 @@ export default function EbayApp() {
         />
 
         <Tabs defaultValue="settings" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-7 lg:w-auto lg:inline-grid">
+          <TabsList className="grid w-full grid-cols-8 lg:w-auto lg:inline-grid">
             <TabsTrigger value="settings" className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
               Settings
@@ -669,6 +670,10 @@ export default function EbayApp() {
             <TabsTrigger value="queue" className="flex items-center gap-2">
               <Clock className="h-4 w-4" />
               Sync Queue
+            </TabsTrigger>
+            <TabsTrigger value="schema" className="flex items-center gap-2">
+              <Microscope className="h-4 w-4" />
+              Schema
             </TabsTrigger>
           </TabsList>
 
@@ -1073,6 +1078,11 @@ export default function EbayApp() {
           {/* Sync Queue Tab */}
           <TabsContent value="queue">
             <EbaySyncQueueMonitor />
+          </TabsContent>
+
+          {/* Category Schema Inspector Tab */}
+          <TabsContent value="schema">
+            <EbayCategorySchemaInspector storeKey={selectedConfig?.store_key} />
           </TabsContent>
         </Tabs>
       </div>
