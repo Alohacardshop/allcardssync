@@ -127,6 +127,7 @@ export const OverviewTab = React.memo(({ item, detailData, locationsMap, onField
                 shopifyProductId={item.shopify_product_id}
                 shopifyInventoryItemId={item.shopify_inventory_item_id}
                 readOnly={isDeleted}
+                isGraded={!!(item.grading_company && item.grading_company !== 'none')}
               />
             </div>
           </div>

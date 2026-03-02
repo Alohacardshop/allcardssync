@@ -20,6 +20,8 @@ interface InlineQuantityEditorProps {
   readOnly?: boolean;
   /** Message to show when readOnly */
   readOnlyReason?: string;
+  /** When true, locks quantity to 1 (graded 1-of-1 items) */
+  isGraded?: boolean;
 }
 
 export const InlineQuantityEditor = memo(({
@@ -32,7 +34,11 @@ export const InlineQuantityEditor = memo(({
   onRefreshNeeded,
   readOnly = false,
   readOnlyReason = 'Quantity is managed by Shopify',
+  isGraded = false,
 }: InlineQuantityEditorProps) => {
+  // Graded items are always 1-of-1 — override readOnly
+  const effectiveReadOnly = readOnly || isGraded;
+  const effectiveReadOnlyReason = isGraded ? 'Graded items are always 1-of-1' : readOnlyReason;
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -304,7 +310,7 @@ export const InlineQuantityEditor = memo(({
   }
 
   // Read-only mode - show quantity with lock icon
-  if (readOnly) {
+  if (effectiveReadOnly) {
     return (
       <TooltipProvider delayDuration={300}>
         <Tooltip>
@@ -321,7 +327,7 @@ export const InlineQuantityEditor = memo(({
             </div>
           </TooltipTrigger>
           <TooltipContent side="top" className="text-xs max-w-[200px]">
-            <p>{readOnlyReason}</p>
+            <p>{effectiveReadOnlyReason}</p>
             <p className="text-muted-foreground mt-1">Use Receiving or Transfer to adjust</p>
           </TooltipContent>
         </Tooltip>

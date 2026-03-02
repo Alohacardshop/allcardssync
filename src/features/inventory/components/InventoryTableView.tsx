@@ -265,6 +265,7 @@ const TableRow = memo(({
             compact
             readOnly={quantityReadOnly}
             readOnlyReason={quantityReadOnlyReason}
+            isGraded={!!(item.grading_company && item.grading_company !== 'none')}
           />
           </div>
         </QuantityAuditTooltip>

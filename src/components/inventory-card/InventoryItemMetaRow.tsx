@@ -84,6 +84,7 @@ export const InventoryItemMetaRow = memo(({
           shopifyInventoryItemId={item.shopify_inventory_item_id}
           readOnly={quantityReadOnly}
           readOnlyReason={quantityReadOnlyReason}
+          isGraded={!!(item.grading_company && item.grading_company !== 'none')}
         />
       </div>
       <div className="flex items-center space-x-1">
