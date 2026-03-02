@@ -87,6 +87,13 @@ export function useSendToInventory() {
       // Wait briefly then refresh from server to confirm final state
       await new Promise((resolve) => setTimeout(resolve, 120));
       await queryClient.invalidateQueries({ queryKey });
+      
+      // Trigger the sync processor to pick up queued items
+      try {
+        await supabase.functions.invoke('shopify-sync', { body: {} });
+      } catch (e) {
+        console.warn('Failed to trigger sync processor', e);
+      }
     },
   });
 }
