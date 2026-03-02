@@ -275,7 +275,8 @@ export const useAddIntakeItem = () => {
         throw new Error('No data returned from create_raw_intake_item');
       }
 
-      logger.logInfo('Intake item created successfully', { id: result.id });
+      const itemId = typeof result === 'string' ? result : result.id;
+      logger.logInfo('Intake item created successfully', { id: itemId });
       return result as AddIntakeItemResponse;
     },
 
