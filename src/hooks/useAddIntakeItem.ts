@@ -141,6 +141,10 @@ export const useAddIntakeItem = () => {
               lot_id: activeLotId, // Move to current batch
               removed_from_batch_at: null, // Clear any removal flag
               deleted_at: null, // Clear any deletion flag
+              sold_at: null, // Clear sold flag — item is being re-added
+              sold_price: null,
+              sold_channel: null,
+              sold_order_id: null,
               updated_at: new Date().toISOString(),
               // Update descriptive fields with new data (prefer new over existing)
               subject: params.subject_in || existing.subject,
@@ -271,6 +275,10 @@ export const useAddIntakeItem = () => {
                 lot_id: activeLotId, // Move to current batch
                 removed_from_batch_at: null, // Clear any removal flag
                 deleted_at: null, // Clear any deletion flag
+                sold_at: null, // Clear sold flag — item is being re-added
+                sold_price: null,
+                sold_channel: null,
+                sold_order_id: null,
                 updated_at: new Date().toISOString(),
                 // Update descriptive fields with new data (prefer new over existing)
                 subject: params.subject_in || existing.subject,
