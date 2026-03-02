@@ -689,7 +689,10 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                        editingItem.variant?.includes('Damaged') ? 'Damaged' : ''),
             cardNumber: String(editingItem.card_number || editingItem.catalog_snapshot?.number || ''),
             grade: editingItem.grade,
-            gradingCompany: editingItem.grading_company || 'PSA',
+            gradingCompany: editingItem.grading_company || 
+                          (editingItem.catalog_snapshot?.grading_company) ||
+                          (editingItem.catalog_snapshot?.grading_service?.toUpperCase?.()) || 
+                          'PSA',
             psaCert: editingItem.psa_cert || (editingItem.catalog_snapshot?.psaCert) || '',
             price: editingItem.price?.toString() || (editingItem.catalog_snapshot?.entered_price?.toString()) || '',
             cost: editingItem.cost?.toString() || (editingItem.catalog_snapshot?.calculated_cost?.toString()) || '',

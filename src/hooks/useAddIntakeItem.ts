@@ -21,6 +21,7 @@ interface AddIntakeItemParams {
   main_category_in: string;
   sub_category_in?: string | null;
   year_in?: string | null;
+  grading_company_in?: string | null;
   catalog_snapshot_in?: any;
   pricing_snapshot_in?: any;
   processing_notes_in?: string | null;

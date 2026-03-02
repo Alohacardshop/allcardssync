@@ -289,7 +289,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           brandTitle: normalizedData.brandTitle || "",
           subject: normalizedData.subject || "",
           category: normalizedData.category || "",
-          variant: isComic ? (normalizedData.varietyPedigree || "") : prev.variant,
+          variant: normalizedData.varietyPedigree || prev.variant,
           cardNumber: normalizedData.cardNumber || "",
           year: normalizedData.year || "",
           grade: normalizedData.grade || "",
@@ -433,9 +433,11 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         catalog_snapshot_in: {
           ...cardData,
           [gradingService === 'psa' ? 'psa_cert' : 'cgc_cert']: formData.certNumber,
-          grading_service: gradingService,
+          grading_company: gradingService.toUpperCase(),
           year: formData.year
-        }
+        },
+        year_in: formData.year || null,
+        grading_company_in: gradingService.toUpperCase()
       };
 
       const result = await addItem(itemPayload);
