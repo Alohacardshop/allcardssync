@@ -1,47 +1,47 @@
 
 
-## Problem
+## Problem Analysis
 
-Reversing or not reversing the array is unreliable because we don't know if the stored `image_urls` order is correct — the data was stored before the PSA sort fix. Shopify assigns **position 1 = featured image** to the first item in the array.
+From the logs, our code reports `✅ PASSED` — Shopify's GraphQL says `uooA2qS1wUGojEweOijfpw.jpg` is featured. But the storefront still shows the wrong image. This means either:
+1. Our front/back identification is inverted for this comic
+2. Shopify's `productReorderMedia` mutation and `position` field don't actually control what the theme displays
+3. There's a caching layer we can't bust
 
-## Fix
+Your idea bypasses all of this by exploiting Shopify's behavior: **the last image uploaded tends to become the primary/featured image**.
 
-Two changes:
+## Plan: Two-Step Image Upload
 
-### 1. Send images with explicit `position` in `v2-shopify-send-graded/index.ts` (~line 349-352)
+### Changes to `shopify-sync/index.ts` — `createShopifyProduct()`
 
-Instead of guessing with `.reverse()`, assign `position: 1` to the front image explicitly. Since `psa-lookup` now sorts front-first, `image_urls[0]` should be front. We'll assign position explicitly:
+1. **Step 1: Create product with ONLY the back image** (the one we do NOT want as featured)
+   - For comics with 2 images: send only `image_urls[0]` (the back) in the initial `products.json` POST
+   - For non-comics or items with `psa_snapshot`: use existing logic
 
-```typescript
-images: (intakeItem.image_urls && Array.isArray(intakeItem.image_urls) && intakeItem.image_urls.length > 0)
-  ? intakeItem.image_urls.map((url: string, idx: number) => ({
-      src: url,
-      alt: title,
-      position: idx + 1  // position 1 = featured (front image)
-    }))
-  : imageUrl ? [{ src: imageUrl, alt: title, position: 1 }] : []
+2. **Step 2: Wait 1-2 seconds, then add the front image via a separate API call**
+   - Use `POST /products/{id}/images.json` to add the front image after creation
+   - Set `position: 1` on this second image to explicitly make it the primary
+
+3. **Still run `ensureMediaOrder()` afterward** as a verification/safety net, but the two-step upload should make it unnecessary
+
+### Changes to `_shared/shopify-media-order.ts` — `determineFrontImageUrl()`
+
+4. **Flip the comic logic**: Currently returns `imageUrls[1]` for comics. Based on the DB data and the user's feedback, `imageUrls[0]` (`aUqBDKB97kG9I7fq4MKSZQ.jpg`) is actually the front cover. We need to verify this with the user — but the two-step approach makes this less critical since position is controlled by upload order.
+
+### Also apply same logic to `v2-shopify-send-graded/index.ts`
+
+5. Port the two-step upload to the graded send function for consistency.
+
+### Technical Details
+
+```text
+Current flow:
+  POST /products.json  { images: [front, back] }  →  Shopify picks its own order
+  POST GraphQL reorder  →  sometimes ignored by theme
+
+New flow:
+  POST /products.json  { images: [back_only] }     →  back uploaded first
+  sleep(1500ms)
+  POST /products/{id}/images.json  { src: front, position: 1 }  →  front becomes primary
+  (optional) GraphQL reorder verification
 ```
-
-No reverse. Front is at index 0 → position 1 → featured.
-
-### 2. Fallback: if DB data is still stale (stored before sort fix), re-lookup at sync time
-
-For items already in the DB with wrong order, add a quick check: if the item's `psa_snapshot` has image data with `IsFrontImage` flags, re-sort at sync time before sending. This handles legacy data.
-
-```typescript
-// Re-sort image_urls using psa_snapshot if available
-let orderedImageUrls = intakeItem.image_urls || [];
-if (intakeItem.psa_snapshot?.images && Array.isArray(intakeItem.psa_snapshot.images)) {
-  const sorted = intakeItem.psa_snapshot.images
-    .sort((a, b) => (b.IsFrontImage ? 1 : 0) - (a.IsFrontImage ? 1 : 0));
-  orderedImageUrls = sorted.map(img => img.ImageURL).filter(Boolean);
-}
-```
-
-### 3. Deploy `v2-shopify-send-graded`
-
-### Technical Notes
-- Shopify REST API `position` field: position 1 = main/featured image
-- The `psa-lookup` sort fix only applies to newly scanned items; existing DB rows need the re-sort at sync time
-- No changes needed to `psa-lookup/helpers.ts` — the sort fix there is already correct for future scans
 
