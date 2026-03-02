@@ -46,6 +46,11 @@ export const useAddIntakeItem = () => {
 
   return useMutation<AddIntakeItemResponse, Error, AddIntakeItemParams, MutationContext>({
     mutationFn: async (params: AddIntakeItemParams) => {
+      // Graded items are always 1-of-1 — force quantity
+      if (params.grading_company_in) {
+        params.quantity_in = 1;
+      }
+
       logger.logDebug('Creating intake item', { 
         store: params.store_key_in, 
         location: params.shopify_location_gid_in 
