@@ -180,20 +180,23 @@ async function fetchConditions(
   }
 
   const data = await response.json()
-  const conditions: EbayConditionInfo[] = []
+  const condMap = new Map<string, EbayConditionInfo>()
 
   for (const policy of data.itemConditionPolicies || []) {
     for (const cond of policy.itemConditions || []) {
       if (cond.conditionId) {
-        conditions.push({
-          conditionId: String(cond.conditionId),
-          conditionDescription: cond.conditionDescription || cond.conditionId,
-        })
+        const id = String(cond.conditionId)
+        if (!condMap.has(id)) {
+          condMap.set(id, {
+            conditionId: id,
+            conditionDescription: cond.conditionDescription || id,
+          })
+        }
       }
     }
   }
 
-  return conditions
+  return [...condMap.values()]
 }
 
 async function fetchAspects(

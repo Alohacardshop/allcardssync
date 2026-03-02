@@ -103,7 +103,19 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
       });
       if (error) throw error;
       if (data?.success && data.schema?.conditions) {
-        setCategoryConditions(data.schema.conditions);
+        // Dedupe by conditionId, prefer first occurrence (which has description)
+        const deduped = new Map<string, CachedCondition>();
+        for (const c of data.schema.conditions as CachedCondition[]) {
+          if (!deduped.has(c.conditionId)) {
+            deduped.set(c.conditionId, {
+              conditionId: c.conditionId,
+              conditionDescription: c.conditionDescription || c.conditionId,
+            });
+          }
+        }
+        // Sort numerically by conditionId
+        const sorted = [...deduped.values()].sort((a, b) => Number(a.conditionId) - Number(b.conditionId));
+        setCategoryConditions(sorted);
       } else {
         setCategoryConditions([]);
       }
@@ -191,7 +203,9 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
         category_name: selectedCategoryName || editingTemplate.category_name || null,
         marketplace_id: editingTemplate.marketplace_id || 'EBAY_US',
         condition_id: editingTemplate.preferred_condition_ids?.[0] || editingTemplate.condition_id || '2750',
-        preferred_condition_ids: editingTemplate.preferred_condition_ids?.length ? editingTemplate.preferred_condition_ids : null,
+        preferred_condition_ids: editingTemplate.preferred_condition_ids?.length
+          ? [...new Map(editingTemplate.preferred_condition_ids.map(id => [id, id])).values()]
+          : null,
         is_graded: editingTemplate.is_graded ?? true,
         title_template: editingTemplate.title_template || null,
         description_template: editingTemplate.description_template || null,
