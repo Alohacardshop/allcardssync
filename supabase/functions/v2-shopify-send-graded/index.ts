@@ -81,13 +81,23 @@ Deno.serve(async (req) => {
                      (intakeItem.image_urls && Array.isArray(intakeItem.image_urls) && intakeItem.image_urls.length > 0 ? 
                        intakeItem.image_urls[0] : null)     // First image from array as fallback
 
-    // Get Shopify credentials
+    // Get Shopify credentials from system_settings table
     const storeUpper = storeKey.toUpperCase()
-    const domainKey = `SHOPIFY_${storeUpper}_STORE_DOMAIN`
-    const tokenKey = `SHOPIFY_${storeUpper}_ACCESS_TOKEN`
     
-    const domain = Deno.env.get(domainKey)
-    const token = Deno.env.get(tokenKey)
+    const { data: domainSetting } = await supabase
+      .from('system_settings')
+      .select('key_value')
+      .eq('key_name', `SHOPIFY_${storeUpper}_STORE_DOMAIN`)
+      .single()
+
+    const { data: tokenSetting } = await supabase
+      .from('system_settings')
+      .select('key_value')
+      .eq('key_name', `SHOPIFY_${storeUpper}_ACCESS_TOKEN`)
+      .single()
+
+    const domain = domainSetting?.key_value
+    const token = tokenSetting?.key_value
 
     if (!domain || !token) {
       throw new Error(`Missing Shopify credentials for ${storeKey}`)
