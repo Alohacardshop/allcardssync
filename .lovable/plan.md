@@ -1,38 +1,21 @@
 
 
-## Plan: Send Only the Front Image to Shopify (Skip Back Image)
+## Problem
+The `v2-shopify-send-graded` edge function fails to boot with: `Identifier 'variant' has already been declared at line 320`.
 
-### Problem
-Despite multiple reordering strategies, Shopify continues showing the back image as featured for comics. None of the approaches (GraphQL reorder, two-step upload, variant media fix) have reliably worked.
+There are two conflicting declarations of `variant` in the same function scope:
+- **Line 104**: `const variant` — the card variant string (e.g., "1st Edition", "Normal")
+- **Line 366**: `let product, variant` — the Shopify API variant object
 
-### Solution
-Simplify drastically: only send the front image to Shopify. Customers can look up the cert number to see the back image if needed.
+## Fix
+Rename the card variant variable on line 104 from `variant` to `cardVariant`, and update all references to it (lines 120, 254, 258):
 
-### Changes
+1. **Line 104**: `const variant` → `const cardVariant`
+2. **Line 120**: `if (variant && variant !== 'Normal')` → `if (cardVariant && cardVariant !== 'Normal')`
+3. **Line 254**: `if (variant)` → `if (cardVariant)`
+4. **Line 258**: `value: variant` → `value: cardVariant`
 
-**1. `supabase/functions/shopify-sync/index.ts`** — `createShopifyProduct()`
-- Remove the two-step upload logic entirely
-- Replace image array construction with: send only the front image (from `determineFrontImageUrl()`)
-- If no front image identified, fall back to `image_urls[0]` or `image_url`
-- Result: product always created with exactly 1 image — the front
-- Remove the deferred front image upload block (the `sleep(1500)` + POST section)
-- Keep `ensureMediaOrder()` call but it will be a no-op with single images
+Then redeploy `v2-shopify-send-graded`.
 
-**2. `supabase/functions/v2-shopify-send-graded/index.ts`**
-- Same change: in the `images` builder (the IIFE around line 231), return only the front image
-- Remove the two-step deferred front image upload block
-
-**3. `supabase/functions/_shared/shopify-media-order.ts`**
-- No changes needed — `ensureMediaOrder()` already short-circuits when `mediaNodes.length < 2`
-
-### Technical Detail
-```text
-Current: POST /products.json { images: [back] } → sleep → POST images.json { front }
-New:     POST /products.json { images: [front_only] }
-
-Front image selection (determineFrontImageUrl):
-  - PSA snapshot with IsFrontImage flag → that image
-  - Comics with 2 images → image_urls[1]  
-  - Default → image_urls[0]
-```
+No other files need changes. The Shopify `variant` on line 366 remains as-is since it refers to the product variant object returned by the Shopify API.
 
