@@ -1,59 +1,34 @@
 
 
-## Plan: Fix Invalid Category 259061 and Add Category Discovery/Validation
+## Plan: Prevent Duplicate Offers + Fix Merchant Location Key
 
 ### Problem
-Category ID `259061` ("Graded Comic Books") does not exist in eBay's live US category tree (error 62005). It's referenced in 4 places:
-1. `ebay_categories` DB table (row with `id = '259061'`)
-2. `ebay_listing_templates` — 4 graded comic templates use it
-3. `supabase/functions/_shared/ebayConditions.ts` — `GRADED_COMIC_BOOKS: '259061'`
-4. `src/lib/ebayPreviewResolver.ts` — hardcoded fallback
+1. `processCreate` (line 576) always calls `POST /offer` without checking if an offer already exists for that SKU, causing "Offer entity already exists" errors on retries.
+2. The merchant location key is already sourced from `storeConfig.location_key` (line 594), but if it's unregistered, the error isn't handled gracefully.
 
-### Step 1: Harden schema fetcher against empty responses
+### Changes (single file: `supabase/functions/ebay-sync-processor/index.ts`)
 
-**File: `supabase/functions/_shared/ebayCategorySchema.ts`**
-- In `fetchConditions` (~line 176): replace `response.json()` with safe text-first parsing — read `response.text()`, return `[]` if empty, then `JSON.parse(text)`
-- In `fetchAspects` (~line 199): same safe parsing pattern
+**Fix 1: Check for existing offers before creating (lines ~575-599)**
 
-### Step 2: Add `action: "subtree"` to the category schema edge function
+Replace the direct `createOffer` call with:
+1. Call `getOffersBySku(accessToken, environment, ebaySku)` first
+2. If an offer exists: `updateOffer` with current template values (categoryId, price, policies, merchantLocationKey, quantity), store the existing `offerId`, then `publishOffer`
+3. If no offer exists: `createOffer` as before, then `publishOffer`
 
-**File: `supabase/functions/ebay-category-schema/index.ts`**
-- Accept an optional `action` field in the request body (`"schema"` default, `"subtree"`)
-- When `action === "subtree"`: call `GET /commerce/taxonomy/v1/category_tree/{treeId}/get_category_subtree?category_id={category_id}` and return the child categories with their IDs, names, leaf status, and children count
-- This lets the admin browse eBay's live category tree from the Schema Inspector to discover the correct leaf ID for comics
+**Fix 2: Handle error 25002 (merchant location not registered)**
 
-### Step 3: Add subtree browser to Schema Inspector UI
+After the offer create/update step, if the result contains error 25002 or the string "Merchant location not registered":
+- Surface a clear error message: `"Merchant location '${locationKey}' is not registered on eBay. Go to Admin → eBay → Locations and click 'Register Location', or call ebay-manage-location POST."`
+- This is already partially handled in the shared `createOffer` function (it detects 25002), but we should also check it in the update path
 
-**File: `src/components/admin/EbayCategorySchemaInspector.tsx`**
-- Add a "Browse Subtree" button next to the existing "Inspect" button
-- When clicked, calls the edge function with `action: "subtree"` for the entered category ID
-- Displays child categories in a table with columns: ID, Name, Leaf?, Children count
-- Clicking a leaf category auto-fills the inspector's category ID field
+**Fix 3: Also pass `merchantLocationKey` in `processUpdate` offer update (line ~811-828)**
 
-### Step 4: Remove invalid `259061` constant and update fallbacks
+The existing `processUpdate` calls `updateOffer` but doesn't include `merchantLocationKey`. Add it so location changes propagate on updates too.
 
-**File: `supabase/functions/_shared/ebayConditions.ts`**
-- Change `GRADED_COMIC_BOOKS: '259061'` to `GRADED_COMIC_BOOKS: '63'` (temporary — will be updated to the real leaf once discovered)
-- This constant is only a last-resort fallback; the template's `category_id` takes priority
-
-**File: `src/lib/ebayPreviewResolver.ts`**
-- Change the graded comics fallback from `{ id: '259061', name: 'Graded Comic Books' }` to `{ id: '63', name: 'Comic Books' }` (same temporary measure)
-
-### Step 5: Update DB data (after discovery)
-
-Once we deploy the subtree browser and use it to find the correct leaf category under `63`:
-- Update `ebay_categories` row: change `id` from `259061` to the discovered leaf ID
-- Update `ebay_listing_templates`: change `category_id` from `259061` to the discovered leaf ID on all 4 graded comic templates
-
-This is a two-phase approach: deploy the tools first, discover the correct ID, then update the data.
-
-### Files to modify
-| File | Change |
-|------|--------|
-| `supabase/functions/_shared/ebayCategorySchema.ts` | Safe JSON parsing in `fetchConditions` and `fetchAspects` |
-| `supabase/functions/ebay-category-schema/index.ts` | Add `action: "subtree"` mode |
-| `src/components/admin/EbayCategorySchemaInspector.tsx` | Add subtree browser UI |
-| `supabase/functions/_shared/ebayConditions.ts` | Replace `259061` with `63` temporarily |
-| `src/lib/ebayPreviewResolver.ts` | Replace `259061` fallback with `63` |
-| DB: `ebay_categories` + `ebay_listing_templates` | Update after leaf discovery |
+### Summary of edits
+| Location | Change |
+|----------|--------|
+| `processCreate` lines 575-602 | Add `getOffersBySku` check; if exists → `updateOffer` + `publishOffer`; if not → `createOffer` + `publishOffer` |
+| `processUpdate` line 811-828 | Add `merchantLocationKey` to the offer update payload |
+| No new files needed | All changes in `ebay-sync-processor/index.ts` |
 
