@@ -347,28 +347,18 @@ Deno.serve(async (req) => {
           weight: intakeItem.product_weight || 3,
           weight_unit: 'oz'
         }],
-        // TWO-STEP IMAGE UPLOAD: Send back image(s) first, front added after delay
+        // FRONT-ONLY IMAGE: Send only the front image to Shopify
+        // Customers can look up the cert number to see back image if needed
         images: (() => {
-          let orderedUrls: string[] = intakeItem.image_urls || [];
-          if (intakeItem.psa_snapshot?.images && Array.isArray(intakeItem.psa_snapshot.images)) {
-            const sorted = [...intakeItem.psa_snapshot.images]
-              .sort((a: any, b: any) => (b.IsFrontImage ? 1 : 0) - (a.IsFrontImage ? 1 : 0));
-            const snapshotUrls = sorted.map((img: any) => img.ImageURL).filter(Boolean);
-            if (snapshotUrls.length > 0) orderedUrls = snapshotUrls;
-          } else if (isComic && orderedUrls.length === 2) {
-            orderedUrls = [...orderedUrls].reverse();
-          }
-          // For two-step: only include back image(s) in initial create
-          // Front image will be added after delay
           const frontUrl = determineFrontImageUrl(intakeItem);
-          if (orderedUrls.length >= 2 && frontUrl) {
-            const backImages = orderedUrls.filter((url: string) => url !== frontUrl);
-            return backImages.map((url: string, idx: number) => ({ src: url, alt: title, position: idx + 1 }));
+          const singleUrl = frontUrl || imageUrl || 
+            (intakeItem.image_urls && Array.isArray(intakeItem.image_urls) && intakeItem.image_urls.length > 0 
+              ? intakeItem.image_urls[0] : null);
+          if (singleUrl) {
+            console.log(`[FRONT-ONLY] Sending single image to Shopify: ${singleUrl}`);
+            return [{ src: singleUrl, alt: title, position: 1 }];
           }
-          if (orderedUrls.length > 0) {
-            return orderedUrls.map((url: string, idx: number) => ({ src: url, alt: title, position: idx + 1 }));
-          }
-          return imageUrl ? [{ src: imageUrl, alt: title, position: 1 }] : [];
+          return [];
         })()
       }
     }
@@ -441,45 +431,7 @@ Deno.serve(async (req) => {
       variant = product.variants[0]
     }
 
-    // TWO-STEP: Add the front image after a delay so it becomes the primary/featured image
-    const deferredFrontUrl = determineFrontImageUrl(intakeItem)
-    if (deferredFrontUrl) {
-      // Check if the front image was excluded from initial create (2+ images)
-      const allImageUrls = intakeItem.image_urls || []
-      const hasPsaImages = intakeItem.psa_snapshot?.images && Array.isArray(intakeItem.psa_snapshot.images)
-      const hasMultipleImages = allImageUrls.length >= 2 || (hasPsaImages && intakeItem.psa_snapshot.images.length >= 2)
-      
-      if (hasMultipleImages) {
-        console.log(`[TWO-STEP] Waiting 1.5s before adding front image...`)
-        await new Promise(r => setTimeout(r, 1500))
-        
-        try {
-          const addImageResponse = await fetch(`https://${domain}/admin/api/2024-07/products/${product.id}/images.json`, {
-            method: 'POST',
-            headers: {
-              'X-Shopify-Access-Token': token,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              image: {
-                src: deferredFrontUrl,
-                alt: `${title} - Front`,
-                position: 1
-              }
-            })
-          })
-          if (addImageResponse.ok) {
-            const imgResult = await addImageResponse.json()
-            console.log(`[TWO-STEP] ✅ Front image added with position 1, image ID: ${imgResult?.image?.id}`)
-          } else {
-            const errText = await addImageResponse.text()
-            console.error(`[TWO-STEP] ❌ Failed to add front image: ${errText}`)
-          }
-        } catch (imgErr) {
-          console.error(`[TWO-STEP] ❌ Failed to add front image:`, imgErr)
-        }
-      }
-    }
+    // No deferred image upload needed — front-only strategy sends single image in initial create
 
     // Ensure front image is featured using shared helper (verification/safety net)
     const frontUrl = determineFrontImageUrl(intakeItem)

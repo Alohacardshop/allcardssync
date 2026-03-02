@@ -435,31 +435,15 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
   // Determine front URL using shared logic
   const frontImageUrl = determineFrontImageUrl(item)
   
-  // TWO-STEP IMAGE UPLOAD: Send back image(s) first, front image added later
-  // This exploits Shopify's behavior where the last uploaded image becomes the primary/featured
-  let initialImages: { src: string; alt: string; position: number }[] = []
-  let deferredFrontUrl: string | null = null
-  
-  if (uniqueImageUrls.length >= 2 && frontImageUrl) {
-    // Send all images EXCEPT the front one in the initial create
-    const backImages = uniqueImageUrls.filter(url => url !== frontImageUrl)
-    initialImages = backImages.map((url, index) => ({
-      src: url,
-      alt: `${title} - Image ${index + 1}`,
-      position: index + 1
-    }))
-    deferredFrontUrl = frontImageUrl
-    console.log(`[TWO-STEP] Will create with ${backImages.length} back image(s), then add front image after delay`)
-  } else {
-    // Single image or no front identified — send all at once
-    initialImages = uniqueImageUrls.map((url, index) => ({
-      src: url,
-      alt: `${title} - Image ${index + 1}`,
-      position: index + 1
-    }))
-  }
-  
-  const images = initialImages
+  // FRONT-ONLY IMAGE: Send only the front image to Shopify
+  // Customers can look up the cert number to see back image if needed
+  const singleImageUrl = frontImageUrl || uniqueImageUrls[0]
+  const images = [{
+    src: singleImageUrl,
+    alt: title,
+    position: 1
+  }]
+  console.log(`[FRONT-ONLY] Sending single image to Shopify: ${singleImageUrl}`)
   
   const handle = item.sku.toLowerCase().replace(/[^a-z0-9]/g, '-')
   
@@ -615,28 +599,6 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
 
   const createdProduct = result.product
   const createdVariant = createdProduct.variants[0]
-
-  // TWO-STEP: Add the front image after a delay so it becomes the primary/featured image
-  if (deferredFrontUrl) {
-    console.log(`[TWO-STEP] Waiting 1.5s before adding front image...`)
-    await sleep(1500)
-    
-    try {
-      const addImageResult = await shopifyRequest(credentials, `products/${createdProduct.id}/images.json`, {
-        method: 'POST',
-        body: JSON.stringify({
-          image: {
-            src: deferredFrontUrl,
-            alt: `${title} - Front`,
-            position: 1
-          }
-        })
-      })
-      console.log(`[TWO-STEP] ✅ Front image added with position 1, image ID: ${addImageResult?.image?.id}`)
-    } catch (imgErr) {
-      console.error(`[TWO-STEP] ❌ Failed to add front image:`, imgErr)
-    }
-  }
 
   return {
     product: createdProduct,
