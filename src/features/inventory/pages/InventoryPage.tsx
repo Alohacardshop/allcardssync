@@ -664,8 +664,8 @@ const InventoryPage = () => {
                     inventoryLevelsMap={inventoryLevelsMap}
                     selectedLocationGid={filters.locationFilter}
                     focusedIndex={focusedIndex}
-                    quantityReadOnly={isShopifyTruth}
-                    quantityReadOnlyReason="Shopify is source of truth."
+                    quantityReadOnly={false}
+                    quantityReadOnlyReason=""
                     visibleColumns={visibleColumns}
                     onToggleSelection={toggleSelection}
                     onSetSelection={setSelection}
@@ -710,8 +710,8 @@ const InventoryPage = () => {
                 syncingRowId={syncingRowId}
                 locationsMap={locationsMap}
                 focusedIndex={focusedIndex}
-                quantityReadOnly={isShopifyTruth}
-                quantityReadOnlyReason="Shopify is source of truth."
+                quantityReadOnly={false}
+                quantityReadOnlyReason=""
                 onToggleSelection={toggleSelection}
                 onToggleExpanded={toggleExpanded}
                 onSync={handleSync}

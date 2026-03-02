@@ -46,6 +46,7 @@ export interface InventoryListItem {
     [key: string]: unknown;
   } | null;
   ebay_listing_id: string | null;
+  ebay_offer_id: string | null;
   ebay_listing_url: string | null;
   ebay_sync_status: string | null;
   ebay_sync_error: string | null;
