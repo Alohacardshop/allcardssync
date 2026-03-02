@@ -16,6 +16,7 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { CGCCertificateData } from "@/types/cgc";
 import type { PSACertificateData } from "@/types/psa";
+import { normalizePSAData } from "@/lib/psaNormalization";
 import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
 
 interface GradedComicIntakeProps {
@@ -151,7 +152,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
           return;
         }
 
-        const psaCertData = data.data;
+        const psaCertData = normalizePSAData(data.data);
         logger.logInfo('PSA data found', { subject: psaCertData.subject, grade: psaCertData.grade });
         setPsaData(psaCertData);
         
@@ -159,7 +160,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
         setFormData(prev => ({
           ...prev,
           title: psaCertData.subject || "",
-          issueNumber: psaCertData.cardNumber || "",
+          issueNumber: psaCertData.issueNumber || psaCertData.cardNumber || "",
           publisher: psaCertData.brandTitle || "",
           year: psaCertData.year || "",
           grade: psaCertData.grade || "",
@@ -261,13 +262,10 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
             year: formData.year
           };
 
-      // Build variant: include variety if available (from CGC or PSA), then grading info
-      const varietyPart = gradingService === 'psa' 
+      // Variant is just the variety/pedigree info (e.g., cover variant), no grade info
+      const variant = gradingService === 'psa' 
         ? (psaData?.varietyPedigree || '') 
         : (cgcData?.variety || '');
-      const gradePart = `${gradingService.toUpperCase()} ${formData.grade}`;
-      const variant = varietyPart ? `${varietyPart} ${gradePart}` : gradePart;
-      const titleWithVariant = `${formData.title} ${variant}`.trim();
 
       await addItem({
         store_key_in: assignedStore,
@@ -275,7 +273,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
         quantity_in: formData.quantity,
         grade_in: formData.grade,
         brand_title_in: formData.publisher,
-        subject_in: titleWithVariant,
+        subject_in: formData.title,
         category_in: formData.publisher || "Comics",
         variant_in: variant,
         card_number_in: formData.issueNumber,
