@@ -1,38 +1,30 @@
 
 
-## Summary
+## Problem
 
-Two issues to address:
+The default column set (`WORKBENCH_COLUMNS`) used on the inventory page doesn't include `ebay_status`. So the eBay sync badge only appears if the user manually adds the column via the Column Chooser. Shopify status is included by default, but eBay is not.
 
-1. **Quantity editing already works and syncs to Shopify** — the `InlineQuantityEditor` component already updates the DB and calls `v2-shopify-set-inventory` with delta-based adjustments. However, it's currently **blocked** when `isShopifyTruth` is enabled (read-only mode). We need to allow editing even in Shopify-truth mode since the user wants to adjust quantity from the inventory screen.
+## Fix
 
-2. **Delete does not clean up eBay** — the `deleteMutation` in `useInventoryMutations.ts` removes from Shopify but never ends the eBay listing. If the item has an `ebay_offer_id`, we need to call `queue_ebay_end_listing` to end the eBay listing too.
+**File: `src/features/inventory/pages/InventoryPage.tsx`** (line 69-78)
 
----
-
-### Changes
-
-**File: `src/features/inventory/pages/InventoryPage.tsx`**
-- Remove or change `quantityReadOnly={isShopifyTruth}` so quantity is always editable. The `InlineQuantityEditor` already handles Shopify sync via delta adjustments with optimistic locking, so it's safe to allow edits even in truth mode.
-
-**File: `src/features/inventory/hooks/useInventoryMutations.ts`**
-- In the `deleteMutation` (around line 278-325), after successfully removing from Shopify, check if the item has an `ebay_offer_id`. If so, call `supabase.rpc('queue_ebay_end_listing', { p_ebay_offer_id: item.ebay_offer_id, p_sku: item.sku })` to queue ending the eBay listing.
-- Also do the same in the `removeMutation` for consistency — if removing from Shopify, also end the eBay listing.
-
-**File: `src/features/inventory/types.ts`**
-- Ensure `ebay_offer_id` is available on `InventoryListItem` (check if it's already in the type/query).
-
-### Technical Detail
+Add `'ebay_status'` to the `WORKBENCH_COLUMNS` array, placing it right after `'shopify_status'`:
 
 ```typescript
-// In deleteMutation, after Shopify removal succeeds:
-if (item.ebay_offer_id) {
-  await supabase.rpc('queue_ebay_end_listing', {
-    p_ebay_offer_id: item.ebay_offer_id,
-    p_sku: item.sku || ''
-  });
-}
+const WORKBENCH_COLUMNS: InventoryColumn[] = [
+  'checkbox',
+  'sku',
+  'title',
+  'location',
+  'price',
+  'quantity',
+  'shopify_status',
+  'ebay_status',    // ← add this
+  'actions',
+];
 ```
 
-The retry_jobs system will handle the actual eBay API call with exponential backoff, so this is reliable even if eBay is temporarily unavailable.
+This is a one-line addition. The `EbayStatusBadge` component and the table cell rendering for `ebay_status` already exist — they're just hidden because the column isn't in the default set.
+
+**Note:** Users who have already loaded the page will have the old default cached in React state. If column preferences are persisted (e.g., in a saved view or localStorage), those users may need to reset their view to pick up the new default.
 
