@@ -188,6 +188,11 @@ export async function scrapeComicCert(certNumber: string, requestId: string): Pr
     }
     
     if (imageUrls.length > 0) {
+      // PSA cert pages show back image first (Slide 1) and front cover second (Slide 2).
+      // Reverse so front cover is at index 0 for consistent handling downstream.
+      if (imageUrls.length === 2) {
+        imageUrls.reverse();
+      }
       result.imageUrls = imageUrls;
       result.imageUrl = imageUrls[0];
     }
