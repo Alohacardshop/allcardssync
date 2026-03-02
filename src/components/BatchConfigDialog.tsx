@@ -119,14 +119,16 @@ export function BatchConfigDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {children || (
-          <Button disabled={disabled} variant="default">
-            <Upload className="w-4 h-4 mr-2" />
-            Batch Send to Shopify ({itemCount})
-          </Button>
-        )}
-      </DialogTrigger>
+      {externalOpen === undefined && (
+        <DialogTrigger asChild>
+          {children || (
+            <Button disabled={disabled} variant="default">
+              <Upload className="w-4 h-4 mr-2" />
+              Batch Send to Shopify ({itemCount})
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
