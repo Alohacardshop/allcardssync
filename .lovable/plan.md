@@ -1,21 +1,26 @@
 
 
-## Problem
+## Fix: Instant eBay Push After Toggle
 
-When you toggle "List on eBay" on an item, it only sets the `list_on_ebay` flag in `intake_items`. Nothing inserts a row into `ebay_sync_queue`, so the `ebay-sync-processor` cron (runs every 3 minutes) never picks it up. The item just sits at "Pending" forever.
+### Problem
+1. The `ebay-sync-processor` cron job has zero logs — it's either not configured in `pg_cron` or broken
+2. Even if it worked, waiting 3 minutes is unnecessary for single-item toggles
 
-## Fix
+### Solution
+Add an immediate `supabase.functions.invoke('ebay-sync-processor')` call in the `toggleListOnEbay` function right after inserting the queue entry. This mirrors how the Shopify sync works — queue + immediate trigger.
 
-Modify `toggleListOnEbay` in `src/hooks/useEbayListing.ts` so that when enabling eBay (`!currentValue === true`), it also inserts a row into `ebay_sync_queue` with `action: 'create'` and `status: 'queued'`, and sets `ebay_sync_status: 'queued'` on the intake item. When disabling eBay, it clears the `ebay_sync_status`.
+### Changes
 
-### Changes to `src/hooks/useEbayListing.ts` — `toggleListOnEbay` function:
+**`src/hooks/useEbayListing.ts`** — After the queue upsert (line 38), add:
+```typescript
+// Immediately trigger the processor (don't await — fire and forget)
+supabase.functions.invoke('ebay-sync-processor', {
+  body: { batch_size: 1 }
+}).catch(() => {}) // Silent fail — cron will retry
+```
 
-1. After updating `list_on_ebay`, if enabling:
-   - Also update `ebay_sync_status` to `'queued'`
-   - Insert a row into `ebay_sync_queue` with `inventory_item_id`, `action: 'create'`, `status: 'queued'`
-2. If disabling:
-   - Set `ebay_sync_status` to `null`
-   - Remove any pending queue entries for this item
+This gives instant processing while the cron remains as a safety net for any missed items.
 
-The `ebay-sync-processor` cron already runs every 3 minutes and picks up `queued` items from `ebay_sync_queue`, so no other changes are needed — the item will be automatically processed on the next cron cycle.
+### Also check
+- Verify the `pg_cron` schedule exists for `ebay-sync-processor` as a backup — if it doesn't, we should add it
 
