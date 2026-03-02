@@ -2,58 +2,39 @@
 
 ## Problem
 
-When you re-scan a graded comic (cert 146094215), the item exists in a **closed** lot (`a856bfe6`). The `create_raw_intake_item` RPC fires its `ON CONFLICT DO UPDATE` clause, which updates fields like quantity, subject, grade, etc. — but **does not update `lot_id`**. The item stays assigned to the closed lot and never appears in the current batch.
-
-The client-side duplicate detection in `useAddIntakeItem.ts` (lines 61-173) should catch this first, but either it's not triggering or its lot reassignment is also failing. Either way, the RPC itself needs to be the safety net.
+The back image shows as the primary/featured image in Shopify for graded cards. The current fix attempt — `.reverse()` on `image_urls` at line 354 of `v2-shopify-send-graded` — is fragile because it assumes PSA always returns images in `[back, front]` order, which isn't guaranteed.
 
 ## Root Cause
 
-In `create_raw_intake_item`, the `ON CONFLICT DO UPDATE SET` block is missing `lot_id` reassignment. When a duplicate is found, the item needs to be moved into the user's current active lot.
+In `supabase/functions/psa-lookup/helpers.ts`, `extractImageUrls` stores images in whatever order the PSA API returns them (line 66). The `IsFrontImage` flag is only used to pick `primaryImageUrl` but **not** to sort the `image_urls` array. So the stored order is unpredictable.
+
+Then `v2-shopify-send-graded` blindly reverses the array hoping to put front first — but if PSA already returned front first, the reverse puts back first.
 
 ## Plan
 
-### 1. Fix `create_raw_intake_item` RPC — reassign lot on conflict
+### 1. Fix image ordering at the source — `psa-lookup/helpers.ts`
 
-Update the RPC to:
-- Call `get_or_create_active_lot` at the top of the function to get the current active lot ID
-- Use that lot ID in the INSERT (so new items get lot assignment)
-- Add `lot_id = v_active_lot_id` to the `ON CONFLICT DO UPDATE SET` clause
-
-This ensures that both new inserts AND conflict-updates always land in the active lot.
-
-### 2. Add guard in `useAddIntakeItem.ts` duplicate path
-
-In the duplicate detection path (line 126), add a null check for `activeLotId`. If `get_or_create_active_lot` returns empty/undefined, throw an error instead of silently passing `undefined` to the update:
+Update `extractImageUrls` to sort images so the front image is always first:
 
 ```typescript
-if (!activeLotId) {
-  throw new Error('Failed to get or create active lot');
-}
+// Sort: front image first, then others
+imageUrls = imagesData
+  .sort((a, b) => (b.IsFrontImage === true ? 1 : 0) - (a.IsFrontImage === true ? 1 : 0))
+  .map(img => img.ImageURL)
+  .filter(url => url);
 ```
 
-Same fix for the race-condition fallback path (~line 252).
+This guarantees `image_urls[0]` is always the front image in the database.
 
-### 3. Fix existing orphaned item
+### 2. Remove the `.reverse()` hack in `v2-shopify-send-graded`
 
-Run a data fix to move the stranded item (`5d89030b`) into a new active lot so it appears in the current batch.
+Since `image_urls` will now be reliably front-first, remove the reverse logic on line 349-355 and use the array directly for both comics and cards:
 
-### Technical Details
-
-**Database migration** — Update `create_raw_intake_item`:
-```sql
--- Add at top of function body:
-v_active_lot_id uuid;
-...
-SELECT id INTO v_active_lot_id 
-FROM get_or_create_active_lot(store_key_in, shopify_location_gid_in);
-
--- Add lot_id to INSERT column list and VALUES
--- Add to ON CONFLICT DO UPDATE SET:
-lot_id = v_active_lot_id,
+```typescript
+images: intakeItem.image_urls.map((url) => ({ src: url, alt: title }))
 ```
 
-**Files to modify:**
-- `src/hooks/useAddIntakeItem.ts` — null guard for `activeLotId` (2 locations)
-- Database migration for `create_raw_intake_item` RPC
-- Data fix for the stranded item
+### 3. Deploy and re-sync
+
+After deploying both edge functions, re-scan cert `146094215` and sync to Shopify. The front image will be first in the array, and Shopify will use it as the featured image.
 
