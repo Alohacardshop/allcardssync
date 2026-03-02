@@ -63,9 +63,12 @@ export function extractImageUrls(imagesData: any[] | null): {
   let primaryImageUrl: string | undefined = undefined;
 
   if (imagesData && Array.isArray(imagesData)) {
-    imageUrls = imagesData.map(img => img.ImageURL).filter(url => url);
-    const frontImage = imagesData.find(img => img.IsFrontImage === true);
-    primaryImageUrl = frontImage?.ImageURL || imageUrls[0];
+    // Sort: front image first, then others — guarantees image_urls[0] is always the front
+    imageUrls = imagesData
+      .sort((a, b) => (b.IsFrontImage === true ? 1 : 0) - (a.IsFrontImage === true ? 1 : 0))
+      .map(img => img.ImageURL)
+      .filter(url => url);
+    primaryImageUrl = imageUrls[0];
   }
 
   return { imageUrls, primaryImageUrl };
