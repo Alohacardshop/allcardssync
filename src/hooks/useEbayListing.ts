@@ -10,18 +10,42 @@ export function useEbayListing() {
 
   const toggleListOnEbay = async (itemId: string, currentValue: boolean) => {
     setIsToggling(itemId);
+    const enabling = !currentValue;
     try {
+      // Update the flag + sync status together
       const { error } = await supabase
         .from('intake_items')
         .update({ 
-          list_on_ebay: !currentValue,
+          list_on_ebay: enabling,
+          ebay_sync_status: enabling ? 'queued' : null,
           updated_at: new Date().toISOString()
         })
         .eq('id', itemId);
 
       if (error) throw error;
 
-      toast.success(!currentValue ? 'Marked for eBay listing' : 'Removed from eBay listing');
+      if (enabling) {
+        // Insert into sync queue so the cron picks it up
+        const { error: queueError } = await supabase
+          .from('ebay_sync_queue')
+          .upsert({
+            inventory_item_id: itemId,
+            action: 'create',
+            status: 'queued',
+            queue_position: 1
+          }, { onConflict: 'inventory_item_id' });
+
+        if (queueError) throw queueError;
+      } else {
+        // Remove any pending queue entries
+        await supabase
+          .from('ebay_sync_queue')
+          .delete()
+          .eq('inventory_item_id', itemId)
+          .in('status', ['queued', 'pending']);
+      }
+
+      toast.success(enabling ? 'Queued for eBay listing' : 'Removed from eBay listing');
       queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
     } catch (error: any) {
       toast.error('Failed to update eBay status: ' + error.message);
