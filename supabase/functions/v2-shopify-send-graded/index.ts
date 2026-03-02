@@ -1,7 +1,8 @@
 import { corsHeaders } from '../_shared/cors.ts'
 import { requireAuth, requireRole, requireStoreAccess } from '../_shared/auth.ts'
 import { SendGradedSchema, SendGradedInput } from '../_shared/validation.ts'
- import { writeInventory, generateRequestId, locationGidToId } from '../_shared/inventory-write.ts'
+import { writeInventory, generateRequestId, locationGidToId } from '../_shared/inventory-write.ts'
+import { ensureMediaOrder, determineFrontImageUrl } from '../_shared/shopify-media-order.ts'
 
 // Helper function to generate barcode for graded items
 // Priority: Certificate number (PSA/CGC) > SKU
@@ -436,93 +437,18 @@ Deno.serve(async (req) => {
       variant = product.variants[0]
     }
 
-    // === Reorder media via GraphQL to guarantee front image is featured ===
-    // Wait for Shopify to finish processing uploaded images
-    await new Promise(r => setTimeout(r, 3000))
-    try {
-      const mediaQueryResponse = await fetch(`https://${domain}/admin/api/2024-07/graphql.json`, {
-        method: 'POST',
-        headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `query($id:ID!){product(id:$id){media(first:10){edges{node{id ... on MediaImage{image{url}}}}}}}`,
-          variables: { id: `gid://shopify/Product/${product.id}` }
-        })
+    // Ensure front image is featured using shared helper
+    const frontUrl = determineFrontImageUrl(intakeItem)
+    if (frontUrl) {
+      const mediaResult = await ensureMediaOrder({
+        domain,
+        token,
+        productId: product.id.toString(),
+        intendedFrontUrl: frontUrl
       })
-
-      if (mediaQueryResponse.ok) {
-        const mediaResult = await mediaQueryResponse.json()
-        const mediaEdges = mediaResult?.data?.product?.media?.edges || []
-        console.log(`[MEDIA REORDER] Found ${mediaEdges.length} media items for product ${product.id}`)
-
-        if (mediaEdges.length >= 2) {
-          // Determine front image URL from our sorted order
-          // orderedUrls[0] should be the front image (sorted earlier in the images IIFE)
-          const orderedUrls: string[] = (() => {
-            let urls: string[] = intakeItem.image_urls || [];
-            if (intakeItem.psa_snapshot?.images && Array.isArray(intakeItem.psa_snapshot.images)) {
-              const sorted = [...intakeItem.psa_snapshot.images]
-                .sort((a: any, b: any) => (b.IsFrontImage ? 1 : 0) - (a.IsFrontImage ? 1 : 0));
-              const snapshotUrls = sorted.map((img: any) => img.ImageURL).filter(Boolean);
-              if (snapshotUrls.length > 0) return snapshotUrls;
-            }
-            if (isComic && urls.length === 2) return [...urls].reverse();
-            return urls;
-          })()
-          
-          const frontFilename = (orderedUrls[0] || '').split('/').pop() || ''
-          
-          // Find which Shopify media node matches the front image
-          let frontMediaIdx = -1
-          for (let i = 0; i < mediaEdges.length; i++) {
-            const mediaUrl = mediaEdges[i].node?.image?.url || ''
-            if (frontFilename && mediaUrl.includes(frontFilename)) {
-              frontMediaIdx = i
-              break
-            }
-          }
-          
-          console.log(`[MEDIA REORDER] Front filename: ${frontFilename}, matched at Shopify index: ${frontMediaIdx}`)
-
-          let moves: { id: string; newPosition: string }[]
-          if (frontMediaIdx >= 0) {
-            const frontId = mediaEdges[frontMediaIdx].node.id
-            const otherIds = mediaEdges.filter((_: any, i: number) => i !== frontMediaIdx).map((e: any) => e.node.id)
-            moves = [
-              { id: frontId, newPosition: "0" },
-              ...otherIds.map((id: string, i: number) => ({ id, newPosition: String(i + 1) }))
-            ]
-          } else {
-            moves = mediaEdges.map((e: any, i: number) => ({ id: e.node.id, newPosition: String(i) }))
-          }
-
-          const reorderResponse = await fetch(`https://${domain}/admin/api/2024-07/graphql.json`, {
-            method: 'POST',
-            headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              query: `mutation($id:ID!,$moves:[MoveInput!]!){productReorderMedia(id:$id,moves:$moves){job{id}mediaUserErrors{field message}}}`,
-              variables: { id: `gid://shopify/Product/${product.id}`, moves }
-            })
-          })
-
-          if (reorderResponse.ok) {
-            const reorderResult = await reorderResponse.json()
-            const userErrors = reorderResult?.data?.productReorderMedia?.mediaUserErrors || []
-            if (userErrors.length > 0) {
-              console.warn(`[MEDIA REORDER] userErrors:`, JSON.stringify(userErrors))
-            } else {
-              console.log(`[MEDIA REORDER] ✅ Reordered media for product ${product.id}. Front=${moves[0]?.id}`)
-            }
-          } else {
-            console.warn(`[MEDIA REORDER] HTTP ${reorderResponse.status}: ${await reorderResponse.text()}`)
-          }
-        } else {
-          console.log(`[MEDIA REORDER] Product ${product.id} has ${mediaEdges.length} media items, skipping reorder`)
-        }
-      } else {
-        console.warn(`[MEDIA REORDER] Failed to fetch media: HTTP ${mediaQueryResponse.status}`)
+      if (!mediaResult.success) {
+        console.warn(`[MEDIA ORDER] ${mediaResult.message}`)
       }
-    } catch (reorderError) {
-      console.warn(`[MEDIA REORDER] Error reordering media:`, reorderError)
     }
 
     // Set inventory level at location using centralized helper
