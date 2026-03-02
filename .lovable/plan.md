@@ -1,23 +1,36 @@
 
 
-## Add Location Management UI to the eBay Settings Tab
+## Plan: Add "List All eBay Locations" and Fix Multi-Store Support
 
-The `ebay-manage-location` edge function is deployed but has no frontend. We'll add a "Merchant Location" card to the Settings tab on `/ebay` that lets you verify and register your eBay location.
+### Problem
+- The edge function uses `.single()` on `ebay_store_config` but you have 2 active configs (hawaii + las_vegas), causing it to crash.
+- There's no way to list all merchant locations registered on your eBay account.
 
-### What it does
+### Changes
 
-- **Verify button**: Calls `GET ebay-manage-location` to check if the configured `location_key` exists on eBay. Shows the result (found with details, or "not registered").
-- **Register form**: If not found, shows address fields (`addressLine1`, `city`, `stateOrProvince`, `postalCode`, `country`) and a Register button that calls `POST ebay-manage-location`.
-- Displays the current `location_key` from config so you know what key is being checked.
+**1. Update `supabase/functions/ebay-manage-location/index.ts`**
+
+- Accept a `store_key` query parameter (e.g., `?store_key=hawaii`) to select which store config to use, instead of `.single()`.
+- Add a new action via query param `?action=list` that calls `GET /sell/inventory/v1/location` (no key suffix) to return **all** locations registered on that eBay account.
+- Keep the existing `?action=verify` (default GET) behavior for checking a specific `location_key`.
+
+**2. Update `src/components/admin/EbayMerchantLocation.tsx`**
+
+- Pass the current `storeKey` as a prop alongside `locationKey`.
+- Add a "List All Locations" button that calls the edge function with `action=list`.
+- Display the returned locations in a table/list showing each location's key, name, address, and status.
+- The existing Verify and Register buttons continue to work as before.
+
+**3. Update `src/pages/EbayApp.tsx`**
+
+- Pass `storeKey={selectedConfig.store_key}` to `EbayMerchantLocation`.
+
+### How it works
+
+The eBay Inventory API endpoint `GET /sell/inventory/v1/location` (without a specific key) returns all registered merchant locations. The edge function will call this and return the full list. The UI will render them so you can see exactly what's registered.
 
 ### Files to change
-
-1. **`src/pages/EbayApp.tsx`** — Add a "Merchant Location" card inside the Settings tab (after the connection card, around line 1019). It will:
-   - Show the current `location_key` from `selectedConfig`
-   - Have a "Verify Location" button that invokes `ebay-manage-location` via GET
-   - Show verification result (success with location details, or error)
-   - On failure, expand an address form to register the location via POST
-   - Show success/error toast on registration
-
-No new files needed — just UI wiring to the existing edge function.
+- `supabase/functions/ebay-manage-location/index.ts` — add `store_key` param, add `action=list`
+- `src/components/admin/EbayMerchantLocation.tsx` — add list UI, accept `storeKey` prop
+- `src/pages/EbayApp.tsx` — pass `storeKey` prop
 
