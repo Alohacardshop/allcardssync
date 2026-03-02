@@ -262,6 +262,8 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
             year: formData.year
           };
 
+      const gradingCompanyUpper = gradingService.toUpperCase();
+
       // Variant is just the variety/pedigree info (e.g., cover variant), no grade info
       const variant = gradingService === 'psa' 
         ? (psaData?.varietyPedigree || '') 
@@ -283,6 +285,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
         main_category_in: formData.mainCategory,
         sub_category_in: 'graded_comics',
         year_in: formData.year || null,
+        grading_company_in: gradingCompanyUpper,
         catalog_snapshot_in: catalogSnapshot
       });
 
