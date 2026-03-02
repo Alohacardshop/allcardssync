@@ -211,4 +211,4 @@ verify_jwt = true
 
 # eBay merchant location management (list/create locations)
 [functions.ebay-manage-location]
-verify_jwt = true
+verify_jwt = false
