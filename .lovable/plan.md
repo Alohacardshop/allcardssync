@@ -1,11 +1,18 @@
 
 
-## Make Graded Comics the Default on Intake Tab
+## Remove Redundant "Batch Send to Shopify" Button
 
-Two quick changes in `src/pages/Index.tsx`:
+The `BatchConfigDialog` component always renders a trigger button ("Batch Send to Shopify") via `DialogTrigger`, even when the dialog is controlled externally through `open`/`onOpenChange` props. Since the "Send to Inventory" button in the `CurrentBatchPanel` header already opens this dialog, the bottom button is redundant and confusing.
 
-1. **Line 12**: Change `collectibleType` default from `'cards'` to `'comics'`
-2. **Line 14**: Change `comicCondition` default from `'raw'` to `'graded'`
+### Fix
 
-This will open the Intake page with the Comics tab selected and the Graded sub-tab active by default.
+**File: `src/components/BatchConfigDialog.tsx`**
+
+When `externalOpen` is provided (meaning the dialog is controlled externally), skip rendering the `DialogTrigger` entirely. Only render the `DialogContent`.
+
+Change the return JSX so that:
+- If `externalOpen !== undefined` (externally controlled), render `<Dialog>` with just `<DialogContent>` — no `<DialogTrigger>`
+- If internally controlled (no external open prop), keep the existing trigger button behavior
+
+This removes the floating green button at the bottom of the intake page while keeping the dialog functional when opened via "Send to Inventory".
 
