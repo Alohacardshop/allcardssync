@@ -282,11 +282,14 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
                                  "";
         
         // Auto-populate form with fetched data
+        // For comics, use varietyPedigree as variant (actual cover variant info)
+        const isComic = detectedCategory === 'comics';
         setFormData(prev => ({
           ...prev,
           brandTitle: normalizedData.brandTitle || "",
           subject: normalizedData.subject || "",
           category: normalizedData.category || "",
+          variant: isComic ? (normalizedData.varietyPedigree || "") : prev.variant,
           cardNumber: normalizedData.cardNumber || "",
           year: normalizedData.year || "",
           grade: normalizedData.grade || "",

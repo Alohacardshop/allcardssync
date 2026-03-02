@@ -144,15 +144,28 @@ export function normalizePSAData(rawData: any): PSACertificateData {
     return cleaned || undefined;
   };
 
+  // Clean grade: strip trailing .0 (e.g., "10.0" → "10")
+  const rawGrade = extractCleanField(rawData.grade, 20);
+  const cleanedGrade = rawGrade ? rawGrade.replace(/\.0$/, '') : rawGrade;
+
+  // Clean subject: strip trailing grade info patterns like "1 PSA 10.0" or "PSA 10"
+  const rawSubject = extractCleanField(rawData.subject, 100);
+  const cleanedSubject = rawSubject 
+    ? rawSubject
+        .replace(/\s+\d*\s*PSA\s+\d+\.?\d*$/i, '')
+        .replace(/\s+PSA\s+\d+\.?\d*$/i, '')
+        .trim()
+    : rawSubject;
+
   return {
     certNumber: extractCleanField(rawData.certNumber || rawData.cert, 50) || '',
     isValid: Boolean(rawData.isValid),
-    grade: extractCleanField(rawData.grade, 20),
+    grade: cleanedGrade,
     gradeLabel: extractCleanField(rawData.gradeLabel || rawData.grade_label, 50),
     year: extractYear(rawData.year),
     publicationDate: extractCleanField(rawData.publicationDate || rawData.publication_date, 20),
     brandTitle: extractCleanField(rawData.brandTitle || rawData.brand, 100),
-    subject: extractCleanField(rawData.subject, 100),
+    subject: cleanedSubject,
     cardNumber: extractCardNumber(rawData.cardNumber || rawData.card_number),
     issueNumber: extractCleanField(rawData.issueNumber || rawData.issue_number, 50),
     varietyPedigree: extractCleanField(rawData.varietyPedigree || rawData.variety_pedigree, 100),
