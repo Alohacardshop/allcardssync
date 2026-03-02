@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
-import { Plus, Edit, Trash2, Copy, Check, FileText } from 'lucide-react';
+import { Plus, Edit, Trash2, Copy, Check, FileText, Loader2 } from 'lucide-react';
 import { EbayCategorySelect } from './EbayCategorySelect';
 
 
@@ -66,6 +66,11 @@ interface EbayTemplateManagerProps {
   storeKey: string;
 }
 
+interface CachedCondition {
+  conditionId: string;
+  conditionDescription: string;
+}
+
 export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
   const [templates, setTemplates] = useState<ListingTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,6 +83,43 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
   const [fulfillmentPolicies, setFulfillmentPolicies] = useState<PolicyOption[]>([]);
   const [paymentPolicies, setPaymentPolicies] = useState<PolicyOption[]>([]);
   const [returnPolicies, setReturnPolicies] = useState<PolicyOption[]>([]);
+  const [categoryConditions, setCategoryConditions] = useState<CachedCondition[]>([]);
+  const [loadingConditions, setLoadingConditions] = useState(false);
+
+  // Fetch valid conditions for the selected category from DB cache or eBay API
+  const fetchCategoryConditions = useCallback(async (categoryId: string, marketplaceId?: string) => {
+    if (!categoryId) {
+      setCategoryConditions([]);
+      return;
+    }
+    setLoadingConditions(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('ebay-category-schema', {
+        body: {
+          category_id: categoryId,
+          store_key: storeKey,
+          marketplace_id: marketplaceId,
+        },
+      });
+      if (error) throw error;
+      if (data?.success && data.schema?.conditions) {
+        setCategoryConditions(data.schema.conditions);
+      } else {
+        setCategoryConditions([]);
+      }
+    } catch {
+      setCategoryConditions([]);
+    } finally {
+      setLoadingConditions(false);
+    }
+  }, [storeKey]);
+
+  // Fetch conditions when category or marketplace changes in the editor
+  useEffect(() => {
+    if (isDialogOpen && editingTemplate?.category_id) {
+      fetchCategoryConditions(editingTemplate.category_id, editingTemplate.marketplace_id);
+    }
+  }, [isDialogOpen, editingTemplate?.category_id, editingTemplate?.marketplace_id, fetchCategoryConditions]);
 
   useEffect(() => {
     loadData();
@@ -428,7 +470,10 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Preferred Condition IDs (priority order)</Label>
+                  <Label className="flex items-center gap-2">
+                    Preferred Condition IDs (priority order)
+                    {loadingConditions && <Loader2 className="h-3 w-3 animate-spin" />}
+                  </Label>
                   <div className="flex gap-2">
                     <Select
                       value=""
@@ -440,14 +485,22 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
                       }}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Add condition..." />
+                        <SelectValue placeholder={categoryConditions.length > 0 ? "Add from category..." : "Set category first"} />
                       </SelectTrigger>
                       <SelectContent>
-                        {CONDITION_OPTIONS.map((cond) => (
-                          <SelectItem key={cond.id} value={cond.id}>
-                            {cond.id} — {cond.name}
-                          </SelectItem>
-                        ))}
+                        {categoryConditions.length > 0 ? (
+                          categoryConditions.map((cond) => (
+                            <SelectItem key={cond.conditionId} value={cond.conditionId}>
+                              {cond.conditionId} — {cond.conditionDescription}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          CONDITION_OPTIONS.map((cond) => (
+                            <SelectItem key={cond.id} value={cond.id}>
+                              {cond.id} — {cond.name} (generic)
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                     <div className="flex gap-1">
@@ -473,15 +526,18 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
                   {editingTemplate?.preferred_condition_ids?.length ? (
                     <div className="flex flex-wrap gap-1 mt-1">
                       {editingTemplate.preferred_condition_ids.map((id, idx) => {
-                        const label = CONDITION_OPTIONS.find(c => c.id === id)?.name || id;
+                        const cachedLabel = categoryConditions.find(c => c.conditionId === id)?.conditionDescription;
+                        const fallbackLabel = CONDITION_OPTIONS.find(c => c.id === id)?.name;
+                        const label = cachedLabel || fallbackLabel || id;
+                        const isValid = categoryConditions.length === 0 || categoryConditions.some(c => c.conditionId === id);
                         return (
                           <Badge 
                             key={id} 
-                            variant="outline"
+                            variant={isValid ? 'outline' : 'destructive'}
                             className="cursor-pointer"
                             onClick={() => setEditingTemplate(prev => ({ ...prev, preferred_condition_ids: (prev?.preferred_condition_ids || []).filter(c => c !== id) }))}
                           >
-                            #{idx + 1}: {id} ({label}) ×
+                            #{idx + 1}: {id} ({label}) {!isValid && '⚠'} ×
                           </Badge>
                         );
                       })}
@@ -489,9 +545,11 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
                   ) : (
                     <p className="text-xs text-muted-foreground">No preferred conditions set — will use condition_id as fallback</p>
                   )}
-                  <p className="text-xs text-muted-foreground">
-                    Processor picks the first valid ID for the category. Fallback: condition_id = {editingTemplate?.condition_id || '2750'}
-                  </p>
+                  {categoryConditions.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {categoryConditions.length} valid conditions for this category. Invalid selections marked with ⚠.
+                    </p>
+                  )}
                 </div>
                 {editingTemplate?.is_graded && (
                   <div className="space-y-2">

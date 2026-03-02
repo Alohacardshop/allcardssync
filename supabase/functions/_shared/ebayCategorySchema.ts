@@ -1,11 +1,14 @@
 /**
  * eBay Category Schema Utility
  * 
- * Provides a unified, cached interface for fetching and validating
+ * Provides a unified, DB-cached interface for fetching and validating
  * eBay condition policies and aspect definitions for any category.
+ * 
+ * Cache hierarchy: in-memory (per invocation) → DB (ebay_category_schema_cache) → eBay API
  */
 
 import { ebayApiRequest } from './ebayApi.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -52,28 +55,122 @@ function getCategoryTreeId(marketplaceId: string): string {
   return MARKETPLACE_TREE_MAP[marketplaceId] || '0'
 }
 
-// ─── Cache ───────────────────────────────────────────────────────
+// ─── In-memory cache (per edge function invocation) ──────────────
 
-const schemaCache = new Map<string, { data: EbayCategorySchema; ts: number }>()
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+const memCache = new Map<string, { data: EbayCategorySchema; ts: number }>()
+const MEM_TTL_MS = 10 * 60 * 1000 // 10 min (within a single invocation)
 
-function cacheKey(marketplaceId: string, categoryId: string, environment: string): string {
-  return `${environment}:${marketplaceId}:${categoryId}`
+// DB cache TTL
+const DB_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+
+function cacheKey(env: string, marketplace: string, category: string): string {
+  return `${env}:${marketplace}:${category}`
 }
 
-// ─── Fetch + Parse ───────────────────────────────────────────────
+// ─── DB Cache Read/Write ─────────────────────────────────────────
+
+function getSupabaseAdmin(): ReturnType<typeof createClient> {
+  return createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+  )
+}
+
+async function readDbCache(
+  supabase: ReturnType<typeof createClient>,
+  environment: string,
+  marketplaceId: string,
+  categoryId: string,
+): Promise<EbayCategorySchema | null> {
+  const { data, error } = await supabase
+    .from('ebay_category_schema_cache')
+    .select('conditions, aspects, fetched_at')
+    .eq('environment', environment)
+    .eq('marketplace_id', marketplaceId)
+    .eq('category_id', categoryId)
+    .maybeSingle()
+
+  if (error || !data) return null
+
+  // Check TTL
+  const fetchedAt = new Date(data.fetched_at).getTime()
+  if (Date.now() - fetchedAt > DB_TTL_MS) {
+    console.log(`[CategorySchema] DB cache stale for ${marketplaceId}:${categoryId}`)
+    return null
+  }
+
+  const conditions = (data.conditions || []) as EbayConditionInfo[]
+  const aspects = (data.aspects || []) as EbayAspectConstraint[]
+
+  return buildSchemaObject(categoryId, marketplaceId, data.fetched_at, conditions, aspects)
+}
+
+async function writeDbCache(
+  supabase: ReturnType<typeof createClient>,
+  environment: string,
+  marketplaceId: string,
+  categoryId: string,
+  conditions: EbayConditionInfo[],
+  aspects: EbayAspectConstraint[],
+): Promise<void> {
+  const now = new Date().toISOString()
+  const { error } = await supabase
+    .from('ebay_category_schema_cache')
+    .upsert(
+      {
+        environment,
+        marketplace_id: marketplaceId,
+        category_id: categoryId,
+        conditions,
+        aspects,
+        fetched_at: now,
+        updated_at: now,
+      },
+      { onConflict: 'environment,marketplace_id,category_id' },
+    )
+
+  if (error) {
+    console.warn(`[CategorySchema] Failed to write DB cache: ${error.message}`)
+  } else {
+    console.log(`[CategorySchema] DB cache written for ${environment}:${marketplaceId}:${categoryId}`)
+  }
+}
+
+// ─── Build helper ────────────────────────────────────────────────
+
+function buildSchemaObject(
+  categoryId: string,
+  marketplaceId: string,
+  fetchedAt: string,
+  conditions: EbayConditionInfo[],
+  aspects: EbayAspectConstraint[],
+): EbayCategorySchema {
+  return {
+    categoryId,
+    marketplaceId,
+    fetchedAt,
+    conditions,
+    conditionIds: conditions.map(c => c.conditionId),
+    aspects,
+    requiredAspects: aspects.filter(a => a.required),
+    optionalAspects: aspects.filter(a => !a.required),
+    aspectNames: new Set(aspects.map(a => a.aspectName)),
+  }
+}
+
+// ─── Fetch from eBay APIs ────────────────────────────────────────
 
 async function fetchConditions(
   accessToken: string,
   environment: 'sandbox' | 'production',
   marketplaceId: string,
-  categoryId: string
+  categoryId: string,
 ): Promise<EbayConditionInfo[]> {
   const response = await ebayApiRequest(
     accessToken,
     environment,
     'GET',
-    `/sell/metadata/v1/marketplace/${marketplaceId}/get_item_condition_policies?filter=categoryIds:{${categoryId}}`
+    `/sell/metadata/v1/marketplace/${marketplaceId}/get_item_condition_policies?filter=categoryIds:{${categoryId}}`,
   )
 
   if (!response.ok) {
@@ -103,13 +200,13 @@ async function fetchAspects(
   accessToken: string,
   environment: 'sandbox' | 'production',
   categoryId: string,
-  categoryTreeId: string
+  categoryTreeId: string,
 ): Promise<EbayAspectConstraint[]> {
   const response = await ebayApiRequest(
     accessToken,
     environment,
     'GET',
-    `/commerce/taxonomy/v1/category_tree/${categoryTreeId}/get_item_aspects_for_category?category_id=${categoryId}`
+    `/commerce/taxonomy/v1/category_tree/${categoryTreeId}/get_item_aspects_for_category?category_id=${categoryId}`,
   )
 
   if (!response.ok) {
@@ -145,44 +242,57 @@ async function fetchAspects(
 
 /**
  * Get the full category schema (conditions + aspects) for an eBay category.
- * Results are cached for 24 hours per environment:marketplace:category.
+ * 
+ * Cache hierarchy:
+ * 1. In-memory (10min, per invocation)
+ * 2. DB table ebay_category_schema_cache (24h TTL)
+ * 3. Live eBay API call (writes back to DB)
+ * 
+ * Pass an optional supabase client; if omitted, creates one from env vars.
  */
 export async function getCategorySchema(
   accessToken: string,
   environment: 'sandbox' | 'production',
   marketplaceId: string,
-  categoryId: string
+  categoryId: string,
+  supabaseClient?: ReturnType<typeof createClient>,
 ): Promise<EbayCategorySchema> {
-  const key = cacheKey(marketplaceId, categoryId, environment)
-  const cached = schemaCache.get(key)
-  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
-    console.log(`[CategorySchema] Cache hit for ${key}`)
-    return cached.data
+  const key = cacheKey(environment, marketplaceId, categoryId)
+
+  // 1. In-memory cache
+  const mem = memCache.get(key)
+  if (mem && Date.now() - mem.ts < MEM_TTL_MS) {
+    console.log(`[CategorySchema] Memory cache hit for ${key}`)
+    return mem.data
   }
 
-  console.log(`[CategorySchema] Fetching schema for marketplace=${marketplaceId} category=${categoryId}`)
+  const supabase = supabaseClient || getSupabaseAdmin()
 
+  // 2. DB cache
+  const dbCached = await readDbCache(supabase, environment, marketplaceId, categoryId)
+  if (dbCached) {
+    console.log(`[CategorySchema] DB cache hit for ${key}`)
+    memCache.set(key, { data: dbCached, ts: Date.now() })
+    return dbCached
+  }
+
+  // 3. Live fetch from eBay
+  console.log(`[CategorySchema] Fetching from eBay API: marketplace=${marketplaceId} category=${categoryId}`)
   const treeId = getCategoryTreeId(marketplaceId)
 
-  // Fetch conditions and aspects in parallel
   const [conditions, aspects] = await Promise.all([
     fetchConditions(accessToken, environment, marketplaceId, categoryId),
     fetchAspects(accessToken, environment, categoryId, treeId),
   ])
 
-  const schema: EbayCategorySchema = {
-    categoryId,
-    marketplaceId,
-    fetchedAt: new Date().toISOString(),
-    conditions,
-    conditionIds: conditions.map(c => c.conditionId),
-    aspects,
-    requiredAspects: aspects.filter(a => a.required),
-    optionalAspects: aspects.filter(a => !a.required),
-    aspectNames: new Set(aspects.map(a => a.aspectName)),
-  }
+  const now = new Date().toISOString()
+  const schema = buildSchemaObject(categoryId, marketplaceId, now, conditions, aspects)
 
-  schemaCache.set(key, { data: schema, ts: Date.now() })
+  // Write to DB cache (fire-and-forget)
+  writeDbCache(supabase, environment, marketplaceId, categoryId, conditions, aspects).catch(() => {})
+
+  // Write to memory cache
+  memCache.set(key, { data: schema, ts: Date.now() })
   console.log(`[CategorySchema] Cached: ${conditions.length} conditions, ${aspects.length} aspects (${schema.requiredAspects.length} required)`)
 
   return schema
@@ -197,7 +307,7 @@ export async function getCategorySchema(
 export function resolveConditionId(
   schema: EbayCategorySchema,
   preferredConditionIds: string[],
-  isGraded: boolean
+  isGraded: boolean,
 ): string {
   if (schema.conditionIds.length === 0) {
     const first = preferredConditionIds[0] || (isGraded ? '2750' : '4000')
@@ -205,7 +315,6 @@ export function resolveConditionId(
     return first
   }
 
-  // Iterate the priority list and return the first valid match
   for (const id of preferredConditionIds) {
     if (schema.conditionIds.includes(id)) {
       console.log(`[CategorySchema] Matched preferred condition: ${id}`)
@@ -215,7 +324,6 @@ export function resolveConditionId(
 
   console.warn(`[CategorySchema] None of [${preferredConditionIds.join(', ')}] valid. Valid: [${schema.conditionIds.join(', ')}]`)
 
-  // Hardcoded fallbacks as last resort
   const fallbacks = isGraded ? ['2750', '3000', '4000'] : ['4000', '3000']
   for (const fb of fallbacks) {
     if (schema.conditionIds.includes(fb)) {
@@ -235,7 +343,7 @@ export function resolveConditionId(
  */
 export function validateAspects(
   schema: EbayCategorySchema,
-  aspects: Record<string, string[]>
+  aspects: Record<string, string[]>,
 ): { validated: Record<string, string[]>; warnings: string[] } {
   if (schema.aspects.length === 0) {
     return { validated: aspects, warnings: ['No taxonomy data; aspects passed through unvalidated'] }
@@ -245,13 +353,11 @@ export function validateAspects(
   const warnings: string[] = []
   const removed: string[] = []
 
-  // Build lookup
   const aspectMap = new Map<string, EbayAspectConstraint>()
   for (const a of schema.aspects) {
     aspectMap.set(a.aspectName, a)
   }
 
-  // Filter and validate provided aspects
   for (const [key, values] of Object.entries(aspects)) {
     const def = aspectMap.get(key)
     if (!def) {
@@ -261,7 +367,6 @@ export function validateAspects(
 
     let finalValues = values
 
-    // For SELECTION_ONLY, filter to allowed values
     if (def.mode === 'SELECTION_ONLY' && def.allowedValues.length > 0) {
       finalValues = values.filter(v => def.allowedValues.includes(v))
       if (finalValues.length === 0) {
@@ -273,7 +378,6 @@ export function validateAspects(
       }
     }
 
-    // Trim to max values
     if (finalValues.length > def.maxValues) {
       finalValues = finalValues.slice(0, def.maxValues)
     }
@@ -285,7 +389,6 @@ export function validateAspects(
     warnings.push(`Removed unsupported aspects: [${removed.join(', ')}]`)
   }
 
-  // Warn about missing required aspects
   for (const req of schema.requiredAspects) {
     if (!validated[req.aspectName]) {
       warnings.push(`Missing required aspect: "${req.aspectName}"`)
@@ -307,7 +410,7 @@ export function serializeCategorySchema(schema: EbayCategorySchema): Record<stri
     requiredAspects: schema.requiredAspects.map(a => ({
       name: a.aspectName,
       mode: a.mode,
-      allowedValues: a.allowedValues.length > 20 
+      allowedValues: a.allowedValues.length > 20
         ? [...a.allowedValues.slice(0, 20), `... and ${a.allowedValues.length - 20} more`]
         : a.allowedValues,
       maxValues: a.maxValues,
