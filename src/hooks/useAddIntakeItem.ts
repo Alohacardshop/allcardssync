@@ -83,16 +83,32 @@ export const useAddIntakeItem = () => {
           // Graded items are 1-of-1 — never allow quantity increment
           // Check BOTH the incoming params AND the existing item's grading status
           if (params.grading_company_in || existing.grading_company) {
-            logger.logInfo('Duplicate graded item detected, skipping', { sku: params.sku_in });
-            toast.warning(`Cert ${params.sku_in} already exists in the batch.`);
-            return {
-              id: existing.id,
-              lot_number: 'existing',
-              lot_id: existing.lot_id || '',
-              created_at: new Date().toISOString(),
-              isDuplicate: true,
-              skipped: true,
-            } as AddIntakeItemResponse;
+            // If the item is already in the current active batch (not removed, not deleted), skip
+            if (!existing.removed_from_batch_at) {
+              // Check if its lot is still active
+              const { data: lotCheck } = existing.lot_id 
+                ? await supabase
+                    .from('intake_lots')
+                    .select('status')
+                    .eq('id', existing.lot_id)
+                    .single()
+                : { data: null };
+              
+              if (lotCheck?.status === 'active') {
+                logger.logInfo('Duplicate graded item already in active batch, skipping', { sku: params.sku_in });
+                toast.warning(`Cert ${params.sku_in} already exists in the batch.`);
+                return {
+                  id: existing.id,
+                  lot_number: 'existing',
+                  lot_id: existing.lot_id || '',
+                  created_at: new Date().toISOString(),
+                  isDuplicate: true,
+                  skipped: true,
+                } as AddIntakeItemResponse;
+              }
+            }
+            // Item exists but is in a closed/removed lot — let the RPC re-add it to the current batch
+            logger.logInfo('Re-adding graded item to current batch', { sku: params.sku_in });
           }
 
           // Get or create active lot for current batch
@@ -192,16 +208,31 @@ export const useAddIntakeItem = () => {
             // Graded items are 1-of-1 — never allow quantity increment
             // Check BOTH the incoming params AND the existing item's grading status
             if (params.grading_company_in || existing.grading_company) {
-              logger.logInfo('Duplicate graded item detected (race condition path), skipping', { sku: params.sku_in });
-              toast.warning(`Cert ${params.sku_in} already exists in the batch.`);
-              return {
-                id: existing.id,
-                lot_number: 'existing',
-                lot_id: existing.lot_id || '',
-                created_at: new Date().toISOString(),
-                isDuplicate: true,
-                skipped: true,
-              } as AddIntakeItemResponse;
+              // If the item is already in the current active batch, skip
+              if (!existing.removed_from_batch_at) {
+                const { data: lotCheck } = existing.lot_id
+                  ? await supabase
+                      .from('intake_lots')
+                      .select('status')
+                      .eq('id', existing.lot_id)
+                      .single()
+                  : { data: null };
+                
+                if (lotCheck?.status === 'active') {
+                  logger.logInfo('Duplicate graded item already in active batch (race condition path), skipping', { sku: params.sku_in });
+                  toast.warning(`Cert ${params.sku_in} already exists in the batch.`);
+                  return {
+                    id: existing.id,
+                    lot_number: 'existing',
+                    lot_id: existing.lot_id || '',
+                    created_at: new Date().toISOString(),
+                    isDuplicate: true,
+                    skipped: true,
+                  } as AddIntakeItemResponse;
+                }
+              }
+              // Item exists but in closed/removed lot — let RPC re-add to current batch
+              logger.logInfo('Re-adding graded item to current batch (race condition path)', { sku: params.sku_in });
             }
 
             // Get or create active lot for current batch
