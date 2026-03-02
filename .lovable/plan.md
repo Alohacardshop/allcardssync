@@ -1,31 +1,19 @@
 
 
-## Convert Auto-Decline to Percentage-Based
+## Relabel "Variant" to "Condition" for Raw Cards in the Overview Tab
 
-Currently `auto_decline_price` is stored as a fixed dollar amount. The user wants it to be a percentage of the listing price instead, so the decline threshold scales with each item's price.
+The `variant` field on raw Pokémon cards already stores condition values like "Near Mint - Foil". The variant is also already included in titles across all `generateTitle` functions and in the Shopify edge function (`v2-shopify-send-raw`). So the data and title logic are correct -- the only change needed is a UI label update.
 
 ### Changes
 
-**1. Database: Rename column for clarity**
-- SQL migration: rename `auto_decline_price` to `auto_decline_percent` (numeric, 0-100) on `ebay_listing_templates`
-- Update existing data: if any templates have a value, we can null them out or leave as-is (they'll need re-entry as percentages)
+**1. `src/features/inventory/components/inspector/tabs/OverviewTab.tsx`**
+- Change the `EditableField` label from "Variant" to "Condition" when the item is a raw card (`item.type !== 'Graded'` or no grading company)
+- Logic: `label={isRaw ? "Condition" : "Variant"}` where `isRaw = !item.grade || item.type?.toLowerCase() === 'raw'`
 
-**2. `src/components/admin/EbayTemplateManager.tsx`**
-- Change the auto-decline input label from "Auto-Decline below ($)" to "Auto-Decline below (% of price)"
-- Update placeholder to e.g. "e.g. 80" meaning 80% of listing price
-- Update the badge display from `≥$X` to `≥X%`
-- Change step to `1`, max to `100`
-- Update field references from `auto_decline_price` to `auto_decline_percent`
+That's the only change needed. The condition value is already shown in titles in:
+- All `generateTitle` functions (InspectorPanel, InventoryTableView, ItemDetailsDrawer, InventoryItemCard, EditIntakeItemDialog) -- variant is already appended to the title parts
+- Shopify sync (`v2-shopify-send-raw/index.ts` line 148-151) -- already uses `intakeItem.variant` as condition in the title
+- eBay sync processor -- uses the same title
 
-**3. `supabase/functions/ebay-sync-processor/index.ts` (~lines 601-603, 638-640, 881-883)**
-- At each `autoDeclinePrice` usage, compute the dollar value: `finalPrice * (template.auto_decline_percent / 100)`
-- Send computed dollar value to eBay API (it still expects a dollar amount)
-
-**4. `src/integrations/supabase/types.ts`**
-- Update the type from `auto_decline_price` to `auto_decline_percent`
-
-**5. Redeploy `ebay-sync-processor`**
-
-### Result
-Template editor shows "Auto-Decline below 80%" → at sync time, an item priced at $200 would auto-decline offers below $160.
+No database changes, no edge function changes, no title logic changes required.
 
