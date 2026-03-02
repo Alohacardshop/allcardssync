@@ -1,34 +1,36 @@
 
 
-## Plan: Prevent Duplicate Offers + Fix Merchant Location Key
+## Fix: Template Placeholder Mismatch (Double vs Single Curly Braces)
 
 ### Problem
-1. `processCreate` (line 576) always calls `POST /offer` without checking if an offer already exists for that SKU, causing "Offer entity already exists" errors on retries.
-2. The merchant location key is already sourced from `storeConfig.location_key` (line 594), but if it's unregistered, the error isn't handled gracefully.
+Comic templates use `{{placeholder}}` (double curly braces) but `buildTitle()` and `buildDescription()` only replace `{placeholder}` (single curly braces). Result: `{Amazing Spider-Man}` instead of `Amazing Spider-Man`.
 
-### Changes (single file: `supabase/functions/ebay-sync-processor/index.ts`)
+### Solution
+Update `buildTitle()` and `buildDescription()` in `supabase/functions/_shared/ebayTemplateResolver.ts` to handle **both** `{{placeholder}}` and `{placeholder}` formats.
 
-**Fix 1: Check for existing offers before creating (lines ~575-599)**
+### Changes
 
-Replace the direct `createOffer` call with:
-1. Call `getOffersBySku(accessToken, environment, ebaySku)` first
-2. If an offer exists: `updateOffer` with current template values (categoryId, price, policies, merchantLocationKey, quantity), store the existing `offerId`, then `publishOffer`
-3. If no offer exists: `createOffer` as before, then `publishOffer`
+**File: `supabase/functions/_shared/ebayTemplateResolver.ts`**
 
-**Fix 2: Handle error 25002 (merchant location not registered)**
+In both `buildTitle()` (~line 265) and `buildDescription()` (~line 295), add double-brace replacements **before** the existing single-brace ones:
 
-After the offer create/update step, if the result contains error 25002 or the string "Merchant location not registered":
-- Surface a clear error message: `"Merchant location '${locationKey}' is not registered on eBay. Go to Admin → eBay → Locations and click 'Register Location', or call ebay-manage-location POST."`
-- This is already partially handled in the shared `createOffer` function (it detects 25002), but we should also check it in the update path
+```typescript
+// Add these BEFORE existing single-brace replacements:
+.replace(/{{subject}}/g, item.subject || '')
+.replace(/{{brand_title}}/g, item.brand_title || '')
+.replace(/{{brand}}/g, item.brand_title || '')
+.replace(/{{year}}/g, item.year || '')
+.replace(/{{grade}}/g, item.grade || '')
+.replace(/{{grading_company}}/g, item.grading_company || '')
+.replace(/{{card_number}}/g, item.card_number || '')
+.replace(/{{variant}}/g, item.variant || '')
+.replace(/{{psa_cert}}/g, item.psa_cert || '')
+.replace(/{{sku}}/g, item.sku || '')
+.replace(/{{cgc_cert}}/g, item.cgc_cert || '')
+// Then existing single-brace replacements follow...
+```
 
-**Fix 3: Also pass `merchantLocationKey` in `processUpdate` offer update (line ~811-828)**
+Double-brace patterns must be matched first so they don't get partially consumed by single-brace patterns.
 
-The existing `processUpdate` calls `updateOffer` but doesn't include `merchantLocationKey`. Add it so location changes propagate on updates too.
-
-### Summary of edits
-| Location | Change |
-|----------|--------|
-| `processCreate` lines 575-602 | Add `getOffersBySku` check; if exists → `updateOffer` + `publishOffer`; if not → `createOffer` + `publishOffer` |
-| `processUpdate` line 811-828 | Add `merchantLocationKey` to the offer update payload |
-| No new files needed | All changes in `ebay-sync-processor/index.ts` |
+**No other files affected.** After deploying, re-sync the item to get corrected title and description on eBay.
 
