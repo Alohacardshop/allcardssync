@@ -930,37 +930,46 @@ async function markQueueItemFailed(
   const maxRetries = 3
 
   if (retryCount < maxRetries) {
-    // Schedule retry
-    await supabase
-      .from('ebay_sync_queue')
-      .update({
-        status: 'queued',
-        retry_count: retryCount + 1,
-        error_message: errorMessage,
-        retry_after: new Date(Date.now() + Math.pow(2, retryCount) * 60000).toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', queueId)
+    // Schedule retry in queue, but show error on the item immediately
+    await Promise.all([
+      supabase
+        .from('ebay_sync_queue')
+        .update({
+          status: 'queued',
+          retry_count: retryCount + 1,
+          error_message: errorMessage,
+          retry_after: new Date(Date.now() + Math.pow(2, retryCount) * 60000).toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', queueId),
+      supabase
+        .from('intake_items')
+        .update({
+          ebay_sync_status: 'error',
+          ebay_sync_error: `[Retry ${retryCount + 1}/${maxRetries}] ${errorMessage}`,
+        })
+        .eq('id', itemId),
+    ])
   } else {
-    // Max retries reached
-    await supabase
-      .from('ebay_sync_queue')
-      .update({
-        status: 'failed',
-        error_message: errorMessage,
-        completed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', queueId)
-
-    // Update intake item error status
-    await supabase
-      .from('intake_items')
-      .update({
-        ebay_sync_status: 'error',
-        ebay_sync_error: errorMessage,
-      })
-      .eq('id', itemId)
+    // Max retries reached — permanent failure
+    await Promise.all([
+      supabase
+        .from('ebay_sync_queue')
+        .update({
+          status: 'failed',
+          error_message: errorMessage,
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', queueId),
+      supabase
+        .from('intake_items')
+        .update({
+          ebay_sync_status: 'error',
+          ebay_sync_error: errorMessage,
+        })
+        .eq('id', itemId),
+    ])
   }
 }
 
