@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { PSACertificateData, PSA_GRADE_COLORS } from "@/types/psa";
 import { ExternalLink, Shield, Calendar, Trophy, User, Hash, Tag, Globe, BookOpen, FileText } from "lucide-react";
+import { formatGrade } from "@/lib/labelData";
 import noImagePlaceholder from "@/assets/no-image-available.png";
 
 interface PSACertificateDisplayProps {
@@ -68,11 +69,10 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
               className="font-bold text-lg px-4 py-2"
             >
               <Trophy className="h-4 w-4 mr-2" />
-              Grade {psaData.grade}
+              {psaData.gradeLabel 
+                ? psaData.gradeLabel.replace(/(\d+)\.0\b/g, '$1')
+                : `Grade ${formatGrade(psaData.grade)}`}
             </Badge>
-            {psaData.gradeLabel && (
-              <span className="text-xs text-muted-foreground">{psaData.gradeLabel}</span>
-            )}
           </div>
         )}
 
@@ -119,36 +119,16 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
 
         {/* Card Details */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-          {psaData.brandTitle && (
-            <div className="flex items-center gap-2">
-              <Tag className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <span className="text-muted-foreground">{isComic ? 'Publisher' : 'Brand'}: </span>
-                <span className="font-medium">{psaData.brandTitle}</span>
-              </div>
-            </div>
-          )}
-          
           {psaData.subject && (
             <div className="flex items-center gap-2">
               <User className="h-4 w-4 text-muted-foreground" />
               <div>
-                <span className="text-muted-foreground">Subject: </span>
+                <span className="text-muted-foreground">Name: </span>
                 <span className="font-medium">{psaData.subject}</span>
               </div>
             </div>
           )}
-          
-          {psaData.year && (
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <span className="text-muted-foreground">Year: </span>
-                <span className="font-medium">{psaData.year}</span>
-              </div>
-            </div>
-          )}
-          
+
           {psaData.cardNumber && (
             <div className="flex items-center gap-2">
               <Hash className="h-4 w-4 text-muted-foreground" />
@@ -159,42 +139,32 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
             </div>
           )}
 
-          {psaData.category && (
-            <div className="flex items-center gap-2">
-              <Tag className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <span className="text-muted-foreground">Category: </span>
-                <span className="font-medium">{psaData.category}</span>
-              </div>
-            </div>
-          )}
-          
-          {psaData.gameSport && (
-            <div className="flex items-center gap-2">
-              <Trophy className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <span className="text-muted-foreground">Game: </span>
-                <span className="font-medium capitalize">{psaData.gameSport}</span>
-              </div>
-            </div>
-          )}
-
           {psaData.publicationDate && (
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-muted-foreground" />
               <div>
-                <span className="text-muted-foreground">Published: </span>
+                <span className="text-muted-foreground">Publication Date: </span>
                 <span className="font-medium">{psaData.publicationDate}</span>
               </div>
             </div>
           )}
 
-          {psaData.pageQuality && (
+          {psaData.year && !psaData.publicationDate && (
             <div className="flex items-center gap-2">
-              <BookOpen className="h-4 w-4 text-muted-foreground" />
+              <Calendar className="h-4 w-4 text-muted-foreground" />
               <div>
-                <span className="text-muted-foreground">Pages: </span>
-                <span className="font-medium capitalize">{psaData.pageQuality}</span>
+                <span className="text-muted-foreground">Year: </span>
+                <span className="font-medium">{psaData.year}</span>
+              </div>
+            </div>
+          )}
+
+          {psaData.brandTitle && (
+            <div className="flex items-center gap-2">
+              <Tag className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <span className="text-muted-foreground">{isComic ? 'Publisher' : 'Brand'}: </span>
+                <span className="font-medium">{psaData.brandTitle}</span>
               </div>
             </div>
           )}
@@ -215,6 +185,36 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
               <div>
                 <span className="text-muted-foreground">Country: </span>
                 <span className="font-medium uppercase">{psaData.country}</span>
+              </div>
+            </div>
+          )}
+
+          {psaData.pageQuality && (
+            <div className="flex items-center gap-2">
+              <BookOpen className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <span className="text-muted-foreground">Page Quality: </span>
+                <span className="font-medium capitalize">{psaData.pageQuality}</span>
+              </div>
+            </div>
+          )}
+
+          {psaData.category && (
+            <div className="flex items-center gap-2">
+              <Tag className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <span className="text-muted-foreground">Category: </span>
+                <span className="font-medium">{psaData.category}</span>
+              </div>
+            </div>
+          )}
+
+          {psaData.gameSport && (
+            <div className="flex items-center gap-2">
+              <Trophy className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <span className="text-muted-foreground">Game: </span>
+                <span className="font-medium capitalize">{psaData.gameSport}</span>
               </div>
             </div>
           )}
