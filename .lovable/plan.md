@@ -2,35 +2,24 @@
 
 ## Problem
 
-When PSA graded comics are ingested, the PSA scraper returns a `subject` field with grade info baked in (e.g., "Amazing Spider-Man 1 PSA 10.0"). This polluted value flows into both the `subject` and `variant` DB columns. The grade also stores "10.0" instead of "10".
+`GradedComicIntake.tsx` is the component used for comic intake (not `GradedCardIntake.tsx`). It has two issues:
 
-Current DB values for cert 146094215:
-- `subject`: "Amazing Spider-Man 1 PSA 10.0" → should be "Amazing Spider-Man"
-- `variant`: "1 PSA 10.0" → should be empty or just the variant description
-- `grade`: "10.0" → should be "10"
+1. **No normalization**: Line 154 uses raw PSA API data directly (`data.data`) without calling `normalizePSAData`, so `grade` stays "10.0"
+2. **Variant construction** (lines 264-270): It builds `variant` by concatenating `varietyPedigree + grading company + grade` (e.g., `"1 PSA 10.0"`), and also bakes this into `subject_in` as `titleWithVariant`. The variant should just be the `varietyPedigree` value ("1"), and grade info should NOT be appended to subject or variant since it's already stored in separate `grade_in` and `grading_company` fields.
 
 ## Changes
 
-### 1. Clean PSA subject at normalization (`src/lib/psaNormalization.ts`)
+**File: `src/components/GradedComicIntake.tsx`**
 
-In `normalizePSAData`, after extracting `subject`, strip trailing grade info patterns like `\d+ PSA \d+\.?\d*` from the subject string. This prevents "Amazing Spider-Man 1 PSA 10.0" from being stored — it becomes "Amazing Spider-Man".
+1. **Import and apply normalization** (line 154-166): Import `normalizePSAData` and run it on `data.data` before setting `psaData` and form fields. This ensures `grade` becomes "10" (stripped `.0`).
 
-### 2. Strip `.0` from grade at normalization (`src/lib/psaNormalization.ts`)
+2. **Fix variant construction** (lines 264-280): 
+   - Set `variant_in` to just `varietyPedigree` (e.g., "1") — no grade info appended
+   - Set `subject_in` to just `formData.title` (e.g., "Amazing Spider-Man") — no variant/grade info appended
+   - The grade is already stored via `grade_in` and displayed separately in batch panel
 
-Apply `.replace(/\.0$/, '')` to the `grade` field so "10.0" becomes "10" right at the normalization layer.
-
-### 3. Fix auto-populate in GradedCardIntake (`src/components/GradedCardIntake.tsx`)
-
-When PSA data is for a comic (detected via `mainCategory === 'comics'`), auto-populate `variant` with the `varietyPedigree` field (which contains actual variant info like cover variants) instead of leaving it to be manually filled with grade-polluted data.
-
-### 4. Fix existing data display in EditIntakeItemDialog
-
-In `generateTitle` (line 48-67), the title already appends grade separately via `PSA ${item.grade}`. Since we're cleaning the subject, this will now produce clean titles like "2018 Marvel Comics Amazing Spider-Man #798 PSA 10".
-
-## Summary
-
-- **Root fix**: Clean grade info from `subject` in normalization layer
-- **Grade format**: Strip `.0` at normalization 
-- **Variant**: Auto-set from `varietyPedigree` for comics, not from polluted subject
-- **No DB migration needed** — new items will be clean; existing items can be manually edited
+### Result
+- `variant`: "1" (just the PSA variety/pedigree)
+- `grade`: "10" (cleaned)
+- `subject`: "Amazing Spider-Man" (clean title only)
 
