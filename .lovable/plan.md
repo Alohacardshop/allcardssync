@@ -1,58 +1,45 @@
 
 
-## End-to-End Pipeline Audit: Intake → Database → Inventory → Shopify → eBay
+## Remaining Issues Found
 
-I traced the full pipeline and found **3 issues** that need fixing:
+### Issue 1: `initializeSystemViews` fires before auth is ready (console errors)
 
----
+The `SavedViewsDropdown` component calls `initializeSystemViews.mutate()` inside a `useEffect` when `views.length === 0`. But the query returns `[]` when `userId` is undefined (line 29: `if (!userId) return []`), so the effect fires immediately — and the mutation throws "Not authenticated" because `userId` is still undefined.
 
-### Issue 1: Tag backfill never ran — existing items have NULL tags
+**Fix**: Add a `userId` guard to the `useEffect` in `SavedViewsDropdown.tsx` line 66:
+```
+if (!isLoading && views.length === 0 && userId)
+```
+This requires passing `userId` availability from the hook or checking session in the component. Simplest: add `userId` check in the effect condition — the hook already returns when `!userId`.
 
-The `trigger_normalize_tags` trigger only generates `shopify_tags` on **INSERT** when tags are NULL. The migration that was supposed to backfill existing items either failed or was lost. SKU `146094215` has `grading_company=PSA`, `grade=10`, `main_category=comics`, `brand_title=Marvel Comics` — but `shopify_tags`, `normalized_tags` are both NULL.
+### Issue 2: Test file imports non-existent hook `useShopifySyncQueue`
 
-**Impact**: When `v2-shopify-send-graded` reads `intakeItem.normalized_tags || intakeItem.shopify_tags`, it gets an empty array `[]` — the item syncs to Shopify with no tags, breaking storefront filtering and eBay routing rules.
+`tests/integration/shopify-sync-workflow.test.ts` imports `useShopifySyncQueue` from `@/hooks/useShopifySyncQueue` — this file doesn't exist. The test will fail at import time.
 
-**Fix**: Run a backfill UPDATE that touches each item missing tags, triggering the normalize trigger. But the trigger only runs on INSERT, so we need to also add UPDATE-path tag generation (when `shopify_tags IS NULL` and metadata exists, generate tags regardless of `TG_OP`).
+**Fix**: Either delete the test file (it's entirely mocked and tests fictional APIs) or create the missing hook. Given the test is fully mocked with no real integration value, recommend **deleting** it.
 
----
+### Issue 3: Shopify webhook HMAC failures (orders/create, orders/fulfilled)
 
-### Issue 2: SKU 146094215 is `deleted_at` set AND `queued` in sync queue
+Logs show repeated `Invalid HMAC signature detected` for `orders/create` and `orders/fulfilled` from `hawaii_store`. The `orders/updated` topic works fine (HMAC verified). This means the webhook secret stored in `system_settings` as `SHOPIFY_HAWAII_WEBHOOK_SECRET` is correct, but Shopify may be sending different secrets per topic — or the secret was rotated after those webhook subscriptions were created.
 
-The item currently has `deleted_at = 2026-03-02 04:13:49` but still has a `queued` entry in `shopify_sync_queue`. When the sync processor picks it up, it will fetch the item and try to create a Shopify product for a deleted item. The processor doesn't check `deleted_at`.
+**Fix**: This is a Shopify admin configuration issue, not a code bug. The webhook secret needs to be verified/updated in the Shopify admin panel. No code change needed — just flag it for you to check in Shopify admin.
 
-**Impact**: Potential ghost products in Shopify, or a cryptic error.
+### What's working correctly (confirmed)
 
-**Fix**: 
-1. Add a `deleted_at IS NULL` check in `processQueueItem` before proceeding.
-2. Clean up the orphaned queue entry for this item.
-
----
-
-### Issue 3: Trigger only generates tags on INSERT — UPDATE path ignored
-
-When items are updated (e.g., metadata corrected, re-scanned), the trigger skips tag generation because `TG_OP = 'INSERT'` check fails. This means any item that was created before the trigger update, or any item whose metadata is later enriched, will never get auto-generated tags.
-
-**Fix**: Change the trigger condition from `IF NEW.shopify_tags IS NULL AND TG_OP = 'INSERT'` to `IF NEW.shopify_tags IS NULL` (removing the INSERT-only restriction). This way, any UPDATE that results in NULL tags will also auto-generate them.
-
----
-
-### What's working correctly
-
-- **`useAddIntakeItem`**: Correctly enforces 1-of-1 for graded, handles duplicates, type-safe result handling.
-- **`useSendToInventory`**: Now correctly triggers `shopify-sync` after queuing (the fix from the last message).
-- **`useBatchSendToShopify`**: Calls `send_and_queue_inventory` RPC + triggers sync processor — working correctly.
-- **`send_and_queue_inventory` RPC**: Correctly queues items and sets `removed_from_batch_at`.
-- **`shopify-sync` edge function**: Queue processing logic is sound — auth, rate limiting, retry with dead letter queue all correct.
-- **`v2-shopify-send-graded`**: Properly reads tags from `normalized_tags`/`shopify_tags`, handles images, metafields, barcode.
-- **eBay sync**: Reads from the same `intake_items` with proper status guards and 1-of-1 clamping.
+- Tag backfill completed — 0 items with NULL `shopify_tags` and available metadata remain
+- Sync queue clean — only 1 entry with status `completed` (the deleted item we cleaned up)
+- `deleted_at` guard in `shopify-sync` processor is live
+- Trigger generates tags on both INSERT and UPDATE
+- `useAddIntakeItem` type-safe result handling works
+- `useSendToInventory` triggers sync processor after queuing
 
 ---
 
 ### Implementation Plan
 
-**Step 1: SQL migration** — Update `trigger_normalize_tags` to remove the `TG_OP = 'INSERT'` restriction, then run a backfill UPDATE to populate tags for all items with NULL `shopify_tags` and available metadata.
+**Step 1**: Fix `SavedViewsDropdown.tsx` — add auth guard to the `useEffect` so `initializeSystemViews` only fires when the user is authenticated. Expose `isAuthenticated` or similar from the hook.
 
-**Step 2: SQL migration** — Clean up the orphaned sync queue entry for the deleted item.
+**Step 2**: Delete `tests/integration/shopify-sync-workflow.test.ts` — it imports a non-existent hook and tests fictional behavior with full mocks, providing no real coverage.
 
-**Step 3: Edge function update** — Add `deleted_at IS NULL` guard in `shopify-sync/index.ts` `processQueueItem` function (around line 657-665) so deleted items are skipped and their queue entries marked as completed.
+**Step 3**: No code change for webhook HMAC — note for you: check that your Shopify webhook secret in admin matches what's stored in `system_settings` for `SHOPIFY_HAWAII_WEBHOOK_SECRET`. The `orders/updated` topic verifies fine, but `orders/create` and `orders/fulfilled` fail, suggesting those webhook subscriptions may use a different secret.
 
