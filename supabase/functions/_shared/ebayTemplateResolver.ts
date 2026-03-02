@@ -265,6 +265,17 @@ export async function buildCategoryAwareAspects(
 export function buildTitle(item: any, template?: string | null): string {
   if (template) {
     return template
+      // Double-brace replacements first
+      .replace(/{{subject}}/g, item.subject || '')
+      .replace(/{{brand_title}}/g, item.brand_title || '')
+      .replace(/{{brand}}/g, item.brand_title || '')
+      .replace(/{{year}}/g, item.year || '')
+      .replace(/{{grade}}/g, item.grade || '')
+      .replace(/{{grading_company}}/g, item.grading_company || '')
+      .replace(/{{card_number}}/g, item.card_number || '')
+      .replace(/{{variant}}/g, item.variant || '')
+      .replace(/{{psa_cert}}/g, item.psa_cert || '')
+      // Single-brace replacements
       .replace(/{subject}/g, item.subject || '')
       .replace(/{brand_title}/g, item.brand_title || '')
       .replace(/{brand}/g, item.brand_title || '')
@@ -298,6 +309,19 @@ export function buildTitle(item: any, template?: string | null): string {
 export function buildDescription(item: any, template?: string | null): string {
   if (template) {
     return template
+      // Double-brace replacements first
+      .replace(/{{subject}}/g, item.subject || '')
+      .replace(/{{brand_title}}/g, item.brand_title || '')
+      .replace(/{{brand}}/g, item.brand_title || '')
+      .replace(/{{year}}/g, item.year || '')
+      .replace(/{{grade}}/g, item.grade || '')
+      .replace(/{{grading_company}}/g, item.grading_company || '')
+      .replace(/{{card_number}}/g, item.card_number || '')
+      .replace(/{{variant}}/g, item.variant || '')
+      .replace(/{{sku}}/g, item.sku || '')
+      .replace(/{{psa_cert}}/g, item.psa_cert || '')
+      .replace(/{{cgc_cert}}/g, item.cgc_cert || '')
+      // Single-brace replacements
       .replace(/{subject}/g, item.subject || '')
       .replace(/{brand_title}/g, item.brand_title || '')
       .replace(/{brand}/g, item.brand_title || '')
