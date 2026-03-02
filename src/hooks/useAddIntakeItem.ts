@@ -75,6 +75,20 @@ export const useAddIntakeItem = () => {
         }
 
         if (existing) {
+          // Graded items are 1-of-1 — never allow quantity increment
+          if (params.grading_company_in) {
+            logger.logInfo('Duplicate graded item detected, skipping', { sku: params.sku_in });
+            toast.warning(`Cert ${params.sku_in} already exists in the batch.`);
+            return {
+              id: existing.id,
+              lot_number: 'existing',
+              lot_id: existing.lot_id || '',
+              created_at: new Date().toISOString(),
+              isDuplicate: true,
+              skipped: true,
+            } as AddIntakeItemResponse;
+          }
+
           // Get or create active lot for current batch
           const { data: lotData, error: lotError } = await supabase
             .rpc('get_or_create_active_lot', {
@@ -169,6 +183,20 @@ export const useAddIntakeItem = () => {
           }
 
           if (existing) {
+            // Graded items are 1-of-1 — never allow quantity increment
+            if (params.grading_company_in) {
+              logger.logInfo('Duplicate graded item detected (race condition path), skipping', { sku: params.sku_in });
+              toast.warning(`Cert ${params.sku_in} already exists in the batch.`);
+              return {
+                id: existing.id,
+                lot_number: 'existing',
+                lot_id: existing.lot_id || '',
+                created_at: new Date().toISOString(),
+                isDuplicate: true,
+                skipped: true,
+              } as AddIntakeItemResponse;
+            }
+
             // Get or create active lot for current batch
             const { data: lotData, error: lotError } = await supabase
               .rpc('get_or_create_active_lot', {
@@ -294,7 +322,9 @@ export const useAddIntakeItem = () => {
       }
 
       // Show appropriate success message based on duplicate status
-      if ((data as any).isDuplicate) {
+      if ((data as any).skipped) {
+        // Already showed warning toast, nothing else to do
+      } else if ((data as any).isDuplicate) {
         const oldQty = (data as any).oldQuantity || 0;
         const newQty = (data as any).newQuantity || 0;
         toast.success(`Quantity updated from ${oldQty} to ${newQty}`);
