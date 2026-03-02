@@ -25,6 +25,35 @@ import {
   resolveConditionId,
   validateAspects,
 } from '../_shared/ebayCategorySchema.ts'
+
+// Map numeric condition IDs to eBay Inventory API ConditionEnum values
+const CONDITION_ID_TO_ENUM: Record<string, string> = {
+  '1000': 'NEW',
+  '1500': 'NEW_OTHER',
+  '1750': 'NEW_WITH_DEFECTS',
+  '2000': 'CERTIFIED_REFURBISHED',
+  '2010': 'EXCELLENT_REFURBISHED',
+  '2020': 'VERY_GOOD_REFURBISHED',
+  '2030': 'GOOD_REFURBISHED',
+  '2500': 'SELLER_REFURBISHED',
+  '2750': 'LIKE_NEW',
+  '2990': 'PRE_OWNED_EXCELLENT',
+  '3000': 'USED_EXCELLENT',
+  '4000': 'USED_VERY_GOOD',
+  '5000': 'USED_GOOD',
+  '6000': 'USED_ACCEPTABLE',
+  '7000': 'FOR_PARTS_OR_NOT_WORKING',
+}
+
+function conditionIdToEnum(conditionId: string): string {
+  const mapped = CONDITION_ID_TO_ENUM[conditionId]
+  if (!mapped) {
+    console.warn(`[ebay-sync-processor] Unknown condition ID ${conditionId}, falling back to USED_VERY_GOOD`)
+    return 'USED_VERY_GOOD'
+  }
+  return mapped
+}
+
 import {
   resolveTemplate,
   buildCategoryAwareAspects,
@@ -521,7 +550,7 @@ async function processCreate(
       aspects,
       imageUrls: item.image_urls || [],
     },
-    condition: conditionId,
+    condition: conditionIdToEnum(conditionId),
     availability: {
       shipToLocationAvailability: {
         quantity,
@@ -755,7 +784,7 @@ async function processUpdate(
       aspects,
       imageUrls: item.image_urls || [],
     },
-    condition: conditionId,
+    condition: conditionIdToEnum(conditionId),
     availability: {
       shipToLocationAvailability: {
         quantity,

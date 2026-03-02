@@ -22,6 +22,19 @@ import {
   detectCategoryFromBrandDB,
 } from '../_shared/ebayTemplateResolver.ts'
 
+// Map numeric condition IDs to eBay Inventory API ConditionEnum values
+const CONDITION_ID_TO_ENUM: Record<string, string> = {
+  '1000': 'NEW', '1500': 'NEW_OTHER', '1750': 'NEW_WITH_DEFECTS',
+  '2000': 'CERTIFIED_REFURBISHED', '2500': 'SELLER_REFURBISHED',
+  '2750': 'LIKE_NEW', '2990': 'PRE_OWNED_EXCELLENT',
+  '3000': 'USED_EXCELLENT', '4000': 'USED_VERY_GOOD',
+  '5000': 'USED_GOOD', '6000': 'USED_ACCEPTABLE',
+  '7000': 'FOR_PARTS_OR_NOT_WORKING',
+}
+function conditionIdToEnum(id: string): string {
+  return CONDITION_ID_TO_ENUM[id] || 'USED_VERY_GOOD'
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -232,7 +245,7 @@ serve(async (req) => {
         aspects: aspects,
         imageUrls: item.image_urls || [],
       },
-      condition: conditionId,
+      condition: conditionIdToEnum(conditionId),
       availability: {
         shipToLocationAvailability: {
           quantity: item.quantity || 1,
