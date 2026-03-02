@@ -23,6 +23,7 @@ interface ListingTemplate {
   category_id: string;
   category_name: string | null;
   condition_id: string;
+  preferred_condition_ids: string[] | null;
   is_graded: boolean;
   title_template: string | null;
   description_template: string | null;
@@ -64,6 +65,7 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
   const [saving, setSaving] = useState(false);
   const [selectedCategoryName, setSelectedCategoryName] = useState('');
   const [tagInput, setTagInput] = useState('');
+  const [conditionInput, setConditionInput] = useState('');
   const [fulfillmentPolicies, setFulfillmentPolicies] = useState<PolicyOption[]>([]);
   const [paymentPolicies, setPaymentPolicies] = useState<PolicyOption[]>([]);
   const [returnPolicies, setReturnPolicies] = useState<PolicyOption[]>([]);
@@ -132,7 +134,8 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
         description: editingTemplate.description || null,
         category_id: editingTemplate.category_id || '183454',
         category_name: selectedCategoryName || editingTemplate.category_name || null,
-        condition_id: editingTemplate.condition_id || '2750',
+        condition_id: editingTemplate.preferred_condition_ids?.[0] || editingTemplate.condition_id || '2750',
+        preferred_condition_ids: editingTemplate.preferred_condition_ids?.length ? editingTemplate.preferred_condition_ids : null,
         is_graded: editingTemplate.is_graded ?? true,
         title_template: editingTemplate.title_template || null,
         description_template: editingTemplate.description_template || null,
@@ -203,6 +206,7 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
       description: '',
       category_id: '183454',
       condition_id: '2750',
+      preferred_condition_ids: ['2750', '3000', '4000'],
       is_graded: true,
       title_template: '{year} {brand_title} {subject} #{card_number} {grading_company} {grade}',
       description_template: '<h2>{subject}</h2>\n<p><strong>Year:</strong> {year}</p>\n<p><strong>Brand:</strong> {brand_title}</p>\n<p><strong>Card #:</strong> {card_number}</p>\n<p><strong>Grade:</strong> {grading_company} {grade}</p>\n<p><strong>Cert:</strong> {psa_cert}</p>',
@@ -218,6 +222,7 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
     });
     setSelectedCategoryName('');
     setTagInput('');
+    setConditionInput('');
     setIsDialogOpen(true);
   }
 
@@ -385,29 +390,70 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="condition">Condition</Label>
-                  <Select
-                    value={editingTemplate?.condition_id || '2750'}
-                    onValueChange={(value) => {
-                      const option = CONDITION_OPTIONS.find(c => c.id === value);
-                      setEditingTemplate(prev => ({ 
-                        ...prev, 
-                        condition_id: value,
-                        is_graded: option?.isGraded ?? false,
-                      }));
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CONDITION_OPTIONS.map((cond) => (
-                        <SelectItem key={cond.id} value={cond.id}>
-                          {cond.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>Preferred Condition IDs (priority order)</Label>
+                  <div className="flex gap-2">
+                    <Select
+                      value=""
+                      onValueChange={(value) => {
+                        const ids = editingTemplate?.preferred_condition_ids || [];
+                        if (!ids.includes(value)) {
+                          setEditingTemplate(prev => ({ ...prev, preferred_condition_ids: [...ids, value] }));
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Add condition..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CONDITION_OPTIONS.map((cond) => (
+                          <SelectItem key={cond.id} value={cond.id}>
+                            {cond.id} — {cond.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <div className="flex gap-1">
+                      <Input
+                        value={conditionInput}
+                        onChange={(e) => setConditionInput(e.target.value)}
+                        placeholder="Custom ID"
+                        className="w-24"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (!conditionInput.trim()) return;
+                            const ids = editingTemplate?.preferred_condition_ids || [];
+                            if (!ids.includes(conditionInput.trim())) {
+                              setEditingTemplate(prev => ({ ...prev, preferred_condition_ids: [...ids, conditionInput.trim()] }));
+                            }
+                            setConditionInput('');
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                  {editingTemplate?.preferred_condition_ids?.length ? (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {editingTemplate.preferred_condition_ids.map((id, idx) => {
+                        const label = CONDITION_OPTIONS.find(c => c.id === id)?.name || id;
+                        return (
+                          <Badge 
+                            key={id} 
+                            variant="outline"
+                            className="cursor-pointer"
+                            onClick={() => setEditingTemplate(prev => ({ ...prev, preferred_condition_ids: (prev?.preferred_condition_ids || []).filter(c => c !== id) }))}
+                          >
+                            #{idx + 1}: {id} ({label}) ×
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No preferred conditions set — will use condition_id as fallback</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Processor picks the first valid ID for the category. Fallback: condition_id = {editingTemplate?.condition_id || '2750'}
+                  </p>
                 </div>
                 {editingTemplate?.is_graded && (
                   <div className="space-y-2">
