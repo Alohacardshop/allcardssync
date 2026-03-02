@@ -291,7 +291,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
       await addItem({
         store_key_in: assignedStore,
         shopify_location_gid_in: selectedLocation,
-        quantity_in: formData.quantity,
+        quantity_in: 1, // Graded comics are always 1-of-1 (unique cert number)
         grade_in: formData.grade,
         brand_title_in: formData.publisher,
         subject_in: formData.title,
@@ -559,10 +559,11 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
               <Input
                 id="quantity"
                 type="number"
-                min="1"
-                value={formData.quantity}
-                onChange={(e) => updateFormField('quantity', parseInt(e.target.value) || 1)}
+                value={1}
+                disabled
+                className="opacity-60"
               />
+              <p className="text-xs text-muted-foreground mt-1">Always 1 for graded items</p>
             </div>
           </div>
 

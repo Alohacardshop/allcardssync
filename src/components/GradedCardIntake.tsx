@@ -418,7 +418,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       const itemPayload: any = {
         store_key_in: assignedStore,
         shopify_location_gid_in: selectedLocation,
-        quantity_in: formData.quantity,
+        quantity_in: 1, // Graded cards are always 1-of-1 (unique cert number)
         grade_in: formData.grade,
         brand_title_in: formData.brandTitle,
         subject_in: formData.subject,
@@ -825,10 +825,11 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               <Input
                 id="quantity"
                 type="number"
-                min="1"
-                value={formData.quantity}
-                onChange={(e) => updateFormField('quantity', parseInt(e.target.value) || 1)}
+                value={1}
+                disabled
+                className="opacity-60"
               />
+              <p className="text-xs text-muted-foreground mt-1">Always 1 for graded items</p>
             </div>
             
           </div>
