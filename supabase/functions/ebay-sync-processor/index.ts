@@ -382,11 +382,13 @@ async function processCreate(
   // Use effective quantity (derived from cards.status for graded items)
   const quantity = item._effectiveQuantity ?? item.quantity ?? 1
 
-  // Determine condition and category from template or auto-detect
+  // Category + marketplace are ALWAYS driven by template — no auto-detection
   const isGraded = !!item.grade
-  const detectedCategory = item.primary_category || item.main_category || await detectCategoryFromBrandDB(supabase, item.brand_title)
-  const categoryId = template?.category_id || 
-    await getEbayCategoryIdDB(supabase, detectedCategory, isGraded)
+  if (!template?.category_id) {
+    return { success: false, error: 'No template with category_id resolved for this item. Assign a template before listing.' }
+  }
+  const categoryId = template.category_id
+  const marketplaceId = template.marketplace_id || storeConfig.marketplace_id || 'EBAY_US'
 
   // Build preferred condition list from template
   const preferredConditionIds: string[] = 
@@ -395,15 +397,16 @@ async function processCreate(
     [isGraded ? '2750' : '4000']
 
   // === DYNAMIC CONDITION + ASPECT VALIDATION via Category Schema ===
-  const marketplaceId = storeConfig.marketplace_id || 'EBAY_US'
   const schema = await getCategorySchema(accessToken, environment, marketplaceId, categoryId)
   let conditionId = resolveConditionId(schema, preferredConditionIds, isGraded)
-  console.log(`[ebay-sync-processor] Validated conditionId: ${conditionId} for category ${categoryId}`)
+  console.log(`[ebay-sync-processor] Validated conditionId: ${conditionId} for category ${categoryId} marketplace=${marketplaceId}`)
 
   // Build condition descriptors for graded items (comics use different descriptor IDs)
+  // Detect comic vs card for condition descriptor format (based on template category, not auto-detect)
+  const isComicCategory = template?.is_graded && (template?.category_name?.toLowerCase().includes('comic') || false)
   let conditionDescriptors: any[] | undefined
   if (isGraded) {
-    if (detectedCategory === 'comics') {
+    if (isComicCategory) {
       conditionDescriptors = buildComicConditionDescriptors(
         item.grading_company || template?.default_grader || 'CGC',
         item.grade,
@@ -418,7 +421,8 @@ async function processCreate(
     }
   }
 
-  // Build aspects based on detected category (TCG, sports, or comics)
+  // Build aspects based on template category type
+  const detectedCategory = isComicCategory ? 'comics' : (item.primary_category || item.main_category || await detectCategoryFromBrandDB(supabase, item.brand_title))
   let aspects = await buildCategoryAwareAspects(supabase, item, detectedCategory)
 
   // Add grading aspects for graded items if taxonomy supports them
@@ -453,7 +457,11 @@ async function processCreate(
       descriptionSuffix = cert ? `\n<p><strong>Grading:</strong> ${parts} — Cert #${cert}</p>` : `\n<p><strong>Grading:</strong> ${parts}</p>`
       console.log(`[ebay-sync-processor] Grading aspects removed by taxonomy, appended to description: ${removedGradingKeys.join(', ')}`)
     }
-  }
+      console.log(`[ebay-sync-processor] PUBLISH LOG: templateId=${template?.id}, sku=${ebaySku}, marketplaceId=${marketplaceId}, categoryId=${categoryId}, conditionId=${conditionId}, removedAspects=[${removedGradingKeys.join(',')}], descriptionFallback=true`)
+    }
+
+  // Log publish details
+  console.log(`[ebay-sync-processor] PUBLISH LOG: templateId=${template?.id}, sku=${ebaySku}, marketplaceId=${marketplaceId}, categoryId=${categoryId}, conditionId=${conditionId}, removedAspects=[], descriptionFallback=false`)
 
   // Look up tag mapping for per-category policy/markup overrides
   const { data: tagMappingPolicies } = detectedCategory ? await supabase
@@ -538,7 +546,7 @@ async function processCreate(
   // Create offer
   const offerResult = await createOffer(accessToken, environment, {
     sku: ebaySku,
-    marketplaceId: storeConfig.marketplace_id || 'EBAY_US',
+    marketplaceId: marketplaceId,
     format: 'FIXED_PRICE',
     listingDescription: description,
     availableQuantity: quantity,
@@ -623,9 +631,13 @@ async function processUpdate(
   const template = await resolveTemplate(supabase, item, storeConfig.store_key)
 
   const isGraded = !!item.grade
-  const detectedCategory = item.primary_category || item.main_category || await detectCategoryFromBrandDB(supabase, item.brand_title)
-  const categoryId = template?.category_id || 
-    await getEbayCategoryIdDB(supabase, detectedCategory, isGraded)
+  
+  // Category + marketplace are ALWAYS driven by template — no auto-detection
+  if (!template?.category_id) {
+    return { success: false, error: 'No template with category_id resolved for this item. Assign a template before updating.' }
+  }
+  const categoryId = template.category_id
+  const marketplaceId = template.marketplace_id || storeConfig.marketplace_id || 'EBAY_US'
 
   // Build preferred condition list from template
   const preferredConditionIds: string[] = 
@@ -634,10 +646,13 @@ async function processUpdate(
     [isGraded ? '2750' : '4000']
 
   // === DYNAMIC CONDITION + ASPECT VALIDATION via Category Schema ===
-  const marketplaceId = storeConfig.marketplace_id || 'EBAY_US'
   const schema = await getCategorySchema(accessToken, environment, marketplaceId, categoryId)
   let conditionId = resolveConditionId(schema, preferredConditionIds, isGraded)
-  console.log(`[ebay-sync-processor] Update: Validated conditionId: ${conditionId} for category ${categoryId}`)
+  console.log(`[ebay-sync-processor] Update: Validated conditionId: ${conditionId} for category ${categoryId} marketplace=${marketplaceId}`)
+
+  // Detect comic vs card for condition descriptor format
+  const isComicCategory = template?.is_graded && (template?.category_name?.toLowerCase().includes('comic') || false)
+  const detectedCategory = isComicCategory ? 'comics' : (item.primary_category || item.main_category || await detectCategoryFromBrandDB(supabase, item.brand_title))
 
   // Look up tag mapping for per-category policy/markup overrides
   const { data: tagMappingPolicies } = detectedCategory ? await supabase
@@ -652,7 +667,7 @@ async function processUpdate(
   const paymentPolicyId = template?.payment_policy_id || tagMappingPolicies?.payment_policy_id || storeConfig.default_payment_policy_id || ''
   const returnPolicyId = template?.return_policy_id || tagMappingPolicies?.return_policy_id || storeConfig.default_return_policy_id || ''
 
-  // Build aspects based on detected category (TCG, sports, or comics)
+  // Build aspects based on template category type
   let aspects = await buildCategoryAwareAspects(supabase, item, detectedCategory)
 
   // Add grading aspects for graded items if taxonomy supports them
@@ -689,10 +704,10 @@ async function processUpdate(
     }
   }
 
-  // Build condition descriptors for graded items (comics use different descriptor IDs)
+  // Build condition descriptors for graded items
   let conditionDescriptors: any[] | undefined
   if (isGraded) {
-    if (detectedCategory === 'comics') {
+    if (isComicCategory) {
       conditionDescriptors = buildComicConditionDescriptors(
         item.grading_company || template?.default_grader || 'CGC',
         item.grade,
@@ -766,7 +781,7 @@ async function processUpdate(
   if (item.ebay_offer_id) {
     const offerUpdateResult = await updateOffer(accessToken, environment, item.ebay_offer_id, {
       sku: ebaySku,
-      marketplaceId: storeConfig.marketplace_id || 'EBAY_US',
+      marketplaceId: marketplaceId,
       format: 'FIXED_PRICE',
       availableQuantity: quantity,
       pricingSummary: {

@@ -20,7 +20,6 @@ import {
   buildTitle,
   buildDescription,
   detectCategoryFromBrandDB,
-  getEbayCategoryIdDB,
 } from '../_shared/ebayTemplateResolver.ts'
 
 const corsHeaders = {
@@ -129,18 +128,35 @@ serve(async (req) => {
 
     console.log(`[ebay-create-listing] Using template: ${template?.id || 'none'}, isGraded: ${!!item.grade}`)
 
+    // Category + marketplace MUST come from template
+    if (!template?.category_id) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'No template with category_id resolved. Assign a template before listing.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     // Get valid access token
     const accessToken = await getValidAccessToken(supabase, store_key, environment)
 
     // Build eBay SKU (use existing SKU or generate)
     const ebaySku = item.sku || `INV-${item.id.substring(0, 8)}`
 
-    // Determine condition and category
+    // Category and marketplace are template-driven
     const isGraded = !!item.grade
-    const conditionId = template?.condition_id || (isGraded ? EBAY_CONDITION_IDS.GRADED : EBAY_CONDITION_IDS.UNGRADED)
-    const detectedCategory = await detectCategoryFromBrandDB(supabase, item.brand_title) || item.main_category
-    const categoryId = template?.category_id || 
-      await getEbayCategoryIdDB(supabase, detectedCategory, isGraded)
+    const categoryId = template.category_id
+    const marketplaceId = template.marketplace_id || storeConfig.marketplace_id || 'EBAY_US'
+
+    // Build preferred condition list from template
+    const preferredConditionIds: string[] =
+      (template.preferred_condition_ids as string[] | null) ||
+      (template.condition_id ? [template.condition_id] : []) ||
+      [isGraded ? '2750' : '4000']
+
+    // Validate condition against category schema
+    const { getCategorySchema, resolveConditionId, validateAspects } = await import('../_shared/ebayCategorySchema.ts')
+    const schema = await getCategorySchema(accessToken, environment, marketplaceId, categoryId)
+    const conditionId = resolveConditionId(schema, preferredConditionIds, isGraded)
 
     // Build title from item data
     const title = buildTitle(item, template?.title_template || storeConfig.title_template)
@@ -148,13 +164,49 @@ serve(async (req) => {
     // Build description
     const description = buildDescription(item, template?.description_template || storeConfig.description_template)
 
-    // Build aspects based on detected category (TCG, sports, or comics)
-    const aspects = await buildCategoryAwareAspects(supabase, item, detectedCategory)
+    // Build aspects based on category type
+    const isComicCategory = template?.category_name?.toLowerCase().includes('comic') || false
+    const detectedCategory = isComicCategory ? 'comics' : (item.primary_category || item.main_category || await detectCategoryFromBrandDB(supabase, item.brand_title))
+    let aspects = await buildCategoryAwareAspects(supabase, item, detectedCategory)
 
-    // Build condition descriptors for graded items (comics use different descriptor IDs)
+    // Add grading aspects for graded items
+    if (isGraded) {
+      const gradingAspects: Record<string, string[]> = {}
+      if (item.grading_company) gradingAspects['Professional Grader'] = [item.grading_company]
+      if (item.grade) gradingAspects['Grade'] = [item.grade]
+      const certNumber = item.psa_cert || item.cgc_cert
+      if (certNumber) gradingAspects['Certification Number'] = [certNumber]
+      gradingAspects['Graded'] = ['Yes']
+      aspects = { ...aspects, ...gradingAspects }
+    }
+
+    // Validate aspects against category schema
+    const gradingAspectKeys = ['Professional Grader', 'Grade', 'Certification Number', 'Graded']
+    const preValidationGradingAspects = isGraded ? gradingAspectKeys.filter(k => aspects[k]) : []
+    const { validated: validatedAspects, warnings: aspectWarnings } = validateAspects(schema, aspects)
+    aspects = validatedAspects
+    if (aspectWarnings.length > 0) {
+      console.log(`[ebay-create-listing] Aspect warnings: ${aspectWarnings.join('; ')}`)
+    }
+
+    // Grading fallback to description
+    let descriptionSuffix = ''
+    const removedGradingKeys: string[] = []
+    if (isGraded && preValidationGradingAspects.length > 0) {
+      removedGradingKeys.push(...preValidationGradingAspects.filter(k => !validatedAspects[k]))
+      if (removedGradingKeys.length > 0) {
+        const grader = item.grading_company || template?.default_grader || ''
+        const grade = item.grade || ''
+        const cert = item.psa_cert || item.cgc_cert || ''
+        const parts = [grader, grade].filter(Boolean).join(' ')
+        descriptionSuffix = cert ? `\n<p><strong>Grading:</strong> ${parts} — Cert #${cert}</p>` : `\n<p><strong>Grading:</strong> ${parts}</p>`
+      }
+    }
+
+    // Build condition descriptors for graded items
     let conditionDescriptors: any[] | undefined
     if (isGraded) {
-      if (detectedCategory === 'comics') {
+      if (isComicCategory) {
         conditionDescriptors = buildComicConditionDescriptors(
           item.grading_company || template?.default_grader || 'CGC',
           item.grade,
@@ -169,12 +221,14 @@ serve(async (req) => {
       }
     }
 
+    console.log(`[ebay-create-listing] PUBLISH LOG: templateId=${template?.id}, sku=${ebaySku}, marketplaceId=${marketplaceId}, categoryId=${categoryId}, conditionId=${conditionId}, removedAspects=[${removedGradingKeys.join(',')}], descriptionFallback=${removedGradingKeys.length > 0}`)
+
     // Create inventory item with condition descriptors
     const inventoryItem: EbayInventoryItem & { conditionDescriptors?: any[] } = {
       sku: ebaySku,
       product: {
         title: title.substring(0, 80), // eBay title limit
-        description: description,
+        description: (description + descriptionSuffix),
         aspects: aspects,
         imageUrls: item.image_urls || [],
       },
@@ -210,9 +264,9 @@ serve(async (req) => {
     // Create offer
     const offer: EbayOffer = {
       sku: ebaySku,
-      marketplaceId: storeConfig.marketplace_id || 'EBAY_US',
+      marketplaceId: marketplaceId,
       format: 'FIXED_PRICE',
-      listingDescription: description,
+      listingDescription: (description + descriptionSuffix),
       availableQuantity: item.quantity || 1,
       pricingSummary: {
         price: {
@@ -254,6 +308,7 @@ serve(async (req) => {
       timestamp: new Date().toISOString(),
       store_key,
       environment,
+      marketplace_id: marketplaceId,
       sku: ebaySku,
       offer_id: offerResult.offerId,
       listing_id: publishResult.listingId,
@@ -263,6 +318,8 @@ serve(async (req) => {
       condition_id: conditionId,
       condition_descriptors: conditionDescriptors,
       aspects: aspects,
+      removed_grading_aspects: removedGradingKeys,
+      description_fallback: removedGradingKeys.length > 0,
     }
 
     await supabase

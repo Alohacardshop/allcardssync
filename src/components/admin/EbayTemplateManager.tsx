@@ -22,6 +22,7 @@ interface ListingTemplate {
   description: string | null;
   category_id: string;
   category_name: string | null;
+  marketplace_id: string;
   condition_id: string;
   preferred_condition_ids: string[] | null;
   is_graded: boolean;
@@ -46,6 +47,14 @@ interface PolicyOption {
 }
 
 const GRADER_OPTIONS = ['PSA', 'BGS', 'CGC', 'SGC', 'CSG', 'HGA', 'GMA', 'KSA'];
+
+const MARKETPLACE_OPTIONS = [
+  { id: 'EBAY_US', name: 'United States' },
+  { id: 'EBAY_GB', name: 'United Kingdom' },
+  { id: 'EBAY_AU', name: 'Australia' },
+  { id: 'EBAY_DE', name: 'Germany' },
+  { id: 'EBAY_CA', name: 'Canada' },
+];
 
 const CONDITION_OPTIONS = [
   { id: '2750', name: 'Professionally Graded', isGraded: true },
@@ -125,6 +134,10 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
       toast.error('Template name is required');
       return;
     }
+    if (!editingTemplate?.category_id) {
+      toast.error('eBay Category ID (leaf) is required');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -132,8 +145,9 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
         store_key: storeKey,
         name: editingTemplate.name,
         description: editingTemplate.description || null,
-        category_id: editingTemplate.category_id || '183454',
+        category_id: editingTemplate.category_id,
         category_name: selectedCategoryName || editingTemplate.category_name || null,
+        marketplace_id: editingTemplate.marketplace_id || 'EBAY_US',
         condition_id: editingTemplate.preferred_condition_ids?.[0] || editingTemplate.condition_id || '2750',
         preferred_condition_ids: editingTemplate.preferred_condition_ids?.length ? editingTemplate.preferred_condition_ids : null,
         is_graded: editingTemplate.is_graded ?? true,
@@ -204,7 +218,8 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
     setEditingTemplate({
       name: '',
       description: '',
-      category_id: '183454',
+      category_id: '',
+      marketplace_id: 'EBAY_US',
       condition_id: '2750',
       preferred_condition_ids: ['2750', '3000', '4000'],
       is_graded: true,
@@ -299,7 +314,10 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
                           )}
                         </CardTitle>
                         <CardDescription className="text-xs mt-1">
-                          {template.category_name || template.category_id}
+                          {template.category_name || template.category_id || '⚠ No category'}
+                          {template.marketplace_id && template.marketplace_id !== 'EBAY_US' && (
+                            <span className="ml-1 text-muted-foreground">({template.marketplace_id})</span>
+                          )}
                         </CardDescription>
                       </div>
                       <Badge variant={template.is_graded ? 'default' : 'secondary'}>
@@ -370,7 +388,7 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Template Name</Label>
+                  <Label htmlFor="name">Template Name *</Label>
                   <Input
                     id="name"
                     value={editingTemplate?.name || ''}
@@ -379,13 +397,33 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="category">eBay Category</Label>
-                  <EbayCategorySelect
-                    value={editingTemplate?.category_id || '183454'}
-                    onValueChange={(value) => setEditingTemplate(prev => ({ ...prev, category_id: value }))}
-                    onCategoryNameChange={setSelectedCategoryName}
-                  />
+                  <Label htmlFor="marketplace">Marketplace</Label>
+                  <Select
+                    value={editingTemplate?.marketplace_id || 'EBAY_US'}
+                    onValueChange={(value) => setEditingTemplate(prev => ({ ...prev, marketplace_id: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MARKETPLACE_OPTIONS.map(m => (
+                        <SelectItem key={m.id} value={m.id}>{m.id} — {m.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="category">eBay Category ID (leaf) *</Label>
+                <EbayCategorySelect
+                  value={editingTemplate?.category_id || ''}
+                  onValueChange={(value) => setEditingTemplate(prev => ({ ...prev, category_id: value }))}
+                  onCategoryNameChange={setSelectedCategoryName}
+                />
+                {!editingTemplate?.category_id && (
+                  <p className="text-xs text-destructive font-medium">⚠ Category ID is required. Template cannot be used without it.</p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -619,7 +657,7 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={saveTemplate} disabled={saving}>
+            <Button onClick={saveTemplate} disabled={saving || !editingTemplate?.category_id}>
               {saving ? 'Saving...' : (editingTemplate?.id ? 'Update Template' : 'Create Template')}
             </Button>
           </DialogFooter>

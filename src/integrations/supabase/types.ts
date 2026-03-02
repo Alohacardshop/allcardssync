@@ -461,6 +461,7 @@ export type Database = {
           is_active: boolean | null
           is_default: boolean | null
           is_graded: boolean | null
+          marketplace_id: string
           name: string
           payment_policy_id: string | null
           preferred_condition_ids: Json | null
@@ -485,6 +486,7 @@ export type Database = {
           is_active?: boolean | null
           is_default?: boolean | null
           is_graded?: boolean | null
+          marketplace_id?: string
           name: string
           payment_policy_id?: string | null
           preferred_condition_ids?: Json | null
@@ -509,6 +511,7 @@ export type Database = {
           is_active?: boolean | null
           is_default?: boolean | null
           is_graded?: boolean | null
+          marketplace_id?: string
           name?: string
           payment_policy_id?: string | null
           preferred_condition_ids?: Json | null
