@@ -362,6 +362,42 @@ export type Database = {
           },
         ]
       }
+      ebay_category_schema_cache: {
+        Row: {
+          aspects: Json
+          category_id: string
+          conditions: Json
+          created_at: string
+          environment: string
+          fetched_at: string
+          id: string
+          marketplace_id: string
+          updated_at: string
+        }
+        Insert: {
+          aspects?: Json
+          category_id: string
+          conditions?: Json
+          created_at?: string
+          environment?: string
+          fetched_at?: string
+          id?: string
+          marketplace_id: string
+          updated_at?: string
+        }
+        Update: {
+          aspects?: Json
+          category_id?: string
+          conditions?: Json
+          created_at?: string
+          environment?: string
+          fetched_at?: string
+          id?: string
+          marketplace_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ebay_fulfillment_policies: {
         Row: {
           created_at: string
