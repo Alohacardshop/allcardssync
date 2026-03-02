@@ -270,20 +270,20 @@ export const ShopifyTab = React.memo(({ item, detailData, onResync, isResyncing 
         </div>
       )}
 
-      {/* Resync Button */}
+      {/* Full Resync — recovery tool for fixing broken syncs */}
       <Button
-        variant="outline"
+        variant="ghost"
         size="sm"
         onClick={onResync}
         disabled={isResyncing || item.deleted_at !== null || item.sold_at !== null}
-        className="w-full"
+        className="w-full text-muted-foreground"
       >
         {isResyncing ? (
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          <Loader2 className="h-3 w-3 mr-2 animate-spin" />
         ) : (
-          <RefreshCw className="h-4 w-4 mr-2" />
+          <RefreshCw className="h-3 w-3 mr-2" />
         )}
-        {productId ? 'Resync' : 'Sync to Shopify'}
+        {productId ? 'Full Resync' : 'Sync to Shopify'}
       </Button>
     </div>
   );

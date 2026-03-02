@@ -65,22 +65,6 @@ export const InventoryItemActionsRow = memo(({
         </Button>
       )}
       
-      {item.shopify_sync_status === 'synced' && item.shopify_product_id && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onResync(item)}
-          disabled={syncingRowId === item.id}
-          title="Re-sync this item to update Shopify product information"
-        >
-          {syncingRowId === item.id ? (
-            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-          ) : (
-            <RotateCcw className="h-3 w-3 mr-1" />
-          )}
-          Resync
-        </Button>
-      )}
       
       {item.shopify_product_id && (
         <Button

@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { ChevronUp, ChevronDown, Copy, X, Loader2, RefreshCw } from 'lucide-react';
+import { ChevronUp, ChevronDown, Copy, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useInventoryItemDetail } from '@/hooks/useInventoryItemDetail';
 import { getLocationNickname } from '@/lib/locationNicknames';
@@ -275,26 +275,13 @@ eBay: ${item.ebay_sync_status || 'Not listed'}
         {/* Footer actions */}
         <div className="shrink-0 px-4 py-3 border-t border-border flex gap-2">
           <Button
-            variant="default"
-            size="sm"
-            onClick={() => onResync(item)}
-            disabled={isResyncing || !!item.deleted_at || !!item.sold_at}
-            className="flex-1 h-8 text-xs"
-          >
-            {isResyncing ? (
-              <Loader2 className="h-3 w-3 mr-2 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3 w-3 mr-2" />
-            )}
-            Resync
-          </Button>
-          <Button
             variant="outline"
             size="sm"
             onClick={handleCopyDetails}
             className="h-8 text-xs px-3"
           >
-            <Copy className="h-3 w-3" />
+            <Copy className="h-3 w-3 mr-1" />
+            Copy Details
           </Button>
         </div>
       </Tabs>
