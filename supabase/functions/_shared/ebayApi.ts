@@ -342,8 +342,13 @@ export function mapConditionToEbay(condition?: string): string {
   return conditionMap[normalized] || 'NEW'
 }
 
+// In-memory caches with 24-hour TTL
+const conditionPolicyCache = new Map<string, { data: string[]; ts: number }>()
+const categoryAspectCache = new Map<string, { data: Set<string>; ts: number }>()
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+
 /**
- * Fetch valid condition policies for a category from eBay Metadata API
+ * Fetch valid condition policies for a category from eBay Metadata API (cached 24h)
  */
 export async function fetchConditionPolicies(
   accessToken: string,
@@ -351,6 +356,13 @@ export async function fetchConditionPolicies(
   marketplaceId: string,
   categoryId: string
 ): Promise<{ conditionIds: string[]; error?: string }> {
+  const cacheKey = `${environment}:${categoryId}`
+  const cached = conditionPolicyCache.get(cacheKey)
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    console.log(`[fetchConditionPolicies] Cache hit for category ${categoryId}`)
+    return { conditionIds: cached.data }
+  }
+
   try {
     const response = await ebayApiRequest(
       accessToken,
@@ -368,7 +380,6 @@ export async function fetchConditionPolicies(
     const data = await response.json()
     const policies = data.itemConditionPolicies || []
     
-    // Extract all valid condition IDs from the policy response
     const conditionIds: string[] = []
     for (const policy of policies) {
       if (policy.itemConditions) {
@@ -381,6 +392,7 @@ export async function fetchConditionPolicies(
     }
 
     console.log(`[fetchConditionPolicies] Category ${categoryId}: valid conditions = [${conditionIds.join(', ')}]`)
+    conditionPolicyCache.set(cacheKey, { data: conditionIds, ts: Date.now() })
     return { conditionIds }
   } catch (err) {
     console.error(`[fetchConditionPolicies] Error:`, err)
@@ -397,6 +409,13 @@ export async function fetchCategoryAspects(
   categoryId: string,
   categoryTreeId: string = '0' // 0 = EBAY_US
 ): Promise<{ aspectNames: Set<string>; error?: string }> {
+  const cacheKey = `${environment}:${categoryId}`
+  const cached = categoryAspectCache.get(cacheKey)
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    console.log(`[fetchCategoryAspects] Cache hit for category ${categoryId}`)
+    return { aspectNames: cached.data }
+  }
+
   try {
     const response = await ebayApiRequest(
       accessToken,
@@ -423,6 +442,7 @@ export async function fetchCategoryAspects(
     }
 
     console.log(`[fetchCategoryAspects] Category ${categoryId}: found ${aspectNames.size} valid aspect names`)
+    categoryAspectCache.set(cacheKey, { data: aspectNames, ts: Date.now() })
     return { aspectNames }
   } catch (err) {
     console.error(`[fetchCategoryAspects] Error:`, err)
