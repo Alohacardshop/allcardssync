@@ -122,7 +122,7 @@ export const OverviewTab = React.memo(({ item, detailData, locationsMap, onField
               disabled={isDeleted}
             />
             <EditableField
-              label="Variant"
+              label={!item.grade || item.type?.toLowerCase() === 'raw' ? "Condition" : "Variant"}
               value={item.variant}
               onSave={handleSave('variant')}
               disabled={isDeleted}
