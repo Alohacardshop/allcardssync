@@ -213,6 +213,17 @@ const InventoryPage = () => {
     inventoryData?.pages.flatMap(page => page.items) || [], 
     [inventoryData]
   );
+
+  // Keep inspector in sync with latest query data after edits
+  useEffect(() => {
+    if (!inspectorItem) return;
+    const fresh = items.find((i: any) => i.id === inspectorItem.id);
+    if (fresh) {
+      setInspectorItem(fresh);
+    } else {
+      setInspectorItem(null);
+    }
+  }, [items]);
   const totalCount = inventoryData?.pages[0]?.count || 0;
 
   // Fetch batch inventory levels for Shopify-truth quantity display
