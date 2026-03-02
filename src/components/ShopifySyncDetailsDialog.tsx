@@ -376,6 +376,7 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
                   quantity={row.quantity}
                   shopifyProductId={row.shopify_product_id}
                   shopifyInventoryItemId={row.shopify_inventory_item_id}
+                  isGraded={!!(row.grading_company && row.grading_company !== 'none')}
                 />
               </div>
               <div>

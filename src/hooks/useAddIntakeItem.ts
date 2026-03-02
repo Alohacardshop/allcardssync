@@ -126,7 +126,9 @@ export const useAddIntakeItem = () => {
           const activeLotId = Array.isArray(lotData) ? lotData[0]?.id : (lotData as any)?.id;
 
           // Update existing item's quantity and move to current batch
-          const newQuantity = (existing.quantity || 0) + (params.quantity_in || 1);
+          // Graded items are always 1-of-1 — never increment
+          const isGraded = !!(params.grading_company_in && params.grading_company_in !== 'none') || !!(existing.grading_company && existing.grading_company !== 'none');
+          const newQuantity = isGraded ? 1 : (existing.quantity || 0) + (params.quantity_in || 1);
           
           const { error: updateError } = await supabase
             .from('intake_items')
@@ -250,7 +252,9 @@ export const useAddIntakeItem = () => {
             const activeLotId = Array.isArray(lotData) ? lotData[0]?.id : (lotData as any)?.id;
 
             // Update existing item's quantity and move to current batch
-            const newQuantity = (existing.quantity || 0) + (params.quantity_in || 1);
+            // Graded items are always 1-of-1 — never increment
+            const isGraded = !!(params.grading_company_in && params.grading_company_in !== 'none') || !!(existing.grading_company && existing.grading_company !== 'none');
+            const newQuantity = isGraded ? 1 : (existing.quantity || 0) + (params.quantity_in || 1);
             
             const { error: updateError } = await supabase
               .from('intake_items')
