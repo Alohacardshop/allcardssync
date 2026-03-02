@@ -572,34 +572,73 @@ async function processCreate(
   const markupPercent = template?.price_markup_percent ?? tagMappingPolicies?.price_markup_percent ?? 0
   const finalPrice = basePrice * (1 + markupPercent / 100)
 
-  // Create offer
-  const offerResult = await createOffer(accessToken, environment, {
-    sku: ebaySku,
-    marketplaceId: marketplaceId,
-    format: 'FIXED_PRICE',
-    listingDescription: description,
-    availableQuantity: quantity,
-    pricingSummary: {
-      price: {
-        value: finalPrice.toFixed(2),
-        currency: 'USD',
-      },
-    },
-    listingPolicies: {
-      fulfillmentPolicyId,
-      paymentPolicyId,
-      returnPolicyId,
-    },
-    categoryId,
-    merchantLocationKey: storeConfig.location_key || undefined,
-  })
+  // Check for existing offer before creating
+  const existingOffers = await getOffersBySku(accessToken, environment, ebaySku)
+  let offerId: string | undefined
 
-  if (!offerResult.success) {
-    return offerResult
+  if (existingOffers.offers && existingOffers.offers.length > 0) {
+    // Offer already exists — update it instead of creating a duplicate
+    offerId = existingOffers.offers[0].offerId
+    console.log(`[processCreate] Existing offer ${offerId} found for SKU ${ebaySku}, updating instead of creating`)
+    const offerUpdateResult = await updateOffer(accessToken, environment, offerId, {
+      sku: ebaySku,
+      marketplaceId: marketplaceId,
+      format: 'FIXED_PRICE',
+      listingDescription: description,
+      availableQuantity: quantity,
+      pricingSummary: {
+        price: {
+          value: finalPrice.toFixed(2),
+          currency: 'USD',
+        },
+      },
+      listingPolicies: {
+        fulfillmentPolicyId,
+        paymentPolicyId,
+        returnPolicyId,
+      },
+      categoryId,
+      merchantLocationKey: storeConfig.location_key || undefined,
+    })
+
+    if (!offerUpdateResult.success) {
+      // Check for merchant location error 25002
+      if (offerUpdateResult.error?.includes('25002') || offerUpdateResult.error?.includes('Merchant location not registered')) {
+        return { success: false, error: `Merchant location '${storeConfig.location_key}' is not registered on eBay. Go to Admin → eBay → Locations and click 'Register Location', or call ebay-manage-location POST.` }
+      }
+      return offerUpdateResult
+    }
+  } else {
+    // No existing offer — create new
+    const offerResult = await createOffer(accessToken, environment, {
+      sku: ebaySku,
+      marketplaceId: marketplaceId,
+      format: 'FIXED_PRICE',
+      listingDescription: description,
+      availableQuantity: quantity,
+      pricingSummary: {
+        price: {
+          value: finalPrice.toFixed(2),
+          currency: 'USD',
+        },
+      },
+      listingPolicies: {
+        fulfillmentPolicyId,
+        paymentPolicyId,
+        returnPolicyId,
+      },
+      categoryId,
+      merchantLocationKey: storeConfig.location_key || undefined,
+    })
+
+    if (!offerResult.success) {
+      return offerResult
+    }
+    offerId = offerResult.offerId
   }
 
   // Publish offer
-  const publishResult = await publishOffer(accessToken, environment, offerResult.offerId!)
+  const publishResult = await publishOffer(accessToken, environment, offerId!)
 
   if (!publishResult.success) {
     return publishResult
@@ -614,7 +653,7 @@ async function processCreate(
     .from('intake_items')
     .update({
       ebay_inventory_item_sku: ebaySku,
-      ebay_offer_id: offerResult.offerId,
+      ebay_offer_id: offerId,
       ebay_listing_id: publishResult.listingId,
       ebay_listing_url: listingUrl,
       ebay_sync_status: 'synced',
@@ -825,6 +864,7 @@ async function processUpdate(
         returnPolicyId,
       },
       categoryId,
+      merchantLocationKey: storeConfig.location_key || undefined,
     })
 
     if (!offerUpdateResult.success) {
