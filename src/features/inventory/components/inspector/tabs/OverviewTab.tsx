@@ -237,59 +237,58 @@ export const OverviewTab = React.memo(({ item, detailData, locationsMap, onField
       </div>
 
       {/* Marketplace Controls — always visible */}
-      <div className="space-y-3">
-        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Marketplace</h4>
+      <div className="space-y-1">
+        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Marketplace</h4>
         
-        {/* Shopify row */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-sm font-medium shrink-0">Shopify</span>
-            {getShopifyBadge()}
+        <div className="border border-border rounded-lg divide-y divide-border">
+          {/* Shopify row */}
+          <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2 min-h-[40px] px-3 py-2">
+            <span className="text-sm font-medium">Shopify</span>
+            <div className="flex items-center">{getShopifyBadge()}</div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onResync?.(item)}
+              disabled={isResyncing || isDeleted}
+              className="h-7 px-2 text-xs text-muted-foreground"
+            >
+              {isResyncing ? (
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3 w-3 mr-1" />
+              )}
+              Resync
+            </Button>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onResync?.(item)}
-            disabled={isResyncing || isDeleted}
-            className="h-7 px-2 text-xs text-muted-foreground shrink-0"
-          >
-            {isResyncing ? (
-              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3 w-3 mr-1" />
-            )}
-            Resync
-          </Button>
-        </div>
 
-        {/* eBay row */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-sm font-medium shrink-0">eBay</span>
-            {getEbayBadge()}
+          {/* eBay row */}
+          <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2 min-h-[40px] px-3 py-2">
+            <span className="text-sm font-medium">eBay</span>
+            <div className="flex items-center">
+              {ebayStatus === 'error' && ebayError ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="destructive" className="text-[10px] h-5 px-1.5 cursor-help">
+                      Error
+                      <AlertCircle className="h-2.5 w-2.5 ml-1" />
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[300px] text-xs">
+                    {ebayError}
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                getEbayBadge()
+              )}
+            </div>
+            <Switch
+              checked={listOnEbay || false}
+              onCheckedChange={handleEbayToggle}
+              disabled={isToggling === item.id || isDeleted}
+              className="border border-border"
+            />
           </div>
-          <Switch
-            checked={listOnEbay || false}
-            onCheckedChange={handleEbayToggle}
-            disabled={isToggling === item.id || isDeleted}
-            className="border border-border shrink-0"
-          />
         </div>
-
-        {/* Compact eBay error */}
-        {ebayError && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex items-center gap-1.5 text-destructive cursor-help pl-1">
-                <AlertCircle className="h-3 w-3 shrink-0" />
-                <p className="text-xs truncate">{ebayError}</p>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="max-w-[300px] text-xs">
-              {ebayError}
-            </TooltipContent>
-          </Tooltip>
-        )}
       </div>
 
       {/* Sync indicator */}
