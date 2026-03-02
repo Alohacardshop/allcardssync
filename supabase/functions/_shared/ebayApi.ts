@@ -222,8 +222,23 @@ export async function createOffer(
     return { success: true, offerId: data.offerId }
   }
 
-  const error = await response.text()
-  return { success: false, error: `Failed to create offer: ${response.status} - ${error}` }
+  const errorText = await response.text()
+  
+  // Check for error 25002 — merchant location not registered
+  try {
+    const errorJson = JSON.parse(errorText)
+    const errors = errorJson.errors || []
+    const loc25002 = errors.find((e: any) => String(e.errorId) === '25002')
+    if (loc25002) {
+      const locationKey = offer.merchantLocationKey || '(unknown)'
+      return {
+        success: false,
+        error: `Merchant location not registered on eBay. Run ebay-manage-location POST to register location_key: ${locationKey}. Original error: ${loc25002.message || errorText}`,
+      }
+    }
+  } catch {}
+
+  return { success: false, error: `Failed to create offer: ${response.status} - ${errorText}` }
 }
 
 /**
