@@ -175,7 +175,7 @@ export function getCategoryId(
   const fallbacks: Record<string, { id: string; name: string }> = {
     tcg: { id: '183454', name: 'CCG Individual Cards' },
     sports: { id: '261328', name: 'Sports Trading Cards' },
-    comics: { id: '63', name: 'Comic Books' },  // Was 259061 for graded (invalid). Use 63 until leaf discovered.
+    comics: { id: '259104', name: 'Graded Comic Books' },
   };
   return fallbacks[category] || fallbacks.tcg;
 }
