@@ -2,33 +2,36 @@
 
 ## Problem
 
-The `useAddIntakeItem` hook has duplicate SKU detection that **increments quantity** when the same cert number is scanned again. For graded items (unique cert numbers), this is incorrect — scanning the same cert should either be rejected or just refresh the data, never increment quantity.
-
-The quantity shows 3 because the same cert was added 3 times, and each time the duplicate logic ran: `newQuantity = (existing.quantity || 0) + (params.quantity_in || 1)`.
+There's 1 active lot (`LOT-20260302-009246`) with **0 items** — it's an empty/stale lot that should have been cleaned up. The "Active Lots" stat card on the dashboard shows "1" but is not clickable, so you can't see or manage these lots.
 
 ## Fix
 
-In `src/hooks/useAddIntakeItem.ts`, modify the duplicate handling logic:
+### 1. Make the "Active Lots" stat card clickable
+- Wrap the `StatCard` for "Active Lots" in a `Link` to a new route (or a dialog)
+- Clicking it opens a popover/dialog listing all active lots with their details
 
-**When a graded item (has `grading_company_in`) is detected as a duplicate:**
-- Do NOT increment quantity
-- Instead, show a warning toast: "This cert number already exists in the batch"
-- Return early without modifying the record
+### 2. Add an Active Lots management dialog
+- Create a small dialog/sheet component that shows when clicking "Active Lots"
+- Lists each active lot: lot number, created date, item count
+- Each lot has a **Delete** button (sets `status = 'closed'` or deletes the lot)
+- After deletion, invalidate the `dashboard-stats` query to refresh the count
 
-This keeps the existing duplicate-merge behavior for non-graded items (raw comics, bulk cards) while enforcing the 1-of-1 rule for graded items.
+### 3. Auto-cleanup empty lots
+- When fetching active lots for the stat, also consider filtering out lots with 0 items that are older than a threshold — but this is optional since the user wants manual control
 
-**Specifically:** Add a check right after `if (existing)` (around line 77) and in the fallback duplicate block (~line 170):
+## Technical approach
 
-```ts
-if (existing) {
-  // Graded items are 1-of-1 — never allow quantity increment
-  if (params.grading_company_in) {
-    toast.warning(`Cert ${params.sku_in} already exists in the batch.`);
-    return { id: existing.id, sku: existing.sku } as AddIntakeItemResponse;
-  }
-  // ... rest of existing duplicate-merge logic
-}
-```
+**`DashboardHome.tsx`:**
+- Add state for dialog open/close
+- Replace the "Active Lots" `StatCard` with a clickable version
+- Add a new `ActiveLotsDialog` component inline or imported
 
-Also fix any existing records: run an update query to reset quantity to 1 for all graded items currently showing quantity > 1.
+**`ActiveLotsDialog` (new component or inline):**
+- Fetches `intake_lots` where `status = 'active'`, joined with item counts
+- Displays lot number, creation date, item count per lot
+- Delete button calls `supabase.from('intake_lots').update({ status: 'closed' }).eq('id', lotId)`
+- Uses `useQueryClient().invalidateQueries` to refresh dashboard stats
+
+**Immediate data fix:**
+- Close the empty stale lot `f9a3a58c-cb9f-4b36-895b-ed7a052ff462` via UPDATE (using insert tool, not migration)
 
