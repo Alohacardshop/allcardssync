@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { InventoryListItem } from '../types';
+import { formatGrade } from '@/lib/labelData';
 
 interface FieldUpdate {
   price?: number;
@@ -60,7 +61,7 @@ export function useInventoryFieldSync() {
           if (subject) titleParts.push(subject);
           if (cardNum) titleParts.push(`#${cardNum}`);
           if (item.grade && (item.psa_cert || item.cgc_cert)) {
-            titleParts.push(`${item.grading_company || 'PSA'} ${item.grade}`);
+            titleParts.push(`${item.grading_company || 'PSA'} ${formatGrade(item.grade)}`);
           }
 
           const shopifyUpdates: Record<string, unknown> = {};

@@ -8,6 +8,7 @@ import { EditableField } from '../EditableField';
 import { InlineQuantityEditor } from '@/components/inventory-card/InlineQuantityEditor';
 import type { InventoryListItem } from '../../../types';
 import type { CachedLocation } from '@/hooks/useLocationNames';
+import { formatGrade } from '@/lib/labelData';
 
 interface OverviewTabProps {
   item: InventoryListItem;
@@ -97,7 +98,7 @@ export const OverviewTab = React.memo(({ item, detailData, locationsMap, onField
                 <span className="text-xs text-muted-foreground block">Condition</span>
                 <p className="text-sm">
                   {item.grade 
-                    ? `${item.grading_company || 'PSA'} ${item.grade}` 
+                    ? `${item.grading_company || 'PSA'} ${formatGrade(item.grade)}` 
                     : 'Raw'}
                 </p>
               </div>

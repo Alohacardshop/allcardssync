@@ -1,6 +1,7 @@
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
 import type { InventoryListItem } from '../../types';
+import { formatGrade } from '@/lib/labelData';
 
 interface CoreInfoSectionProps {
   item: InventoryListItem;
@@ -60,7 +61,7 @@ export const CoreInfoSection = React.memo(({ item, title }: CoreInfoSectionProps
             <div className="flex items-center gap-1.5">
               {item.psa_cert || item.cgc_cert ? (
                 <Badge variant="default" className="text-xs">
-                  {item.grading_company || 'PSA'} {item.grade}
+                  {item.grading_company || 'PSA'} {formatGrade(item.grade)}
                 </Badge>
               ) : (
                 <Badge variant="secondary" className="text-xs">Raw</Badge>

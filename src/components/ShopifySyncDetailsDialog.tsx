@@ -16,6 +16,7 @@ import { QuantityChangeHistory } from '@/components/QuantityChangeHistory';
 import { EditableField } from '@/features/inventory/components/inspector/EditableField';
 import { InlineQuantityEditor } from '@/components/inventory-card/InlineQuantityEditor';
 import { useQueryClient } from '@tanstack/react-query';
+import { formatGrade } from '@/lib/labelData';
 
 interface ShopifySyncDetailsDialogProps {
   open: boolean;
@@ -102,7 +103,7 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
             if (subj) parts.push(subj);
             if (cardNum) parts.push(`#${cardNum}`);
             if (row.grade && (row.psa_cert || row.grading_company)) {
-              parts.push(`${row.grading_company || 'PSA'} ${row.grade}`);
+              parts.push(`${row.grading_company || 'PSA'} ${formatGrade(row.grade)}`);
             }
             shopifyUpdates.title = parts.join(' ') || 'Unknown Item';
           }

@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { History, FileText, MapPin } from 'lucide-react';
 import { QuantityChangeHistory } from '@/components/QuantityChangeHistory';
 import type { InventoryListItem } from '@/features/inventory/types';
+import { formatGrade } from '@/lib/labelData';
 
 interface ItemAuditDialogProps {
   open: boolean;
@@ -30,7 +31,7 @@ export function ItemAuditDialog({ open, onOpenChange, item }: ItemAuditDialogPro
     item.subject,
     item.card_number ? `#${item.card_number}` : null,
     item.grade && (item.psa_cert || item.cgc_cert) 
-      ? `${item.grading_company || 'PSA'} ${item.grade}` 
+      ? `${item.grading_company || 'PSA'} ${formatGrade(item.grade)}` 
       : null,
   ].filter(Boolean).join(' ') || item.sku || 'Unknown Item';
 
