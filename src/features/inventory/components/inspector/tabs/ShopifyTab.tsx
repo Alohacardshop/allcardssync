@@ -283,7 +283,7 @@ export const ShopifyTab = React.memo(({ item, detailData, onResync, isResyncing 
         ) : (
           <RefreshCw className="h-4 w-4 mr-2" />
         )}
-        {productId ? 'Resync to Shopify' : 'Sync to Shopify'}
+        {productId ? 'Resync' : 'Sync to Shopify'}
       </Button>
     </div>
   );
