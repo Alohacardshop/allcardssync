@@ -21,32 +21,10 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
+    // Gateway handles JWT verification — no internal auth check needed
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-
-    // User-scoped client for auth validation and reading intake_items
-    const supabaseUser = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY') ?? '', {
-      global: { headers: { Authorization: authHeader } }
-    });
-
-    // Service-role client for reading system_settings (bypasses RLS)
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-
-    const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
 
     const { itemId, storeKey, updates }: ProductUpdateRequest = await req.json();
 
@@ -58,7 +36,7 @@ Deno.serve(async (req) => {
     }
 
     // Get the intake item to find Shopify IDs
-    const { data: item, error: itemError } = await supabaseUser
+    const { data: item, error: itemError } = await supabaseAdmin
       .from('intake_items')
       .select('shopify_product_id, shopify_variant_id, store_key')
       .eq('id', itemId)
@@ -107,11 +85,39 @@ Deno.serve(async (req) => {
     }
 
     const productId = item.shopify_product_id;
-    const variantId = item.shopify_variant_id;
+
+    // First, fetch the current product from Shopify to get the real variant ID
+    const getResponse = await fetch(
+      `https://${domain}/admin/api/2024-07/products/${productId}.json?fields=id,title,variants`,
+      {
+        method: 'GET',
+        headers: {
+          'X-Shopify-Access-Token': shopifyToken,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!getResponse.ok) {
+      const errorText = await getResponse.text();
+      console.error('Shopify product fetch failed:', errorText);
+      throw new Error(`Failed to fetch product from Shopify: ${getResponse.statusText}`);
+    }
+
+    const currentProduct = await getResponse.json();
+    const realVariantId = currentProduct.product?.variants?.[0]?.id;
+
+    // If stored variant ID is stale, update it
+    if (realVariantId && String(realVariantId) !== String(item.shopify_variant_id)) {
+      console.log(`shopify-update-product: Fixing stale variant ID: ${item.shopify_variant_id} → ${realVariantId}`);
+      await supabaseAdmin
+        .from('intake_items')
+        .update({ shopify_variant_id: String(realVariantId) })
+        .eq('id', itemId);
+    }
 
     // Build product update payload
     const productPayload: Record<string, unknown> = { id: productId };
-    const variantPayload: Record<string, unknown> | null = variantId ? { id: variantId } : null;
 
     if (updates.title !== undefined) {
       productPayload.title = updates.title;
@@ -121,16 +127,16 @@ Deno.serve(async (req) => {
       productPayload.tags = updates.tags.join(', ');
     }
 
-    // Price updates go to the variant
-    if (updates.price !== undefined && variantPayload) {
-      variantPayload.price = updates.price.toFixed(2);
-      productPayload.variants = [variantPayload];
+    // Price updates go to the variant (use real variant ID from Shopify)
+    if (updates.price !== undefined && realVariantId) {
+      productPayload.variants = [{ id: realVariantId, price: updates.price.toFixed(2) }];
     }
 
     console.log(`shopify-update-product: Updating product ${productId}`, {
       itemId,
       storeKey,
-      updates: Object.keys(updates)
+      updates: Object.keys(updates),
+      variantId: realVariantId
     });
 
     // Update product in Shopify
