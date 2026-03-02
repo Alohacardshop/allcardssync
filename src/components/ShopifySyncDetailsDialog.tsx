@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -7,11 +7,15 @@ import { ExternalLink, ChevronDown, ChevronRight, CheckCircle, XCircle, AlertCir
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
+import { toast as sonnerToast } from 'sonner';
 import type { InventoryItem, ShopifySyncStep, ShopifyLocation } from '@/types/inventory';
 import { logger } from '@/lib/logger';
 import { StockByLocationSection } from '@/components/inventory/StockByLocationSection';
 import { useLocationNames } from '@/hooks/useLocationNames';
 import { QuantityChangeHistory } from '@/components/QuantityChangeHistory';
+import { EditableField } from '@/features/inventory/components/inspector/EditableField';
+import { InlineQuantityEditor } from '@/components/inventory-card/InlineQuantityEditor';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface ShopifySyncDetailsDialogProps {
   open: boolean;
@@ -27,6 +31,8 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
   const [expandedJson, setExpandedJson] = useState(false);
   const [relinkingGraded, setRelinkingGraded] = useState(false);
   const [resyncing, setResyncing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const queryClient = useQueryClient();
   
   // Fetch location names for stock by location section
   const { data: locationsMap } = useLocationNames(row?.store_key || selectedStoreKey || null);
@@ -62,6 +68,81 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
   const snapshot = row.shopify_sync_snapshot || {};
   const isSuccess = row.shopify_sync_status === 'success';
   
+  const handleFieldSave = useCallback(async (field: string, value: string | number) => {
+    setIsSaving(true);
+    try {
+      // Update local DB
+      const dbUpdate: Record<string, unknown> = {
+        [field]: value,
+        updated_at: new Date().toISOString(),
+      };
+      const { error: dbError } = await supabase
+        .from('intake_items')
+        .update(dbUpdate)
+        .eq('id', row.id);
+      if (dbError) throw new Error(dbError.message);
+
+      const syncResults: string[] = ['Saved'];
+
+      // Sync to Shopify if synced
+      if (row.shopify_product_id && row.shopify_sync_status === 'synced' && (row.store_key || selectedStoreKey)) {
+        try {
+          const shopifyUpdates: Record<string, unknown> = {};
+          if (field === 'price') {
+            shopifyUpdates.price = value;
+          } else if (['subject', 'brand_title', 'card_number', 'year'].includes(field)) {
+            // Rebuild title
+            const parts: string[] = [];
+            const yr = field === 'year' ? String(value) : (row.year || '');
+            const brand = field === 'brand_title' ? String(value) : (row.brand_title || '');
+            const subj = field === 'subject' ? String(value) : (row.subject || '');
+            const cardNum = field === 'card_number' ? String(value) : (row.card_number || '');
+            if (yr) parts.push(yr);
+            if (brand) parts.push(brand);
+            if (subj) parts.push(subj);
+            if (cardNum) parts.push(`#${cardNum}`);
+            if (row.grade && (row.psa_cert || row.grading_company)) {
+              parts.push(`${row.grading_company || 'PSA'} ${row.grade}`);
+            }
+            shopifyUpdates.title = parts.join(' ') || 'Unknown Item';
+          }
+
+          if (Object.keys(shopifyUpdates).length > 0) {
+            const { data, error } = await supabase.functions.invoke('shopify-update-product', {
+              body: { itemId: row.id, storeKey: row.store_key || selectedStoreKey, updates: shopifyUpdates },
+            });
+            syncResults.push(error || !data?.synced ? '→ Shopify ✗' : '→ Shopify ✓');
+          }
+        } catch { syncResults.push('→ Shopify ✗'); }
+      }
+
+      // Sync price to eBay if listed
+      if (field === 'price' && row.ebay_listing_id && row.sku && (row.store_key || selectedStoreKey)) {
+        try {
+          const { data, error } = await supabase.functions.invoke('ebay-update-inventory', {
+            body: { sku: row.sku, quantity: row.quantity, store_key: row.store_key || selectedStoreKey, price: value },
+          });
+          syncResults.push(error || !data?.success ? '→ eBay ✗' : '→ eBay ✓');
+        } catch { syncResults.push('→ eBay ✗'); }
+      }
+
+      const hasFailure = syncResults.some(s => s.includes('✗'));
+      if (hasFailure) {
+        sonnerToast.warning(syncResults.join(' '));
+      } else {
+        sonnerToast.success(syncResults.join(' '));
+      }
+      
+      queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-item-detail'] });
+      if (onRefresh) onRefresh();
+    } catch (e: any) {
+      sonnerToast.error(`Failed to save: ${e?.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [row, selectedStoreKey, queryClient, onRefresh]);
+
   const getStepIcon = (step: ShopifySyncStep) => {
     if (step.ok) return <CheckCircle className="w-4 h-4 text-green-500" />;
     if (step.ok === false) return <XCircle className="w-4 h-4 text-red-500" />;
@@ -214,7 +295,7 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
                 ) : (
                   <>
                     <RefreshCw className="w-3 h-3" />
-                    Resync to Shopify
+                    Resync
                   </>
                 )}
               </Button>
@@ -225,37 +306,46 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
         <div className="space-y-6">
           {/* Item Information */}
           <div className="border rounded-lg p-4">
-            <div className="text-sm font-medium text-muted-foreground mb-3">Item Information</div>
+            <div className="text-sm font-medium text-muted-foreground mb-3">
+              Item Information
+              {isSaving && <span className="ml-2 text-xs animate-pulse">Saving…</span>}
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Basic Info */}
+              {/* SKU - read only */}
               <div>
                 <div className="text-xs font-medium text-muted-foreground">SKU</div>
                 <div className="font-mono text-sm">{row.sku}</div>
               </div>
-              <div>
-                <div className="text-xs font-medium text-muted-foreground">Year</div>
-                <div className="text-sm">{row.year || row.catalog_snapshot?.year || 'N/A'}</div>
-              </div>
-              <div>
-                <div className="text-xs font-medium text-muted-foreground">Brand / Title / Game</div>
-                <div className="text-sm">{row.brand_title || 'N/A'}</div>
-              </div>
-              <div>
-                <div className="text-xs font-medium text-muted-foreground">Subject</div>
-                <div className="text-sm">{row.subject || 'N/A'}</div>
-              </div>
-              <div>
-                <div className="text-xs font-medium text-muted-foreground">Category</div>
-                <div className="text-sm">{row.category || 'N/A'}</div>
-              </div>
-              <div>
-                <div className="text-xs font-medium text-muted-foreground">Variant</div>
-                <div className="text-sm">{row.variant || row.catalog_snapshot?.varietyPedigree || 'N/A'}</div>
-              </div>
-              <div>
-                <div className="text-xs font-medium text-muted-foreground">Card Number</div>
-                <div className="text-sm">{row.card_number || 'N/A'}</div>
-              </div>
+              <EditableField
+                label="Year"
+                value={row.year || row.catalog_snapshot?.year || ''}
+                onSave={(v) => handleFieldSave('year', v)}
+              />
+              <EditableField
+                label="Brand / Title / Game"
+                value={row.brand_title || ''}
+                onSave={(v) => handleFieldSave('brand_title', v)}
+              />
+              <EditableField
+                label="Subject"
+                value={row.subject || ''}
+                onSave={(v) => handleFieldSave('subject', v)}
+              />
+              <EditableField
+                label="Category"
+                value={row.category || ''}
+                onSave={(v) => handleFieldSave('category', v)}
+              />
+              <EditableField
+                label="Variant"
+                value={row.variant || row.catalog_snapshot?.varietyPedigree || ''}
+                onSave={(v) => handleFieldSave('variant', v)}
+              />
+              <EditableField
+                label="Card Number"
+                value={row.card_number || ''}
+                onSave={(v) => handleFieldSave('card_number', v)}
+              />
               <div>
                 <div className="text-xs font-medium text-muted-foreground">Grade</div>
                 <div className="text-sm">{row.grade || 'N/A'}</div>
@@ -268,17 +358,24 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
                 <div className="text-xs font-medium text-muted-foreground">{row.grading_company || 'PSA'} Certificate</div>
                 <div className="text-sm font-mono">{row.psa_cert || row.sku || 'N/A'}</div>
               </div>
-              <div>
-                <div className="text-xs font-medium text-muted-foreground">Price</div>
-                <div className="text-sm">${parseFloat(String(row.price || 0)).toFixed(2)}</div>
-              </div>
+              <EditableField
+                label="Price"
+                value={row.price}
+                type="currency"
+                onSave={(v) => handleFieldSave('price', v)}
+              />
               <div>
                 <div className="text-xs font-medium text-muted-foreground">Cost</div>
                 <div className="text-sm">{row.cost ? `$${parseFloat(String(row.cost)).toFixed(2)}` : 'N/A'}</div>
               </div>
               <div>
                 <div className="text-xs font-medium text-muted-foreground">Quantity</div>
-                <div className="text-sm">{row.quantity}</div>
+                <InlineQuantityEditor
+                  itemId={row.id}
+                  quantity={row.quantity}
+                  shopifyProductId={row.shopify_product_id}
+                  shopifyInventoryItemId={row.shopify_inventory_item_id}
+                />
               </div>
               <div>
                 <div className="text-xs font-medium text-muted-foreground">Type</div>
