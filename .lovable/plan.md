@@ -1,33 +1,38 @@
 
 
-## Problem
+## Plan: Rebuild `ebay-manage-location` and Add Error 25002 Guard
 
-The `location_key` in `ebay_store_config` is set to `"hawaii"`, but eBay's API returns "Location information not found" — meaning the actual registered merchant location on your eBay account uses a **different key**. Since you have active listings, the location definitely exists; we just need to discover its real key.
+### 1. Rewrite `supabase/functions/ebay-manage-location/index.ts`
 
-## Plan
+**GET** — Verify the configured `location_key` exists on eBay:
+- Read `location_key` from `ebay_store_config`
+- Call `GET /sell/inventory/v1/location/{location_key}` (not the list endpoint)
+- Return the location details if found, or the eBay error if not
 
-### 1. Create `ebay-manage-location` edge function
+**POST** — Register/update the location on eBay:
+- Accept address fields from request body: `addressLine1`, `addressLine2?`, `city`, `stateOrProvince`, `postalCode`, `country`
+- Accept optional `name` (default `"Aloha Card Shop"`), `locationTypes` (default `["STORE"]`), `merchantLocationStatus` (default `"ENABLED"`)
+- Use `location_key` from `ebay_store_config` as the `merchantLocationKey`
+- Call `POST /sell/inventory/v1/location/{location_key}`
+- Return eBay response JSON on success, or `errorId` + message on failure
 
-A simple edge function that queries eBay's Inventory Location API to:
-- **GET**: List all registered merchant locations on the account — returns the actual `merchantLocationKey` values so we can find the correct one
-- **POST**: Optionally create/update a location if needed
+Authentication: `verify_jwt = false` with in-code auth guard using `getClaims()`.
 
-File: `supabase/functions/ebay-manage-location/index.ts`
+### 2. Update `supabase/config.toml`
 
-Uses existing `getValidAccessToken` and `ebayApiRequest` from `_shared/ebayApi.ts`.
+Change `verify_jwt = true` → `verify_jwt = false` for `ebay-manage-location`.
 
-### 2. Add config entry to `supabase/config.toml`
+### 3. Add error 25002 guard in `_shared/ebayApi.ts` → `createOffer()`
 
-```toml
-[functions.ebay-manage-location]
-verify_jwt = true
+When `createOffer` fails, parse the eBay error JSON. If it contains `errorId: 25002`, return a specific error message:
+```
+"Merchant location not registered on eBay. Run ebay-manage-location POST to register location_key: <key>. Original error: ..."
 ```
 
-### 3. Deploy and invoke
+This surfaces in both `ebay-create-listing` and `ebay-sync-processor` since they both call `createOffer()`.
 
-After deploying, we call it to list your eBay locations. Once we see the actual key, we update `ebay_store_config.location_key` to match, and the "Location information not found" error goes away.
-
-### Files to create/change
-- **Create**: `supabase/functions/ebay-manage-location/index.ts`
-- **Edit**: `supabase/config.toml` — add function entry
+### Files to change
+- **Rewrite**: `supabase/functions/ebay-manage-location/index.ts`
+- **Edit**: `supabase/config.toml` (line 213: `verify_jwt = true` → `false`)
+- **Edit**: `supabase/functions/_shared/ebayApi.ts` — `createOffer()` error handling (~lines 220-227)
 
