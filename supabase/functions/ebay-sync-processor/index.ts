@@ -663,7 +663,7 @@ async function processCreate(
         timestamp: new Date().toISOString(),
         action: 'create',
         sku: ebaySku,
-        offer_id: offerResult.offerId,
+        offer_id: offerId,
         listing_id: publishResult.listingId,
         template_id: template?.id,
         category_id: categoryId,
