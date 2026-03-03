@@ -4069,7 +4069,7 @@ export type Database = {
           price_in?: number
           pricing_snapshot_in?: Json
           processing_notes_in?: string
-          quantity_in?: number
+          quantity_in: number
           shopify_location_gid_in: string
           sku_in?: string
           source_provider_in?: string
