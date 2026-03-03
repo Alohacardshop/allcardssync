@@ -437,7 +437,9 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           year: formData.year
         },
         year_in: formData.year || null,
-        grading_company_in: gradingService.toUpperCase()
+        grading_company_in: gradingService.toUpperCase(),
+        // Default 3.5 oz for graded cards (comics use 1.5 lb, handled in edge function)
+        product_weight_in: formData.mainCategory === 'comics' ? null : 3.5,
       };
 
       const result = await addItem(itemPayload);

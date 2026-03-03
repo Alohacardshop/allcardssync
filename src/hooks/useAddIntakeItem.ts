@@ -25,6 +25,7 @@ interface AddIntakeItemParams {
   catalog_snapshot_in?: any;
   pricing_snapshot_in?: any;
   processing_notes_in?: string | null;
+  product_weight_in?: number | null;
 }
 
 interface AddIntakeItemResponse {
