@@ -1,19 +1,35 @@
 
 
-## Relabel "Variant" to "Condition" for Raw Cards in the Overview Tab
+## Fix: TCGplayer Photo URLs Not Being Stored
 
-The `variant` field on raw Pokémon cards already stores condition values like "Near Mint - Foil". The variant is also already included in titles across all `generateTitle` functions and in the Shopify edge function (`v2-shopify-send-raw`). So the data and title logic are correct -- the only change needed is a UI label update.
+**Root Cause:** The `create_raw_intake_item` database function extracts images from `catalog_snapshot_in` by looking for keys `imageUrls` or `imageUrl`. But the TCGPlayer bulk import stores the photo URL under `image_urls` and `photo_url` — neither of which the RPC checks. So the image data is silently dropped.
 
 ### Changes
 
-**1. `src/features/inventory/components/inspector/tabs/OverviewTab.tsx`**
-- Change the `EditableField` label from "Variant" to "Condition" when the item is a raw card (`item.type !== 'Graded'` or no grading company)
-- Logic: `label={isRaw ? "Condition" : "Variant"}` where `isRaw = !item.grade || item.type?.toLowerCase() === 'raw'`
+**1. Database Migration: Update `create_raw_intake_item` to also check `image_urls` and `photo_url` keys**
 
-That's the only change needed. The condition value is already shown in titles in:
-- All `generateTitle` functions (InspectorPanel, InventoryTableView, ItemDetailsDrawer, InventoryItemCard, EditIntakeItemDialog) -- variant is already appended to the title parts
-- Shopify sync (`v2-shopify-send-raw/index.ts` line 148-151) -- already uses `intakeItem.variant` as condition in the title
-- eBay sync processor -- uses the same title
+Add two additional checks in the image extraction logic:
 
-No database changes, no edge function changes, no title logic changes required.
+```sql
+-- Existing checks for imageUrls / imageUrl ...
+-- Add: check for image_urls array key
+ELSIF catalog_snapshot_in ? 'image_urls' AND jsonb_typeof(catalog_snapshot_in->'image_urls') = 'array' THEN
+  SELECT array_agg(elem::text) INTO v_image_urls
+  FROM jsonb_array_elements_text(catalog_snapshot_in->'image_urls') AS elem;
+-- Add: check for photo_url string key
+ELSIF catalog_snapshot_in ? 'photo_url' THEN
+  v_image_urls := ARRAY[catalog_snapshot_in->>'photo_url'];
+```
+
+**2. Backfill existing TCGplayer-imported items that have the URL in catalog_snapshot but NULL image_urls**
+
+```sql
+UPDATE intake_items
+SET image_urls = to_jsonb(ARRAY[catalog_snapshot->>'photo_url'])
+WHERE source_provider = 'tcgplayer'
+  AND image_urls IS NULL
+  AND catalog_snapshot->>'photo_url' IS NOT NULL;
+```
+
+No frontend changes needed — the photo URL is already correctly parsed and passed in `catalog_snapshot_in`. The fix is entirely in the database function.
 
