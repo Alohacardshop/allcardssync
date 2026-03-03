@@ -292,14 +292,14 @@ export default function EbayApp() {
           setSelectedConfig(updatedConfig);
         } else if (typedData.length > 0) {
           // Config was deleted, select another
-          const matchingConfig = typedData.find(c => c.location_key === assignedStore);
+          const matchingConfig = typedData.find(c => c.store_key === assignedStore || c.location_key === assignedStore);
           setSelectedConfig(matchingConfig || typedData[0]);
         } else {
           setSelectedConfig(null);
         }
       } else if (typedData.length > 0) {
         // First load - auto-select config matching user's location
-        const matchingConfig = typedData.find(c => c.location_key === assignedStore);
+        const matchingConfig = typedData.find(c => c.store_key === assignedStore || c.location_key === assignedStore);
         setSelectedConfig(matchingConfig || typedData[0]);
       }
     } catch (error: any) {
