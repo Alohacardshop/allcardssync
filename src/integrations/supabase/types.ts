@@ -510,6 +510,7 @@ export type Database = {
           tag_match: string[] | null
           title_template: string | null
           updated_at: string | null
+          weight_oz: number | null
         }
         Insert: {
           aspects_mapping?: Json | null
@@ -538,6 +539,7 @@ export type Database = {
           tag_match?: string[] | null
           title_template?: string | null
           updated_at?: string | null
+          weight_oz?: number | null
         }
         Update: {
           aspects_mapping?: Json | null
@@ -566,6 +568,7 @@ export type Database = {
           tag_match?: string[] | null
           title_template?: string | null
           updated_at?: string | null
+          weight_oz?: number | null
         }
         Relationships: []
       }
@@ -4069,7 +4072,8 @@ export type Database = {
           price_in?: number
           pricing_snapshot_in?: Json
           processing_notes_in?: string
-          quantity_in: number
+          product_weight_in?: number
+          quantity_in?: number
           shopify_location_gid_in: string
           sku_in?: string
           source_provider_in?: string
