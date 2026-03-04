@@ -25,6 +25,7 @@ import {
   MessageSquare,
   Eye,
   EyeOff,
+  Plug,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -38,7 +39,7 @@ interface SettingField {
   label: string;
   type: 'text' | 'number' | 'boolean' | 'color' | 'json' | 'password';
   description?: string;
-  category: 'branding' | 'ebay' | 'operations' | 'discord';
+  category: 'branding' | 'ebay' | 'operations' | 'discord' | 'services';
 }
 
 const SETTING_FIELDS: SettingField[] = [
@@ -60,6 +61,11 @@ const SETTING_FIELDS: SettingField[] = [
   { key: 'discord.webhook_url', label: 'Discord Webhook URL', type: 'password', category: 'discord', description: 'Webhook URL for sending order notifications' },
   { key: 'discord.role_id', label: 'Staff Role ID', type: 'text', category: 'discord', description: 'Discord role ID to mention for new orders (optional)' },
   { key: 'discord.enabled', label: 'Notifications Enabled', type: 'boolean', category: 'discord', description: 'Enable Discord notifications for this region' },
+
+  // Services
+  { key: 'services.ebay_sync', label: 'eBay Sync', type: 'boolean', category: 'services', description: 'Enable eBay inventory sync for this store' },
+  { key: 'services.shopify_sync', label: 'Shopify Sync', type: 'boolean', category: 'services', description: 'Enable Shopify inventory sync for this store' },
+  { key: 'services.discord_notifications', label: 'Discord Notifications', type: 'boolean', category: 'services', description: 'Enable Discord order notifications for this store' },
 ];
 
 export function RegionSettingsEditor() {
@@ -420,7 +426,7 @@ export function RegionSettingsEditor() {
                 </Card>
 
                 {/* Settings Accordion */}
-                <Accordion type="multiple" defaultValue={['branding', 'ebay', 'operations', 'discord']}>
+                <Accordion type="multiple" defaultValue={['services', 'branding', 'ebay', 'operations', 'discord']}>
                   <AccordionItem value="branding">
                     <AccordionTrigger className="hover:no-underline">
                       <div className="flex items-center gap-2">
@@ -485,6 +491,22 @@ export function RegionSettingsEditor() {
                       <div className="pt-4 border-t">
                         <DiscordTestButton regionId={region.id} />
                       </div>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="services">
+                    <AccordionTrigger className="hover:no-underline">
+                      <div className="flex items-center gap-2">
+                        <Plug className="h-4 w-4" />
+                        Service Toggles
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="space-y-4 pt-4">
+                      {SETTING_FIELDS.filter(f => f.category === 'services').map((field) => (
+                        <div key={field.key}>
+                          {renderField(field, region.id)}
+                        </div>
+                      ))}
                     </AccordionContent>
                   </AccordionItem>
                 </Accordion>

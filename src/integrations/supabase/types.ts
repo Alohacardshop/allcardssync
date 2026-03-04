@@ -3649,7 +3649,7 @@ export type Database = {
       }
       stale_lot_items: {
         Row: {
-          age: unknown
+          age: string | null
           created_at: string | null
           id: string | null
           last_modified: string | null
