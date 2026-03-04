@@ -1,32 +1,19 @@
 
 
-## Add Per-Region Service Toggle Settings
+## Problem
 
-### Approach
-Use the existing `region_settings` table and `RegionSettingsEditor` to add service toggles per region. No schema changes needed — just add new setting fields.
+The Radix Accordion internally manages pointer events in a way that interferes with the Radix Switch inside `AccordionContent`. Even with `stopPropagation` on various events, the Switch doesn't receive hover/pointer states properly — the cursor doesn't even change to pointer on hover.
 
-### Changes
+## Solution
 
-**1. `src/components/admin/RegionSettingsEditor.tsx`** — Add new "Services" category fields to `SETTING_FIELDS`:
-```ts
-// Services
-{ key: 'services.ebay_sync', label: 'eBay Sync', type: 'boolean', category: 'services', description: 'Enable eBay inventory sync for this store' },
-{ key: 'services.shopify_sync', label: 'Shopify Sync', type: 'boolean', category: 'services', description: 'Enable Shopify inventory sync for this store' },
-{ key: 'services.discord_notifications', label: 'Discord Notifications', type: 'boolean', category: 'services', description: 'Enable Discord order notifications' },
-```
+Replace the `Switch` component with a `Checkbox` for boolean fields inside the accordion. Checkboxes work reliably inside accordions and provide the same functionality. Alternatively, we can add explicit `style={{ position: 'relative', zIndex: 50, pointerEvents: 'auto' }}` and `className="cursor-pointer"` to the Switch — but the cleanest fix is:
 
-Add a "Services" accordion section in the UI (alongside Branding, eBay, Operations, Discord) with a plug/connection icon.
+**Keep the Switch but force pointer-events and z-index on the wrapper:**
 
-Update the `SettingField` category type to include `'services'`.
+In `RegionSettingsEditor.tsx`, update the boolean `case` to:
+1. Add `relative z-50` and `pointer-events: auto` styling to the Switch wrapper div
+2. Add `className="relative z-50 pointer-events-auto cursor-pointer"` directly to the `<Switch>` component  
+3. Remove the container-level `onClick`/`onPointerDown` stopPropagation (which may be interfering) and instead only use `onPointerDownCapture` on the Switch itself
 
-**2. `src/hooks/useRegionSettings.ts`** — Add the new service keys to the `RegionSettings` interface:
-```ts
-'services.ebay_sync': boolean;
-'services.shopify_sync': boolean;
-'services.discord_notifications': boolean;
-```
-
-**3. Gate eBay sync** — In the eBay sync components (e.g., `EbaySyncControls`, `EbayApp`), check the region setting `services.ebay_sync` before allowing sync operations. If disabled, show a message like "eBay sync is disabled for this store."
-
-This leverages the existing key-value region_settings infrastructure with no database changes required. You can add more service toggles later (e.g., `services.intake_enabled`) the same way.
+If that still fails (Radix internals), fall back to replacing `<Switch>` with a styled `<Button>` toggle that shows ON/OFF state — this completely avoids the Radix Switch + Radix Accordion conflict.
 
