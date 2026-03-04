@@ -189,13 +189,10 @@ export function RegionSettingsEditor() {
     );
 
     switch (field.type) {
-      case 'boolean':
+      case 'boolean': {
+        const isOn = currentValue ?? false;
         return (
-          <div
-            className="flex items-center justify-between p-4 border rounded-lg"
-            onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
+          <div className="flex items-center justify-between p-4 border rounded-lg">
             <div>
               <Label className="text-base">{field.label}</Label>
               {field.description && (
@@ -203,17 +200,23 @@ export function RegionSettingsEditor() {
               )}
             </div>
             <div className="flex items-center gap-2">
-              <Switch
-                checked={currentValue ?? false}
-                onCheckedChange={async (checked) => {
-                  // Auto-save boolean toggles immediately
+              <Button
+                type="button"
+                size="sm"
+                variant={isOn ? 'default' : 'outline'}
+                disabled={isSaving}
+                className="min-w-[60px] relative z-50"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  const newVal = !isOn;
                   const sk = `${regionId}:${field.key}`;
                   setSavingKey(sk);
                   try {
                     await updateRegionSetting.mutateAsync({
                       regionId,
                       key: field.key,
-                      value: checked,
+                      value: newVal,
                     });
                     setSavedKeys(prev => ({ ...prev, [sk]: true }));
                     setTimeout(() => setSavedKeys(prev => ({ ...prev, [sk]: false })), 2000);
@@ -224,14 +227,14 @@ export function RegionSettingsEditor() {
                     setSavingKey(null);
                   }
                 }}
-                disabled={isSaving}
-                onPointerDownCapture={(e) => e.stopPropagation()}
-              />
+              >
+                {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : isOn ? 'ON' : 'OFF'}
+              </Button>
               {justSaved && <SavedIndicator />}
-              {isSaving && <Loader2 className="h-3 w-3 animate-spin" />}
             </div>
           </div>
         );
+      }
 
       case 'number':
         return (
