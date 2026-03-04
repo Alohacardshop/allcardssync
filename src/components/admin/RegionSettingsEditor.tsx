@@ -222,6 +222,7 @@ export function RegionSettingsEditor() {
                     setTimeout(() => setSavedKeys(prev => ({ ...prev, [sk]: false })), 2000);
                     toast.success('Setting saved');
                   } catch (error: any) {
+                    console.error('[RegionSettings] Toggle save failed:', { regionId, key: field.key, value: newVal, error: error.message, errorObj: error });
                     toast.error(`Failed to save: ${error.message}`);
                   } finally {
                     setSavingKey(null);
