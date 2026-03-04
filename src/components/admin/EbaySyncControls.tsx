@@ -9,13 +9,14 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { 
   Settings, Loader2, Play, Eye, AlertTriangle, CheckCircle,
-  Radio, Hand, Zap
+  Radio, Hand, Zap, Ban
 } from 'lucide-react';
 import {
   Alert,
   AlertDescription,
   AlertTitle,
 } from '@/components/ui/alert';
+import { useRegionSettings } from '@/hooks/useRegionSettings';
 
 interface SyncConfig {
   sync_enabled: boolean;
@@ -30,6 +31,9 @@ interface EbaySyncControlsProps {
 }
 
 export function EbaySyncControls({ storeKey, configId, onSyncTriggered }: EbaySyncControlsProps) {
+  const { settings } = useRegionSettings();
+  const ebaySyncEnabled = settings?.['services.ebay_sync'] ?? true; // default true for backward compat
+
   const [config, setConfig] = useState<SyncConfig>({
     sync_enabled: false,
     dry_run_mode: true,
@@ -170,6 +174,22 @@ export function EbaySyncControls({ storeKey, configId, onSyncTriggered }: EbaySy
         <CardContent className="flex items-center justify-center py-8">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </CardContent>
+      </Card>
+    );
+  }
+
+  if (!ebaySyncEnabled) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Ban className="h-5 w-5 text-muted-foreground" />
+            eBay Sync Disabled
+          </CardTitle>
+          <CardDescription>
+            eBay inventory sync is disabled for this store. Enable it in Admin → Region Settings → Service Toggles.
+          </CardDescription>
+        </CardHeader>
       </Card>
     );
   }

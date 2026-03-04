@@ -34,6 +34,11 @@ export interface RegionSettings {
   
   // Discord
   'discord.role_id'?: string;
+
+  // Services
+  'services.ebay_sync'?: boolean;
+  'services.shopify_sync'?: boolean;
+  'services.discord_notifications'?: boolean;
 }
 
 /**
