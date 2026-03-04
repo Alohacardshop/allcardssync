@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { 
-  ArrowRightLeft, Loader2, Settings, MapPin, Package, History, AlertCircle
+  ArrowRightLeft, Loader2, Settings, MapPin, Package, History, AlertCircle, Ban
 } from 'lucide-react';
 import { EbayLocationPriority } from '@/components/admin/EbayLocationPriority';
 import { EbayAggregatePreview } from '@/components/admin/EbayAggregatePreview';
@@ -14,6 +14,7 @@ import { EbaySyncControls } from '@/components/admin/EbaySyncControls';
 import { EbaySyncLog } from '@/components/admin/EbaySyncLog';
 import { useStore } from '@/contexts/StoreContext';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { useRegionSettings } from '@/hooks/useRegionSettings';
 
 interface EbayStoreConfig {
   id: string;
@@ -27,6 +28,8 @@ interface EbayStoreConfig {
 
 export default function EbaySyncDashboard() {
   const { assignedStore, assignedStoreName, isAdmin } = useStore();
+  const { settings } = useRegionSettings();
+  const ebaySyncEnabled = settings?.['services.ebay_sync'] ?? true;
   const [loading, setLoading] = useState(true);
   const [configs, setConfigs] = useState<EbayStoreConfig[]>([]);
   const [selectedConfig, setSelectedConfig] = useState<EbayStoreConfig | null>(null);
@@ -86,6 +89,26 @@ export default function EbaySyncDashboard() {
       <div className="min-h-screen bg-background">
         <div className="container mx-auto px-4 py-8 flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!ebaySyncEnabled) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto px-4 py-8">
+          <Card className="max-w-lg mx-auto">
+            <CardHeader className="text-center">
+              <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-muted flex items-center justify-center">
+                <Ban className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <CardTitle>eBay Sync Disabled</CardTitle>
+              <CardDescription>
+                eBay inventory sync is disabled for this store. This can be enabled in Admin → Region Settings → Service Toggles.
+              </CardDescription>
+            </CardHeader>
+          </Card>
         </div>
       </div>
     );

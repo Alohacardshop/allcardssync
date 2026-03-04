@@ -201,12 +201,29 @@ export function RegionSettingsEditor() {
             <div className="flex items-center gap-2">
               <Switch
                 checked={currentValue ?? false}
-                onCheckedChange={(checked) => {
-                  setLocalValue(regionId, field.key, checked);
+                onCheckedChange={async (checked) => {
+                  // Auto-save boolean toggles immediately
+                  const sk = `${regionId}:${field.key}`;
+                  setSavingKey(sk);
+                  try {
+                    await updateRegionSetting.mutateAsync({
+                      regionId,
+                      key: field.key,
+                      value: checked,
+                    });
+                    setSavedKeys(prev => ({ ...prev, [sk]: true }));
+                    setTimeout(() => setSavedKeys(prev => ({ ...prev, [sk]: false })), 2000);
+                    toast.success('Setting saved');
+                  } catch (error: any) {
+                    toast.error(`Failed to save: ${error.message}`);
+                  } finally {
+                    setSavingKey(null);
+                  }
                 }}
+                disabled={isSaving}
               />
               {justSaved && <SavedIndicator />}
-              {isEdited && <SaveButton />}
+              {isSaving && <Loader2 className="h-3 w-3 animate-spin" />}
             </div>
           </div>
         );
