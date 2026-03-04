@@ -1,30 +1,24 @@
 
 
-## Problem
+## Verification: Shopify Sync Store Routing
 
-Only `services.ebay_sync` rows exist in the database for both regions. When you click "Shopify Sync" or "Discord Notifications," the upsert tries to INSERT a new row. The code and RLS policies look correct (admin has ALL access, unique constraint exists for upsert), so the issue is likely **not** a permissions problem.
+After reviewing the codebase, both stores can still sync to Shopify and each routes to its own Shopify store correctly. No code changes are needed.
 
-The real issue is that `services.shopify_sync` and `services.discord_notifications` rows simply don't exist yet. The upsert *should* create them, but the button click may be silently failing or the accordion is swallowing the click event before it reaches the button.
+### How store routing works
 
-Looking at the code, I notice the `isSaving` variable depends on `savingKey === saveKey`. If a previous save attempt failed and `savingKey` got stuck (or if the error handler doesn't run), subsequent clicks would find the button `disabled={isSaving}` permanently.
+1. Every `intake_item` has a `store_key` column (`hawaii` or `las_vegas`).
+2. When syncing, the `store_key` is passed to `shopifyGraphQL(storeKey, ...)` which looks up credentials from the `shopify_stores` table by `key`.
+3. The `shopify_stores` table maps each key to its own domain (`aloha-card-shop.myshopify.com` for Hawaii, `vqvxdi-ar.myshopify.com` for Las Vegas).
+4. Edge functions (`v2-shopify-send-graded`, `v2-shopify-send-raw`, `shopify-update-product`, etc.) all receive `storeKey` and look up `SHOPIFY_{STORE}_STORE_DOMAIN` and `SHOPIFY_{STORE}_ACCESS_TOKEN` from `system_settings`.
 
-## Plan
+### The removed toggle has no impact
 
-### 1. Seed the missing service toggle rows
-Insert the missing `services.shopify_sync` and `services.discord_notifications` rows for both regions via a database migration. This ensures the upsert always hits an UPDATE (not INSERT), matching how `services.ebay_sync` already works.
+The `services.shopify_sync` setting was **only defined as a TypeScript type** in `useRegionSettings.ts`. It was never actually checked as a gate before any Shopify sync operation. The sync pipeline (queue_shopify_sync RPC, edge functions, webhook handlers) has no conditional check for this setting — Shopify sync is always-on by design.
 
-```sql
-INSERT INTO region_settings (region_id, setting_key, setting_value, description)
-VALUES 
-  ('hawaii', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
-  ('hawaii', 'services.discord_notifications', 'false', 'Enable Discord order notifications'),
-  ('las_vegas', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
-  ('las_vegas', 'services.discord_notifications', 'false', 'Enable Discord order notifications')
-ON CONFLICT (region_id, setting_key) DO NOTHING;
-```
+### Summary
 
-### 2. Add defensive error logging to the toggle click handler
-Update the boolean toggle's `onClick` in `RegionSettingsEditor.tsx` to log the error details to the console. This ensures any future upsert failures are visible rather than silently swallowed.
-
-This is a small, targeted fix -- seeding the rows is the primary solution.
+- Hawaii items sync to `aloha-card-shop.myshopify.com`
+- Las Vegas items sync to `vqvxdi-ar.myshopify.com`
+- No service toggle gates Shopify sync — removing the UI toggle changes nothing
+- No code changes required
 
