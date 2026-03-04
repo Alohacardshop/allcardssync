@@ -191,7 +191,11 @@ export function RegionSettingsEditor() {
     switch (field.type) {
       case 'boolean':
         return (
-          <div className="flex items-center justify-between p-4 border rounded-lg">
+          <div
+            className="flex items-center justify-between p-4 border rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
             <div>
               <Label className="text-base">{field.label}</Label>
               {field.description && (
