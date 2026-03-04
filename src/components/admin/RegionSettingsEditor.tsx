@@ -225,6 +225,7 @@ export function RegionSettingsEditor() {
                   }
                 }}
                 disabled={isSaving}
+                onPointerDownCapture={(e) => e.stopPropagation()}
               />
               {justSaved && <SavedIndicator />}
               {isSaving && <Loader2 className="h-3 w-3 animate-spin" />}
