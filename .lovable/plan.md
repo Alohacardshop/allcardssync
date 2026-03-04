@@ -2,18 +2,29 @@
 
 ## Problem
 
-The Radix Accordion internally manages pointer events in a way that interferes with the Radix Switch inside `AccordionContent`. Even with `stopPropagation` on various events, the Switch doesn't receive hover/pointer states properly — the cursor doesn't even change to pointer on hover.
+Only `services.ebay_sync` rows exist in the database for both regions. When you click "Shopify Sync" or "Discord Notifications," the upsert tries to INSERT a new row. The code and RLS policies look correct (admin has ALL access, unique constraint exists for upsert), so the issue is likely **not** a permissions problem.
 
-## Solution
+The real issue is that `services.shopify_sync` and `services.discord_notifications` rows simply don't exist yet. The upsert *should* create them, but the button click may be silently failing or the accordion is swallowing the click event before it reaches the button.
 
-Replace the `Switch` component with a `Checkbox` for boolean fields inside the accordion. Checkboxes work reliably inside accordions and provide the same functionality. Alternatively, we can add explicit `style={{ position: 'relative', zIndex: 50, pointerEvents: 'auto' }}` and `className="cursor-pointer"` to the Switch — but the cleanest fix is:
+Looking at the code, I notice the `isSaving` variable depends on `savingKey === saveKey`. If a previous save attempt failed and `savingKey` got stuck (or if the error handler doesn't run), subsequent clicks would find the button `disabled={isSaving}` permanently.
 
-**Keep the Switch but force pointer-events and z-index on the wrapper:**
+## Plan
 
-In `RegionSettingsEditor.tsx`, update the boolean `case` to:
-1. Add `relative z-50` and `pointer-events: auto` styling to the Switch wrapper div
-2. Add `className="relative z-50 pointer-events-auto cursor-pointer"` directly to the `<Switch>` component  
-3. Remove the container-level `onClick`/`onPointerDown` stopPropagation (which may be interfering) and instead only use `onPointerDownCapture` on the Switch itself
+### 1. Seed the missing service toggle rows
+Insert the missing `services.shopify_sync` and `services.discord_notifications` rows for both regions via a database migration. This ensures the upsert always hits an UPDATE (not INSERT), matching how `services.ebay_sync` already works.
 
-If that still fails (Radix internals), fall back to replacing `<Switch>` with a styled `<Button>` toggle that shows ON/OFF state — this completely avoids the Radix Switch + Radix Accordion conflict.
+```sql
+INSERT INTO region_settings (region_id, setting_key, setting_value, description)
+VALUES 
+  ('hawaii', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
+  ('hawaii', 'services.discord_notifications', 'false', 'Enable Discord order notifications'),
+  ('las_vegas', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
+  ('las_vegas', 'services.discord_notifications', 'false', 'Enable Discord order notifications')
+ON CONFLICT (region_id, setting_key) DO NOTHING;
+```
+
+### 2. Add defensive error logging to the toggle click handler
+Update the boolean toggle's `onClick` in `RegionSettingsEditor.tsx` to log the error details to the console. This ensures any future upsert failures are visible rather than silently swallowed.
+
+This is a small, targeted fix -- seeding the rows is the primary solution.
 
