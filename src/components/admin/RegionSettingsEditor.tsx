@@ -64,7 +64,6 @@ const SETTING_FIELDS: SettingField[] = [
 
   // Services
   { key: 'services.ebay_sync', label: 'eBay Sync', type: 'boolean', category: 'services', description: 'Enable eBay inventory sync for this store' },
-  { key: 'services.shopify_sync', label: 'Shopify Sync', type: 'boolean', category: 'services', description: 'Enable Shopify inventory sync for this store' },
 ];
 
 export function RegionSettingsEditor() {
