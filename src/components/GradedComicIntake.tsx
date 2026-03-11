@@ -19,7 +19,7 @@ import type { CGCCertificateData } from "@/types/cgc";
 import type { PSACertificateData } from "@/types/psa";
 import { normalizePSAData } from "@/lib/psaNormalization";
 import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
-import { GradedComicBulkImport } from "@/components/GradedComicBulkImport";
+
 
 interface GradedComicIntakeProps {
   onBatchAdd?: () => void;
