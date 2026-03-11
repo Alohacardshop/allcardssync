@@ -285,7 +285,7 @@ export const GradedComicBulkImport = () => {
   };
 
   const downloadTemplate = () => {
-    const template = "Certificate Number\n12345678\n87654321\n11111111";
+    const template = "Certificate Number,Price,Cost\n12345678,29.99,20.99\n87654321,49.99,34.99\n11111111,19.99,13.99";
     const blob = new Blob([template], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
