@@ -349,17 +349,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
             Graded Comics Intake
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="single" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6">
-              <TabsTrigger value="single">Single Entry</TabsTrigger>
-              <TabsTrigger value="bulk" className="flex items-center gap-2">
-                <Upload className="h-4 w-4" />
-                Bulk Import
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="single" className="space-y-6">
+        <CardContent className="space-y-6">
               {/* Grading Service Toggle */}
               <div className="space-y-2">
                 <Label>Grading Service</Label>
