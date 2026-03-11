@@ -343,14 +343,16 @@ export const GradedComicBulkImport = () => {
       {/* Default Price/Cost */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <Label>Default Price <span className="text-destructive">*</span></Label>
+          <Label>Default Price (fallback if not in CSV)</Label>
           <Input
             type="number"
             step="0.01"
-            placeholder="Price for all items"
+            placeholder="Fallback price"
             value={defaultPrice}
             onChange={(e) => handlePriceChange(e.target.value)}
             disabled={importing}
+          />
+          <p className="text-xs text-muted-foreground mt-1">Per-item prices in CSV take priority</p>
           />
         </div>
         <div>
