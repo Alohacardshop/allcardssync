@@ -235,6 +235,9 @@ export const GradedComicBulkImport = () => {
               year: lookupData?.year,
             };
 
+        const itemPrice = item.price || fallbackPrice;
+        const itemCost = item.cost || (item.price ? +(item.price * 0.7).toFixed(2) : fallbackCost) || null;
+
         await addItem({
           store_key_in: assignedStore,
           shopify_location_gid_in: selectedLocation,
@@ -245,8 +248,8 @@ export const GradedComicBulkImport = () => {
           category_in: lookupData?.publisher || 'Comics',
           variant_in: variant,
           card_number_in: lookupData?.issueNumber || '',
-          price_in: price,
-          cost_in: cost || null,
+          price_in: itemPrice,
+          cost_in: itemCost,
           sku_in: item.certNumber,
           main_category_in: 'comics',
           sub_category_in: 'graded_comics',
