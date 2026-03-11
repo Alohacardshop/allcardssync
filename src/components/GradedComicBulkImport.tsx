@@ -353,7 +353,6 @@ export const GradedComicBulkImport = () => {
             disabled={importing}
           />
           <p className="text-xs text-muted-foreground mt-1">Per-item prices in CSV take priority</p>
-          />
         </div>
         <div>
           <Label>Default Cost (70% auto)</Label>
