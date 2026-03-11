@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, BookOpen, AlertCircle } from "lucide-react";
+import { Loader2, BookOpen, AlertCircle, Upload } from "lucide-react";
 import { useIntakeValidation } from "@/hooks/useIntakeValidation";
 import { useLogger } from "@/hooks/useLogger";
 import { validateCompleteStoreContext, logStoreContext } from "@/utils/storeValidation";
@@ -18,6 +19,7 @@ import type { CGCCertificateData } from "@/types/cgc";
 import type { PSACertificateData } from "@/types/psa";
 import { normalizePSAData } from "@/lib/psaNormalization";
 import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
+import { GradedComicBulkImport } from "@/components/GradedComicBulkImport";
 
 interface GradedComicIntakeProps {
   onBatchAdd?: () => void;
@@ -344,244 +346,259 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BookOpen className="h-5 w-5" />
-            Graded Comics Intake ({gradingService.toUpperCase()})
+            Graded Comics Intake
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Grading Service Toggle */}
-          <div className="space-y-2">
-            <Label>Grading Service</Label>
-            <RadioGroup
-              value={gradingService}
-              onValueChange={(value: 'psa' | 'cgc') => setGradingService(value)}
-              className="flex gap-4"
-            >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="psa" id="psa-comic" />
-                <Label htmlFor="psa-comic" className="cursor-pointer font-normal">PSA</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="cgc" id="cgc-comic" />
-                <Label htmlFor="cgc-comic" className="cursor-pointer font-normal">CGC</Label>
-              </div>
-            </RadioGroup>
-          </div>
+        <CardContent>
+          <Tabs defaultValue="single" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsTrigger value="single">Single Entry</TabsTrigger>
+              <TabsTrigger value="bulk" className="flex items-center gap-2">
+                <Upload className="h-4 w-4" />
+                Bulk Import
+              </TabsTrigger>
+            </TabsList>
 
-          <div className="space-y-2">
-            <Label htmlFor="cert-input">{gradingService.toUpperCase()} Certificate Number</Label>
-            <div className="flex gap-2">
-              <div className="flex-1">
+            <TabsContent value="single" className="space-y-6">
+              {/* Grading Service Toggle */}
+              <div className="space-y-2">
+                <Label>Grading Service</Label>
+                <RadioGroup
+                  value={gradingService}
+                  onValueChange={(value: 'psa' | 'cgc') => setGradingService(value)}
+                  className="flex gap-4"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="psa" id="psa-comic" />
+                    <Label htmlFor="psa-comic" className="cursor-pointer font-normal">PSA</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="cgc" id="cgc-comic" />
+                    <Label htmlFor="cgc-comic" className="cursor-pointer font-normal">CGC</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="cert-input">{gradingService.toUpperCase()} Certificate Number</Label>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Input
+                      id="cert-input"
+                      placeholder={`Enter ${gradingService.toUpperCase()} certificate number (digits only)`}
+                      value={certInput}
+                      onChange={(e) => {
+                        const sanitized = sanitizeCertNumber(e.target.value);
+                        setCertInput(sanitized);
+                        if (error) setError(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleFetchData();
+                        }
+                      }}
+                      disabled={fetchState === 'loading'}
+                      className={error ? "border-destructive" : ""}
+                    />
+                  </div>
+                  <Button 
+                    type="button"
+                    onClick={handleFetchData}
+                    disabled={fetchState === 'loading'}
+                  >
+                    {fetchState === 'loading' ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Fetching...
+                      </>
+                    ) : (
+                      'Fetch Data'
+                    )}
+                  </Button>
+                </div>
+                {fetchState === 'error' && error && (
+                  <Alert variant="destructive" className="mt-2">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+                {fetchState === 'empty' && (
+                  <Alert className="mt-2">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{error || 'No data found.'}</AlertDescription>
+                  </Alert>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="barcode-input">Barcode Scanner</Label>
                 <Input
-                  id="cert-input"
-                  placeholder={`Enter ${gradingService.toUpperCase()} certificate number (digits only)`}
-                  value={certInput}
-                  onChange={(e) => {
-                    const sanitized = sanitizeCertNumber(e.target.value);
-                    setCertInput(sanitized);
-                    if (error) setError(null);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleFetchData();
-                    }
-                  }}
+                  id="barcode-input"
+                  placeholder="Scan barcode here (auto-populates and fetches)"
+                  value={barcodeInput}
+                  onChange={(e) => setBarcodeInput(e.target.value)}
                   disabled={fetchState === 'loading'}
-                  className={error ? "border-destructive" : ""}
+                  className="bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800"
                 />
               </div>
+
+              {fetchState === 'success' && gradingService === 'cgc' && cgcData && (
+                <div className="space-y-3">
+                  <CGCCertificateDisplay 
+                    cgcData={cgcData} 
+                    className="border-2 border-primary/20 bg-primary/5"
+                  />
+                </div>
+              )}
+
+              {fetchState === 'success' && gradingService === 'psa' && psaData && (
+                <div className="space-y-3">
+                  <PSACertificateDisplay 
+                    psaData={psaData} 
+                    className="border-2 border-primary/20 bg-primary/5"
+                  />
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="title">Title <span className="text-destructive">*</span></Label>
+                  <Input
+                    id="title"
+                    placeholder="Comic title"
+                    value={formData.title}
+                    onChange={(e) => updateFormField('title', e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="issueNumber">Issue Number</Label>
+                  <Input
+                    id="issueNumber"
+                    placeholder="Issue #"
+                    value={formData.issueNumber}
+                    onChange={(e) => updateFormField('issueNumber', e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="publisher">Publisher</Label>
+                  <Input
+                    id="publisher"
+                    placeholder="Publisher"
+                    value={formData.publisher}
+                    onChange={(e) => updateFormField('publisher', e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="publicationDate">Publication Date</Label>
+                  <Input
+                    id="publicationDate"
+                    placeholder="e.g. 2018-06"
+                    value={formData.publicationDate}
+                    onChange={(e) => updateFormField('publicationDate', e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="grade">Grade <span className="text-destructive">*</span></Label>
+                  <Input
+                    id="grade"
+                    placeholder="Grade"
+                    value={formData.grade}
+                    onChange={(e) => updateFormField('grade', e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="pageQuality">Page Quality</Label>
+                  <Input
+                    id="pageQuality"
+                    placeholder="e.g. WHITE"
+                    value={formData.pageQuality}
+                    onChange={(e) => updateFormField('pageQuality', e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="language">Language</Label>
+                  <Input
+                    id="language"
+                    placeholder="e.g. ENG"
+                    value={formData.language}
+                    onChange={(e) => updateFormField('language', e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="country">Country</Label>
+                  <Input
+                    id="country"
+                    placeholder="e.g. US"
+                    value={formData.country}
+                    onChange={(e) => updateFormField('country', e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="price">Price <span className="text-destructive">*</span></Label>
+                  <Input
+                    id="price"
+                    type="number"
+                    step="0.01"
+                    placeholder="Selling price"
+                    value={formData.price}
+                    onChange={(e) => updateFormField('price', e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="cost">Cost (70% auto) <span className="text-destructive">*</span></Label>
+                  <Input
+                    id="cost"
+                    type="number"
+                    step="0.01"
+                    placeholder="Cost"
+                    value={formData.cost}
+                    onChange={(e) => updateFormField('cost', e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="quantity">Quantity</Label>
+                  <Input
+                    id="quantity"
+                    type="number"
+                    value={1}
+                    disabled
+                    className="opacity-60"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Always 1 for graded items</p>
+                </div>
+              </div>
+
               <Button 
-                type="button"
-                onClick={handleFetchData}
-                disabled={fetchState === 'loading'}
+                onClick={handleSubmit} 
+                disabled={isAdding || fetchState === 'loading'}
+                className="w-full"
               >
-                {fetchState === 'loading' ? (
+                {isAdding ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Fetching...
+                    Adding to Batch...
                   </>
                 ) : (
-                  'Fetch Data'
+                  'Add to Batch'
                 )}
               </Button>
-            </div>
-            {fetchState === 'error' && error && (
-              <Alert variant="destructive" className="mt-2">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            {fetchState === 'empty' && (
-              <Alert className="mt-2">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error || 'No data found.'}</AlertDescription>
-              </Alert>
-            )}
-          </div>
+            </TabsContent>
 
-          <div className="space-y-2">
-            <Label htmlFor="barcode-input">Barcode Scanner</Label>
-            <Input
-              id="barcode-input"
-              placeholder="Scan barcode here (auto-populates and fetches)"
-              value={barcodeInput}
-              onChange={(e) => setBarcodeInput(e.target.value)}
-              disabled={fetchState === 'loading'}
-              className="bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800"
-            />
-          </div>
-
-          {fetchState === 'success' && gradingService === 'cgc' && cgcData && (
-            <div className="space-y-3">
-              <CGCCertificateDisplay 
-                cgcData={cgcData} 
-                className="border-2 border-primary/20 bg-primary/5"
-              />
-            </div>
-          )}
-
-          {fetchState === 'success' && gradingService === 'psa' && psaData && (
-            <div className="space-y-3">
-              <PSACertificateDisplay 
-                psaData={psaData} 
-                className="border-2 border-primary/20 bg-primary/5"
-              />
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="title">Title <span className="text-destructive">*</span></Label>
-              <Input
-                id="title"
-                placeholder="Comic title"
-                value={formData.title}
-                onChange={(e) => updateFormField('title', e.target.value)}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="issueNumber">Issue Number</Label>
-              <Input
-                id="issueNumber"
-                placeholder="Issue #"
-                value={formData.issueNumber}
-                onChange={(e) => updateFormField('issueNumber', e.target.value)}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="publisher">Publisher</Label>
-              <Input
-                id="publisher"
-                placeholder="Publisher"
-                value={formData.publisher}
-                onChange={(e) => updateFormField('publisher', e.target.value)}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="publicationDate">Publication Date</Label>
-              <Input
-                id="publicationDate"
-                placeholder="e.g. 2018-06"
-                value={formData.publicationDate}
-                onChange={(e) => updateFormField('publicationDate', e.target.value)}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="grade">Grade <span className="text-destructive">*</span></Label>
-              <Input
-                id="grade"
-                placeholder="Grade"
-                value={formData.grade}
-                onChange={(e) => updateFormField('grade', e.target.value)}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="pageQuality">Page Quality</Label>
-              <Input
-                id="pageQuality"
-                placeholder="e.g. WHITE"
-                value={formData.pageQuality}
-                onChange={(e) => updateFormField('pageQuality', e.target.value)}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="language">Language</Label>
-              <Input
-                id="language"
-                placeholder="e.g. ENG"
-                value={formData.language}
-                onChange={(e) => updateFormField('language', e.target.value)}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="country">Country</Label>
-              <Input
-                id="country"
-                placeholder="e.g. US"
-                value={formData.country}
-                onChange={(e) => updateFormField('country', e.target.value)}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="price">Price <span className="text-destructive">*</span></Label>
-              <Input
-                id="price"
-                type="number"
-                step="0.01"
-                placeholder="Selling price"
-                value={formData.price}
-                onChange={(e) => updateFormField('price', e.target.value)}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="cost">Cost (70% auto) <span className="text-destructive">*</span></Label>
-              <Input
-                id="cost"
-                type="number"
-                step="0.01"
-                placeholder="Cost"
-                value={formData.cost}
-                onChange={(e) => updateFormField('cost', e.target.value)}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="quantity">Quantity</Label>
-              <Input
-                id="quantity"
-                type="number"
-                value={1}
-                disabled
-                className="opacity-60"
-              />
-              <p className="text-xs text-muted-foreground mt-1">Always 1 for graded items</p>
-            </div>
-          </div>
-
-
-          <Button 
-            onClick={handleSubmit} 
-            disabled={isAdding || fetchState === 'loading'}
-            className="w-full"
-          >
-            {isAdding ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                Adding to Batch...
-              </>
-            ) : (
-              'Add to Batch'
-            )}
-          </Button>
+            <TabsContent value="bulk">
+              <GradedComicBulkImport />
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
     </div>

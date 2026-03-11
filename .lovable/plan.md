@@ -1,30 +1,30 @@
 
 
-## Bulk Graded Comic Import
+## Problem
 
-Not hard at all. The existing `PSABulkImport` component already implements this exact pattern for graded cards (CSV of cert numbers → lookup each → batch add). We can adapt it for graded comics.
+Only `services.ebay_sync` rows exist in the database for both regions. When you click "Shopify Sync" or "Discord Notifications," the upsert tries to INSERT a new row. The code and RLS policies look correct (admin has ALL access, unique constraint exists for upsert), so the issue is likely **not** a permissions problem.
 
-### Approach
+The real issue is that `services.shopify_sync` and `services.discord_notifications` rows simply don't exist yet. The upsert *should* create them, but the button click may be silently failing or the accordion is swallowing the click event before it reaches the button.
 
-Create a new `GradedComicBulkImport` component, modeled on `PSABulkImport`, with these features:
+Looking at the code, I notice the `isSaving` variable depends on `savingKey === saveKey`. If a previous save attempt failed and `savingKey` got stuck (or if the error handler doesn't run), subsequent clicks would find the button `disabled={isSaving}` permanently.
 
-1. **Two input methods**: CSV file upload and manual textarea (paste cert numbers, one per line)
-2. **Grading service selector**: PSA or CGC toggle (reuses existing `psa-lookup` and `cgc-lookup` edge functions)
-3. **Sequential processing**: For each cert number, call the appropriate lookup function, auto-populate title/publisher/grade/year from the response
-4. **Price/cost fields**: Global default price or per-item override after lookup
-5. **Progress bar + status table**: Shows pending/processing/success/error per item (same UX as PSABulkImport)
-6. **Batch submission**: Adds all successful items to intake via `useAddIntakeItem` with `main_category: 'comics'`, `sub_category: 'graded_comics'`
+## Plan
 
-### Files to create/modify
+### 1. Seed the missing service toggle rows
+Insert the missing `services.shopify_sync` and `services.discord_notifications` rows for both regions via a database migration. This ensures the upsert always hits an UPDATE (not INSERT), matching how `services.ebay_sync` already works.
 
-- **New**: `src/components/GradedComicBulkImport.tsx` — bulk import component (adapted from PSABulkImport, ~300 lines)
-- **Modify**: `src/components/GradedComicIntake.tsx` — add a tab or collapsible section to switch between single entry and bulk import
-- **Modify**: `src/pages/Index.tsx` — no changes needed (GradedComicIntake already rendered under Comics → Graded)
+```sql
+INSERT INTO region_settings (region_id, setting_key, setting_value, description)
+VALUES 
+  ('hawaii', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
+  ('hawaii', 'services.discord_notifications', 'false', 'Enable Discord order notifications'),
+  ('las_vegas', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
+  ('las_vegas', 'services.discord_notifications', 'false', 'Enable Discord order notifications')
+ON CONFLICT (region_id, setting_key) DO NOTHING;
+```
 
-### Key differences from PSABulkImport
+### 2. Add defensive error logging to the toggle click handler
+Update the boolean toggle's `onClick` in `RegionSettingsEditor.tsx` to log the error details to the console. This ensures any future upsert failures are visible rather than silently swallowed.
 
-- Supports both PSA and CGC lookups (not just PSA)
-- Maps response fields to comic-specific data (title, issue number, publisher, publication date) instead of card fields
-- Sets `main_category_in: 'comics'`, `sub_category_in: 'graded_comics'`, `grading_company_in` per item
-- Uses the same catalog snapshot structure as the existing single-item `GradedComicIntake`
+This is a small, targeted fix -- seeding the rows is the primary solution.
 
