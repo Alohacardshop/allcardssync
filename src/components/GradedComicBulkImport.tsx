@@ -18,6 +18,8 @@ import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
 
 interface ComicImportItem {
   certNumber: string;
+  price?: number;
+  cost?: number;
   gradingService: 'psa' | 'cgc';
   status: 'pending' | 'processing' | 'looking_up' | 'adding' | 'success' | 'error';
   error?: string;
@@ -68,12 +70,26 @@ export const GradedComicBulkImport = () => {
   const parseInput = (text: string): ComicImportItem[] => {
     const lines = text.split('\n').filter(line => line.trim());
     return lines
-      .map(line => ({
-        certNumber: sanitizeCert(line.trim()),
-        gradingService,
-        status: 'pending' as const,
-      }))
-      .filter(item => item.certNumber.length >= 6);
+      .map(line => {
+        // Support CSV: "certNumber,price" or just "certNumber"
+        const parts = line.trim().replace(/['"]/g, '').split(/[,\t]/);
+        const cert = sanitizeCert(parts[0]?.trim() || '');
+        const priceVal = parts[1]?.trim() ? parseFloat(parts[1].trim()) : undefined;
+        const costVal = parts[2]?.trim() ? parseFloat(parts[2].trim()) : undefined;
+        return {
+          certNumber: cert,
+          price: priceVal && !isNaN(priceVal) ? priceVal : undefined,
+          cost: costVal && !isNaN(costVal) ? costVal : undefined,
+          gradingService,
+          status: 'pending' as const,
+        };
+      })
+      .filter(item => {
+        if (item.certNumber.length < 6) return false;
+        // Skip header row
+        if (/cert/i.test(item.certNumber)) return false;
+        return true;
+      });
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -163,10 +179,13 @@ export const GradedComicBulkImport = () => {
       return;
     }
 
-    const price = parseFloat(defaultPrice);
-    const cost = parseFloat(defaultCost);
-    if (!price || price <= 0) {
-      toast.error("Please set a default price before importing");
+    const fallbackPrice = parseFloat(defaultPrice);
+    const fallbackCost = parseFloat(defaultCost);
+    
+    // Check that every item has a price (either per-item or default)
+    const missingPrice = items.some(i => !i.price && (!fallbackPrice || fallbackPrice <= 0));
+    if (missingPrice) {
+      toast.error("Please set a default price or include prices in your CSV");
       return;
     }
 
@@ -216,6 +235,9 @@ export const GradedComicBulkImport = () => {
               year: lookupData?.year,
             };
 
+        const itemPrice = item.price || fallbackPrice;
+        const itemCost = item.cost || (item.price ? +(item.price * 0.7).toFixed(2) : fallbackCost) || null;
+
         await addItem({
           store_key_in: assignedStore,
           shopify_location_gid_in: selectedLocation,
@@ -226,8 +248,8 @@ export const GradedComicBulkImport = () => {
           category_in: lookupData?.publisher || 'Comics',
           variant_in: variant,
           card_number_in: lookupData?.issueNumber || '',
-          price_in: price,
-          cost_in: cost || null,
+          price_in: itemPrice,
+          cost_in: itemCost,
           sku_in: item.certNumber,
           main_category_in: 'comics',
           sub_category_in: 'graded_comics',
@@ -263,7 +285,7 @@ export const GradedComicBulkImport = () => {
   };
 
   const downloadTemplate = () => {
-    const template = "Certificate Number\n12345678\n87654321\n11111111";
+    const template = "Certificate Number,Price,Cost\n12345678,29.99,20.99\n87654321,49.99,34.99\n11111111,19.99,13.99";
     const blob = new Blob([template], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -321,15 +343,16 @@ export const GradedComicBulkImport = () => {
       {/* Default Price/Cost */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <Label>Default Price <span className="text-destructive">*</span></Label>
+          <Label>Default Price (fallback if not in CSV)</Label>
           <Input
             type="number"
             step="0.01"
-            placeholder="Price for all items"
+            placeholder="Fallback price"
             value={defaultPrice}
             onChange={(e) => handlePriceChange(e.target.value)}
             disabled={importing}
           />
+          <p className="text-xs text-muted-foreground mt-1">Per-item prices in CSV take priority</p>
         </div>
         <div>
           <Label>Default Cost (70% auto)</Label>
