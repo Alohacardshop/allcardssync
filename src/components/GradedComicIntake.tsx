@@ -7,7 +7,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, BookOpen, AlertCircle, Upload } from "lucide-react";
+import { Loader2, BookOpen, AlertCircle } from "lucide-react";
 import { useIntakeValidation } from "@/hooks/useIntakeValidation";
 import { useLogger } from "@/hooks/useLogger";
 import { validateCompleteStoreContext, logStoreContext } from "@/utils/storeValidation";
