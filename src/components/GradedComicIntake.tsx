@@ -583,12 +583,6 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
                   'Add to Batch'
                 )}
               </Button>
-            </TabsContent>
-
-            <TabsContent value="bulk">
-              <GradedComicBulkImport />
-            </TabsContent>
-          </Tabs>
         </CardContent>
       </Card>
     </div>
