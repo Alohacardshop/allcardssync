@@ -18,6 +18,8 @@ import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
 
 interface ComicImportItem {
   certNumber: string;
+  price?: number;
+  cost?: number;
   gradingService: 'psa' | 'cgc';
   status: 'pending' | 'processing' | 'looking_up' | 'adding' | 'success' | 'error';
   error?: string;
