@@ -70,12 +70,26 @@ export const GradedComicBulkImport = () => {
   const parseInput = (text: string): ComicImportItem[] => {
     const lines = text.split('\n').filter(line => line.trim());
     return lines
-      .map(line => ({
-        certNumber: sanitizeCert(line.trim()),
-        gradingService,
-        status: 'pending' as const,
-      }))
-      .filter(item => item.certNumber.length >= 6);
+      .map(line => {
+        // Support CSV: "certNumber,price" or just "certNumber"
+        const parts = line.trim().replace(/['"]/g, '').split(/[,\t]/);
+        const cert = sanitizeCert(parts[0]?.trim() || '');
+        const priceVal = parts[1]?.trim() ? parseFloat(parts[1].trim()) : undefined;
+        const costVal = parts[2]?.trim() ? parseFloat(parts[2].trim()) : undefined;
+        return {
+          certNumber: cert,
+          price: priceVal && !isNaN(priceVal) ? priceVal : undefined,
+          cost: costVal && !isNaN(costVal) ? costVal : undefined,
+          gradingService,
+          status: 'pending' as const,
+        };
+      })
+      .filter(item => {
+        if (item.certNumber.length < 6) return false;
+        // Skip header row
+        if (/cert/i.test(item.certNumber)) return false;
+        return true;
+      });
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
