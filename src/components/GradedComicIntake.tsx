@@ -4,10 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, BookOpen, AlertCircle, Upload } from "lucide-react";
+import { Loader2, BookOpen, AlertCircle } from "lucide-react";
 import { useIntakeValidation } from "@/hooks/useIntakeValidation";
 import { useLogger } from "@/hooks/useLogger";
 import { validateCompleteStoreContext, logStoreContext } from "@/utils/storeValidation";
@@ -19,7 +19,7 @@ import type { CGCCertificateData } from "@/types/cgc";
 import type { PSACertificateData } from "@/types/psa";
 import { normalizePSAData } from "@/lib/psaNormalization";
 import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
-import { GradedComicBulkImport } from "@/components/GradedComicBulkImport";
+
 
 interface GradedComicIntakeProps {
   onBatchAdd?: () => void;
@@ -349,17 +349,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
             Graded Comics Intake
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="single" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6">
-              <TabsTrigger value="single">Single Entry</TabsTrigger>
-              <TabsTrigger value="bulk" className="flex items-center gap-2">
-                <Upload className="h-4 w-4" />
-                Bulk Import
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="single" className="space-y-6">
+        <CardContent className="space-y-6">
               {/* Grading Service Toggle */}
               <div className="space-y-2">
                 <Label>Grading Service</Label>
@@ -593,12 +583,6 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
                   'Add to Batch'
                 )}
               </Button>
-            </TabsContent>
-
-            <TabsContent value="bulk">
-              <GradedComicBulkImport />
-            </TabsContent>
-          </Tabs>
         </CardContent>
       </Card>
     </div>
