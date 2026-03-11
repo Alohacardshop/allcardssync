@@ -179,10 +179,13 @@ export const GradedComicBulkImport = () => {
       return;
     }
 
-    const price = parseFloat(defaultPrice);
-    const cost = parseFloat(defaultCost);
-    if (!price || price <= 0) {
-      toast.error("Please set a default price before importing");
+    const fallbackPrice = parseFloat(defaultPrice);
+    const fallbackCost = parseFloat(defaultCost);
+    
+    // Check that every item has a price (either per-item or default)
+    const missingPrice = items.some(i => !i.price && (!fallbackPrice || fallbackPrice <= 0));
+    if (missingPrice) {
+      toast.error("Please set a default price or include prices in your CSV");
       return;
     }
 
