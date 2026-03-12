@@ -368,7 +368,7 @@ function JobRow({ job }: { job: SyncJob }) {
       </TableRow>
       <CollapsibleContent asChild>
         <tr>
-          <td colSpan={10} className="p-0">
+          <td colSpan={11} className="p-0">
             <JobItemsTable jobId={job.id} />
           </td>
         </tr>

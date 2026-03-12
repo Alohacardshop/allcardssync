@@ -332,7 +332,7 @@ export function useRetryFailedJobItems() {
       // Reset failed/blocked items back to queued
       await supabase
         .from('shopify_sync_job_items' as any)
-        .update({ status: 'queued', last_error: null } as any)
+        .update({ status: 'queued', last_error: null, failure_code: null } as any)
         .eq('job_id', jobId)
         .in('status', ['failed', 'blocked']);
 
