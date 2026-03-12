@@ -364,112 +364,133 @@ Deno.serve(async (req) => {
   }
 })
 
+// ── Job Status Types ──
+
+type JobStatus = 'queued' | 'running' | 'partial' | 'completed' | 'failed' | 'cancelled'
+
+const TERMINAL_STATUSES: ReadonlySet<JobStatus> = new Set(['completed', 'failed', 'partial', 'cancelled'])
+
+interface ItemCounts {
+  succeeded: number
+  failed: number
+  remaining: number
+  totalApiCalls: number
+  processed: number
+}
+
+function countItems(items: any[]): ItemCounts {
+  const succeeded = items.filter((i: any) => i.status === 'succeeded').length
+  const failed = items.filter((i: any) => i.status === 'failed' || i.status === 'blocked').length
+  const remaining = items.filter((i: any) => i.status === 'queued').length
+  const totalApiCalls = items.reduce((s: number, i: any) => s + (i.api_calls || 0), 0)
+  return { succeeded, failed, remaining, totalApiCalls, processed: succeeded + failed }
+}
+
+function resolveJobStatus(counts: ItemCounts, isCancelled: boolean): JobStatus {
+  if (isCancelled) return 'cancelled'
+  const { succeeded, failed, remaining, processed } = counts
+  if (remaining > 0 && processed > 0) return 'partial'
+  if (remaining > 0 && processed === 0) return 'queued'
+  if (failed > 0 && succeeded === 0) return 'failed'
+  if (failed > 0) return 'partial'
+  return 'completed'
+}
+
+function mapJobStatusToRunStatus(status: JobStatus): string {
+  if (status === 'partial') return 'partial_failure'
+  return status // completed, failed, cancelled pass through
+}
+
+// ── Finalization ──
+
 async function finalizeJob(supabase: any, jobId: string, durationMs?: number, wasCancelled?: boolean) {
+  // Determine cancellation: caller flag OR current DB state
   let isCancelled = wasCancelled || false
-  if (!isCancelled) {
-    const { data: currentJob } = await supabase
-      .from('shopify_sync_job_queue')
-      .select('status')
-      .eq('id', jobId)
-      .single()
-    isCancelled = currentJob?.status === 'cancelled'
+  const { data: currentJob } = await supabase
+    .from('shopify_sync_job_queue')
+    .select('status, batch_id, store_key, triggered_by, total_items')
+    .eq('id', jobId)
+    .single()
+
+  if (!isCancelled && currentJob?.status === 'cancelled') {
+    isCancelled = true
   }
 
+  // Never overwrite a cancellation with another state
+  if (currentJob?.status === 'cancelled') {
+    isCancelled = true
+  }
+
+  // Count item results
   const { data: items } = await supabase
     .from('shopify_sync_job_items')
     .select('status, api_calls, duration_ms, item_id, last_error, shopify_product_id, shopify_variant_id')
     .eq('job_id', jobId)
 
   const allItems = items || []
-  const succeeded = allItems.filter((i: any) => i.status === 'succeeded').length
-  const failed = allItems.filter((i: any) => i.status === 'failed' || i.status === 'blocked').length
-  const remaining = allItems.filter((i: any) => i.status === 'queued').length
-  const totalApiCalls = allItems.reduce((s: number, i: any) => s + (i.api_calls || 0), 0)
-  const processed = succeeded + failed
+  const counts = countItems(allItems)
+  const status = resolveJobStatus(counts, isCancelled)
+  const isTerminal = TERMINAL_STATUSES.has(status)
 
-  let status: string
-  if (isCancelled) {
-    status = 'cancelled'
-  } else if (remaining > 0 && processed > 0) {
-    status = 'partial'
-  } else if (remaining > 0 && processed === 0) {
-    status = 'queued'
-  } else if (failed > 0 && succeeded === 0) {
-    status = 'failed'
-  } else if (failed > 0) {
-    status = 'partial'
-  } else {
-    status = 'completed'
-  }
-
-  const isTerminal = status === 'completed' || status === 'failed' || status === 'cancelled'
-
-  const { data: job } = await supabase
-    .from('shopify_sync_job_queue')
-    .select('batch_id, store_key, triggered_by, total_items')
-    .eq('id', jobId)
-    .single()
-
+  // Update job record
   await supabase.from('shopify_sync_job_queue').update({
     status,
-    processed_items: processed,
-    succeeded,
-    failed,
-    total_api_calls: totalApiCalls,
+    processed_items: counts.processed,
+    succeeded: counts.succeeded,
+    failed: counts.failed,
+    total_api_calls: counts.totalApiCalls,
     total_duration_ms: durationMs || 0,
     completed_at: isTerminal ? new Date().toISOString() : null,
-    // Clear lease on finalization
     heartbeat_at: null,
     lease_expires_at: null,
     claimed_by: null
   }).eq('id', jobId)
 
-  // Roll results into shopify_sync_runs for dashboard history
-  if (job && (status === 'completed' || status === 'failed' || status === 'partial' || status === 'cancelled')) {
-    const { data: existingRun } = await supabase
-      .from('shopify_sync_runs')
-      .select('id')
-      .eq('batch_id', job.batch_id)
-      .single()
+  // Sync results into shopify_sync_runs for dashboard history
+  if (!currentJob || !isTerminal) return
 
-    const runStatus = status === 'partial' ? 'partial_failure' : status
+  const { data: existingRun } = await supabase
+    .from('shopify_sync_runs')
+    .select('id')
+    .eq('batch_id', currentJob.batch_id)
+    .single()
 
-    const runData = {
-      batch_id: job.batch_id,
-      mode: 'bulk',
-      store_key: job.store_key,
-      total_items: job.total_items,
-      succeeded,
-      failed,
-      total_api_calls: totalApiCalls,
-      total_duration_ms: durationMs || 0,
-      triggered_by: job.triggered_by,
-      status: runStatus
-    }
+  const runData = {
+    batch_id: currentJob.batch_id,
+    mode: 'bulk',
+    store_key: currentJob.store_key,
+    total_items: currentJob.total_items,
+    succeeded: counts.succeeded,
+    failed: counts.failed,
+    total_api_calls: counts.totalApiCalls,
+    total_duration_ms: durationMs || 0,
+    triggered_by: currentJob.triggered_by,
+    status: mapJobStatusToRunStatus(status)
+  }
 
-    let runId: string
-    if (existingRun) {
-      await supabase.from('shopify_sync_runs').update(runData).eq('id', existingRun.id)
-      runId = existingRun.id
-    } else {
-      const { data: newRun } = await supabase.from('shopify_sync_runs').insert(runData).select('id').single()
-      runId = newRun?.id
-    }
+  let runId: string
+  if (existingRun) {
+    await supabase.from('shopify_sync_runs').update(runData).eq('id', existingRun.id)
+    runId = existingRun.id
+  } else {
+    const { data: newRun } = await supabase.from('shopify_sync_runs').insert(runData).select('id').single()
+    runId = newRun?.id
+  }
 
-    if (runId) {
-      for (const item of allItems) {
-        if (item.status === 'succeeded' || item.status === 'failed' || item.status === 'blocked') {
-          await supabase.from('shopify_sync_run_items').upsert({
-            run_id: runId,
-            item_id: item.item_id,
-            success: item.status === 'succeeded',
-            error: item.last_error,
-            shopify_product_id: item.shopify_product_id,
-            shopify_variant_id: item.shopify_variant_id,
-            api_calls: item.api_calls || 0,
-            duration_ms: item.duration_ms || 0
-          }, { onConflict: 'run_id,item_id', ignoreDuplicates: false })
-        }
+  // Upsert processed item results
+  if (runId) {
+    for (const item of allItems) {
+      if (item.status === 'succeeded' || item.status === 'failed' || item.status === 'blocked') {
+        await supabase.from('shopify_sync_run_items').upsert({
+          run_id: runId,
+          item_id: item.item_id,
+          success: item.status === 'succeeded',
+          error: item.last_error,
+          shopify_product_id: item.shopify_product_id,
+          shopify_variant_id: item.shopify_variant_id,
+          api_calls: item.api_calls || 0,
+          duration_ms: item.duration_ms || 0
+        }, { onConflict: 'run_id,item_id', ignoreDuplicates: false })
       }
     }
   }
