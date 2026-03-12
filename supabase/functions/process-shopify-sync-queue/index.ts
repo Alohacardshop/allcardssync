@@ -474,3 +474,48 @@ async function finalizeJob(supabase: any, jobId: string, durationMs?: number, wa
     }
   }
 }
+
+type FailureCode =
+  | 'duplicate'
+  | 'validation_error'
+  | 'rate_limited'
+  | 'shopify_api_error'
+  | 'network_error'
+  | 'missing_inventory_data'
+  | 'blocked_business_rule'
+  | 'unknown_error'
+
+function classifyError(errorMsg?: string | null): FailureCode {
+  if (!errorMsg) return 'unknown_error'
+  const msg = errorMsg.toLowerCase()
+
+  // Duplicate / already exists
+  if (msg.includes('duplicate protection') || msg.includes('already exists') || msg.includes('duplicate sku'))
+    return 'duplicate'
+
+  // Rate limiting
+  if (msg.includes('throttl') || msg.includes('rate limit') || msg.includes('429') || msg.includes('too many requests'))
+    return 'rate_limited'
+
+  // Missing data needed for sync
+  if (msg.includes('missing') && (msg.includes('sku') || msg.includes('price') || msg.includes('inventory') || msg.includes('data')))
+    return 'missing_inventory_data'
+
+  // Validation errors
+  if (msg.includes('invalid') || msg.includes('validation') || msg.includes('required field') || msg.includes('must be'))
+    return 'validation_error'
+
+  // Business rule blocks
+  if (msg.includes('blocked') || msg.includes('not eligible') || msg.includes('business rule') || msg.includes('cannot sync'))
+    return 'blocked_business_rule'
+
+  // Network errors
+  if (msg.includes('fetch') || msg.includes('econnrefused') || msg.includes('timeout') || msg.includes('network') || msg.includes('dns') || msg.includes('enotfound'))
+    return 'network_error'
+
+  // Shopify API errors (status codes or explicit API messages)
+  if (msg.includes('shopify') || msg.includes('graphql') || msg.includes('api error') || /\b[45]\d{2}\b/.test(msg))
+    return 'shopify_api_error'
+
+  return 'unknown_error'
+}
