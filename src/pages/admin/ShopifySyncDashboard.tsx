@@ -375,6 +375,7 @@ function JobItemsTable({ jobId }: { jobId: string }) {
             <TableHead className="text-xs">Status</TableHead>
             <TableHead className="text-xs">Failure Code</TableHead>
             <TableHead className="text-xs">Attempts</TableHead>
+            <TableHead className="text-xs">Next Retry</TableHead>
             <TableHead className="text-xs">Product ID</TableHead>
             <TableHead className="text-xs">API Calls</TableHead>
             <TableHead className="text-xs">Duration</TableHead>
@@ -388,7 +389,25 @@ function JobItemsTable({ jobId }: { jobId: string }) {
               <TableCell className="font-mono text-xs">{item.item_id.slice(0, 8)}…</TableCell>
               <TableCell><JobItemStatusBadge status={item.status} /></TableCell>
               <TableCell>{item.failure_code ? <FailureCodeBadge code={item.failure_code} /> : <span className="text-xs text-muted-foreground">—</span>}</TableCell>
-              <TableCell className="text-xs">{item.attempt_count}</TableCell>
+              <TableCell className="text-xs">
+                <span>{item.attempt_count}/{item.max_attempts}</span>
+              </TableCell>
+              <TableCell className="text-xs">
+                {item.next_retry_at ? (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-amber-600 cursor-help">
+                          {formatDistanceToNow(new Date(item.next_retry_at), { addSuffix: true })}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">
+                        {format(new Date(item.next_retry_at), 'PPpp')}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ) : <span className="text-muted-foreground">—</span>}
+              </TableCell>
               <TableCell className="font-mono text-xs">{item.shopify_product_id || '—'}</TableCell>
               <TableCell className="text-xs">{item.api_calls}</TableCell>
               <TableCell className="text-xs">{item.duration_ms}ms</TableCell>
