@@ -233,13 +233,34 @@ function JobItemsTable({ jobId }: { jobId: string }) {
   if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading items…</div>;
   if (!items?.length) return <div className="p-4 text-sm text-muted-foreground">No items</div>;
 
+  // Failure code summary
+  const failureCounts: Record<string, number> = {};
+  items.forEach(item => {
+    if (item.failure_code) {
+      failureCounts[item.failure_code] = (failureCounts[item.failure_code] || 0) + 1;
+    }
+  });
+  const hasFailureSummary = Object.keys(failureCounts).length > 0;
+
   return (
     <div className="border-t border-border/50">
+      {hasFailureSummary && (
+        <div className="px-4 py-2 bg-muted/20 border-b border-border/30 flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-medium text-muted-foreground">Failure breakdown:</span>
+          {Object.entries(failureCounts).sort((a, b) => b[1] - a[1]).map(([code, count]) => (
+            <span key={code} className="inline-flex items-center gap-1">
+              <FailureCodeBadge code={code} />
+              <span className="text-xs text-muted-foreground">×{count}</span>
+            </span>
+          ))}
+        </div>
+      )}
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/30">
             <TableHead className="text-xs">Item ID</TableHead>
             <TableHead className="text-xs">Status</TableHead>
+            <TableHead className="text-xs">Failure Code</TableHead>
             <TableHead className="text-xs">Attempts</TableHead>
             <TableHead className="text-xs">Product ID</TableHead>
             <TableHead className="text-xs">API Calls</TableHead>
@@ -253,13 +274,14 @@ function JobItemsTable({ jobId }: { jobId: string }) {
             <TableRow key={item.id} className={item.status === 'failed' || item.status === 'blocked' ? 'bg-red-500/5' : ''}>
               <TableCell className="font-mono text-xs">{item.item_id.slice(0, 8)}…</TableCell>
               <TableCell><JobItemStatusBadge status={item.status} /></TableCell>
+              <TableCell>{item.failure_code ? <FailureCodeBadge code={item.failure_code} /> : <span className="text-xs text-muted-foreground">—</span>}</TableCell>
               <TableCell className="text-xs">{item.attempt_count}</TableCell>
               <TableCell className="font-mono text-xs">{item.shopify_product_id || '—'}</TableCell>
               <TableCell className="text-xs">{item.api_calls}</TableCell>
               <TableCell className="text-xs">{item.duration_ms}ms</TableCell>
               <TableCell className="text-xs max-w-[200px] truncate text-red-600">{item.last_error || '—'}</TableCell>
               <TableCell>
-                {item.last_error?.includes('Duplicate protection') && (
+                {(item.failure_code === 'duplicate' || item.last_error?.includes('Duplicate protection')) && (
                   <Button
                     size="sm" variant="outline" className="h-6 text-xs gap-1"
                     onClick={() => repairLinkage.mutate({ itemId: item.item_id })}
