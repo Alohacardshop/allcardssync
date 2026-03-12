@@ -375,6 +375,7 @@ function JobItemsTable({ jobId }: { jobId: string }) {
             <TableHead className="text-xs">Status</TableHead>
             <TableHead className="text-xs">Failure Code</TableHead>
             <TableHead className="text-xs">Attempts</TableHead>
+            <TableHead className="text-xs">Next Retry</TableHead>
             <TableHead className="text-xs">Product ID</TableHead>
             <TableHead className="text-xs">API Calls</TableHead>
             <TableHead className="text-xs">Duration</TableHead>
