@@ -80,7 +80,22 @@ export interface SyncDashboardFilters {
   successOnly?: boolean;
   failedOnly?: boolean;
   blockedOnly?: boolean;
+  queueStatus?: string;
+  failureCode?: string;
 }
+
+export type FailureCode = 'duplicate' | 'validation_error' | 'rate_limited' | 'shopify_api_error' | 'network_error' | 'missing_inventory_data' | 'blocked_business_rule' | 'unknown_error';
+
+export const FAILURE_CODE_LABELS: Record<string, string> = {
+  duplicate: 'Duplicate',
+  validation_error: 'Validation',
+  rate_limited: 'Rate Limited',
+  shopify_api_error: 'API Error',
+  network_error: 'Network',
+  missing_inventory_data: 'Missing Data',
+  blocked_business_rule: 'Blocked',
+  unknown_error: 'Unknown',
+};
 
 // ── Sync Runs (history) ──
 
