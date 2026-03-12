@@ -48,6 +48,10 @@ verify_jwt = true
 [functions.repair-shopify-linkage]
 verify_jwt = false
 
+# Bulk Shopify sync (admin/staff only)
+[functions.bulk-shopify-sync]
+verify_jwt = false
+
 # Shopify webhook handler (public - validates HMAC signature)
 [functions.shopify-webhook]
 verify_jwt = false
