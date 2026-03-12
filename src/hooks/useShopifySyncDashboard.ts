@@ -61,6 +61,8 @@ export interface SyncJobItem {
   item_id: string;
   status: string;
   attempt_count: number;
+  max_attempts: number;
+  next_retry_at: string | null;
   last_error: string | null;
   failure_code: string | null;
   shopify_product_id: string | null;

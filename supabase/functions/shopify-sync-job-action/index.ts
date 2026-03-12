@@ -173,11 +173,18 @@ async function handleRetryFailed(supabase: any, job: any, supabaseUrl: string, s
     throw new Error('No failed or blocked items to retry')
   }
 
-  // Reset failed/blocked items to queued atomically
+  // Reset failed/blocked items to queued with full retry state reset
   const failedIds = failedItems.map((i: any) => i.id)
   const { error: resetErr } = await supabase
     .from('shopify_sync_job_items')
-    .update({ status: 'queued', last_error: null, failure_code: null, updated_at: new Date().toISOString() })
+    .update({
+      status: 'queued',
+      last_error: null,
+      failure_code: null,
+      attempt_count: 0,
+      next_retry_at: null,
+      updated_at: new Date().toISOString()
+    })
     .in('id', failedIds)
 
   if (resetErr) throw new Error(`Failed to reset items: ${resetErr.message}`)
