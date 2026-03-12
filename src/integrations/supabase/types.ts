@@ -4252,6 +4252,57 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      claim_shopify_sync_job: {
+        Args: { target_job_id?: string }
+        Returns: {
+          batch_id: string
+          completed_at: string | null
+          created_at: string
+          error: string | null
+          failed: number
+          id: string
+          location_gid: string
+          processed_items: number
+          started_at: string | null
+          status: string
+          store_key: string
+          succeeded: number
+          total_api_calls: number
+          total_duration_ms: number
+          total_items: number
+          triggered_by: string | null
+          vendor: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "shopify_sync_job_queue"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      claim_shopify_sync_job_items: {
+        Args: { p_job_id: string; p_limit?: number }
+        Returns: {
+          api_calls: number
+          attempt_count: number
+          created_at: string
+          duration_ms: number
+          id: string
+          item_id: string
+          job_id: string
+          last_error: string | null
+          shopify_product_id: string | null
+          shopify_variant_id: string | null
+          status: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "shopify_sync_job_items"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       cleanup_old_webhook_events: {
         Args: { retention_days?: number }
         Returns: number
