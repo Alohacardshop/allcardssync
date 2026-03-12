@@ -58,10 +58,26 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge variant="outline" className={v.class}>{v.label}</Badge>;
 }
 
-function ResultBadge({ success, error }: { success: boolean; error?: string | null }) {
+function ResultBadge({ success, error, failureCode }: { success: boolean; error?: string | null; failureCode?: string | null }) {
   if (success) return <Badge variant="outline" className="bg-emerald-500/15 text-emerald-700 border-emerald-500/30">Success</Badge>;
+  if (failureCode) return <FailureCodeBadge code={failureCode} />;
   if (error?.includes('Duplicate protection')) return <Badge variant="outline" className="bg-orange-500/15 text-orange-700 border-orange-500/30">Blocked</Badge>;
   return <Badge variant="outline" className="bg-red-500/15 text-red-700 border-red-500/30">Failed</Badge>;
+}
+
+function FailureCodeBadge({ code }: { code: string }) {
+  const variants: Record<string, { class: string; label: string }> = {
+    duplicate: { class: 'bg-orange-500/15 text-orange-700 border-orange-500/30', label: 'Duplicate' },
+    validation_error: { class: 'bg-yellow-500/15 text-yellow-700 border-yellow-500/30', label: 'Validation' },
+    rate_limited: { class: 'bg-purple-500/15 text-purple-700 border-purple-500/30', label: 'Rate Limited' },
+    shopify_api_error: { class: 'bg-red-500/15 text-red-700 border-red-500/30', label: 'API Error' },
+    network_error: { class: 'bg-sky-500/15 text-sky-700 border-sky-500/30', label: 'Network' },
+    missing_inventory_data: { class: 'bg-amber-500/15 text-amber-700 border-amber-500/30', label: 'Missing Data' },
+    blocked_business_rule: { class: 'bg-orange-500/15 text-orange-700 border-orange-500/30', label: 'Blocked' },
+    unknown_error: { class: 'bg-gray-500/15 text-gray-600 border-gray-500/30', label: 'Unknown' },
+  };
+  const v = variants[code] || { class: 'bg-muted text-muted-foreground', label: code };
+  return <Badge variant="outline" className={v.class}>{v.label}</Badge>;
 }
 
 function JobItemStatusBadge({ status }: { status: string }) {
@@ -217,13 +233,34 @@ function JobItemsTable({ jobId }: { jobId: string }) {
   if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading items…</div>;
   if (!items?.length) return <div className="p-4 text-sm text-muted-foreground">No items</div>;
 
+  // Failure code summary
+  const failureCounts: Record<string, number> = {};
+  items.forEach(item => {
+    if (item.failure_code) {
+      failureCounts[item.failure_code] = (failureCounts[item.failure_code] || 0) + 1;
+    }
+  });
+  const hasFailureSummary = Object.keys(failureCounts).length > 0;
+
   return (
     <div className="border-t border-border/50">
+      {hasFailureSummary && (
+        <div className="px-4 py-2 bg-muted/20 border-b border-border/30 flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-medium text-muted-foreground">Failure breakdown:</span>
+          {Object.entries(failureCounts).sort((a, b) => b[1] - a[1]).map(([code, count]) => (
+            <span key={code} className="inline-flex items-center gap-1">
+              <FailureCodeBadge code={code} />
+              <span className="text-xs text-muted-foreground">×{count}</span>
+            </span>
+          ))}
+        </div>
+      )}
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/30">
             <TableHead className="text-xs">Item ID</TableHead>
             <TableHead className="text-xs">Status</TableHead>
+            <TableHead className="text-xs">Failure Code</TableHead>
             <TableHead className="text-xs">Attempts</TableHead>
             <TableHead className="text-xs">Product ID</TableHead>
             <TableHead className="text-xs">API Calls</TableHead>
@@ -237,13 +274,14 @@ function JobItemsTable({ jobId }: { jobId: string }) {
             <TableRow key={item.id} className={item.status === 'failed' || item.status === 'blocked' ? 'bg-red-500/5' : ''}>
               <TableCell className="font-mono text-xs">{item.item_id.slice(0, 8)}…</TableCell>
               <TableCell><JobItemStatusBadge status={item.status} /></TableCell>
+              <TableCell>{item.failure_code ? <FailureCodeBadge code={item.failure_code} /> : <span className="text-xs text-muted-foreground">—</span>}</TableCell>
               <TableCell className="text-xs">{item.attempt_count}</TableCell>
               <TableCell className="font-mono text-xs">{item.shopify_product_id || '—'}</TableCell>
               <TableCell className="text-xs">{item.api_calls}</TableCell>
               <TableCell className="text-xs">{item.duration_ms}ms</TableCell>
               <TableCell className="text-xs max-w-[200px] truncate text-red-600">{item.last_error || '—'}</TableCell>
               <TableCell>
-                {item.last_error?.includes('Duplicate protection') && (
+                {(item.failure_code === 'duplicate' || item.last_error?.includes('Duplicate protection')) && (
                   <Button
                     size="sm" variant="outline" className="h-6 text-xs gap-1"
                     onClick={() => repairLinkage.mutate({ itemId: item.item_id })}
@@ -330,7 +368,7 @@ function JobRow({ job }: { job: SyncJob }) {
       </TableRow>
       <CollapsibleContent asChild>
         <tr>
-          <td colSpan={10} className="p-0">
+          <td colSpan={11} className="p-0">
             <JobItemsTable jobId={job.id} />
           </td>
         </tr>

@@ -2907,6 +2907,7 @@ export type Database = {
           attempt_count: number
           created_at: string
           duration_ms: number
+          failure_code: string | null
           id: string
           item_id: string
           job_id: string
@@ -2921,6 +2922,7 @@ export type Database = {
           attempt_count?: number
           created_at?: string
           duration_ms?: number
+          failure_code?: string | null
           id?: string
           item_id: string
           job_id: string
@@ -2935,6 +2937,7 @@ export type Database = {
           attempt_count?: number
           created_at?: string
           duration_ms?: number
+          failure_code?: string | null
           id?: string
           item_id?: string
           job_id?: string
@@ -4340,6 +4343,7 @@ export type Database = {
           attempt_count: number
           created_at: string
           duration_ms: number
+          failure_code: string | null
           id: string
           item_id: string
           job_id: string

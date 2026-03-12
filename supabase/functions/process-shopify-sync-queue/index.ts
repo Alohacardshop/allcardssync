@@ -232,11 +232,13 @@ Deno.serve(async (req) => {
           try {
             const result = await syncGradedItemToShopify(syncItem, ctx)
 
+            const failureCode = result.success ? null : classifyError(result.error)
             const itemStatus = result.success ? 'succeeded' :
-              (result.error?.includes('Duplicate protection') ? 'blocked' : 'failed')
+              (failureCode === 'duplicate' || failureCode === 'blocked_business_rule' ? 'blocked' : 'failed')
 
             await supabase.from('shopify_sync_job_items').update({
               status: itemStatus,
+              failure_code: failureCode,
               last_error: result.error || null,
               shopify_product_id: result.shopify_product_id || null,
               shopify_variant_id: result.shopify_variant_id || null,
@@ -255,14 +257,17 @@ Deno.serve(async (req) => {
               job_id: job.id,
               item_id: jobItem.item_id,
               success: result.success,
+              failure_code: failureCode,
               error: result.error
             }))
           } catch (err) {
+            const failureCode = classifyError(err.message)
             failedCount++
             processedCount++
 
             await supabase.from('shopify_sync_job_items').update({
               status: 'failed',
+              failure_code: failureCode,
               last_error: err.message,
               updated_at: new Date().toISOString()
             }).eq('id', jobItem.id)
@@ -271,6 +276,7 @@ Deno.serve(async (req) => {
               event: 'shopify_sync_job_item_failed',
               job_id: job.id,
               item_id: jobItem.item_id,
+              failure_code: failureCode,
               error: err.message
             }))
           }
@@ -467,4 +473,49 @@ async function finalizeJob(supabase: any, jobId: string, durationMs?: number, wa
       }
     }
   }
+}
+
+type FailureCode =
+  | 'duplicate'
+  | 'validation_error'
+  | 'rate_limited'
+  | 'shopify_api_error'
+  | 'network_error'
+  | 'missing_inventory_data'
+  | 'blocked_business_rule'
+  | 'unknown_error'
+
+function classifyError(errorMsg?: string | null): FailureCode {
+  if (!errorMsg) return 'unknown_error'
+  const msg = errorMsg.toLowerCase()
+
+  // Duplicate / already exists
+  if (msg.includes('duplicate protection') || msg.includes('already exists') || msg.includes('duplicate sku'))
+    return 'duplicate'
+
+  // Rate limiting
+  if (msg.includes('throttl') || msg.includes('rate limit') || msg.includes('429') || msg.includes('too many requests'))
+    return 'rate_limited'
+
+  // Missing data needed for sync
+  if (msg.includes('missing') && (msg.includes('sku') || msg.includes('price') || msg.includes('inventory') || msg.includes('data')))
+    return 'missing_inventory_data'
+
+  // Validation errors
+  if (msg.includes('invalid') || msg.includes('validation') || msg.includes('required field') || msg.includes('must be'))
+    return 'validation_error'
+
+  // Business rule blocks
+  if (msg.includes('blocked') || msg.includes('not eligible') || msg.includes('business rule') || msg.includes('cannot sync'))
+    return 'blocked_business_rule'
+
+  // Network errors
+  if (msg.includes('fetch') || msg.includes('econnrefused') || msg.includes('timeout') || msg.includes('network') || msg.includes('dns') || msg.includes('enotfound'))
+    return 'network_error'
+
+  // Shopify API errors (status codes or explicit API messages)
+  if (msg.includes('shopify') || msg.includes('graphql') || msg.includes('api error') || /\b[45]\d{2}\b/.test(msg))
+    return 'shopify_api_error'
+
+  return 'unknown_error'
 }
