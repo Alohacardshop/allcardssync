@@ -50,6 +50,9 @@ export interface SyncJob {
   created_at: string;
   started_at: string | null;
   completed_at: string | null;
+  heartbeat_at?: string | null;
+  lease_expires_at?: string | null;
+  claimed_by?: string | null;
 }
 
 export interface SyncJobItem {
