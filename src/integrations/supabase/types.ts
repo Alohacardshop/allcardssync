@@ -2988,6 +2988,104 @@ export type Database = {
           },
         ]
       }
+      shopify_sync_run_items: {
+        Row: {
+          api_calls: number
+          created_at: string
+          duration_ms: number
+          error: string | null
+          id: string
+          item_id: string
+          run_id: string
+          shopify_product_id: string | null
+          shopify_variant_id: string | null
+          sku: string | null
+          success: boolean
+          title: string | null
+        }
+        Insert: {
+          api_calls?: number
+          created_at?: string
+          duration_ms?: number
+          error?: string | null
+          id?: string
+          item_id: string
+          run_id: string
+          shopify_product_id?: string | null
+          shopify_variant_id?: string | null
+          sku?: string | null
+          success?: boolean
+          title?: string | null
+        }
+        Update: {
+          api_calls?: number
+          created_at?: string
+          duration_ms?: number
+          error?: string | null
+          id?: string
+          item_id?: string
+          run_id?: string
+          shopify_product_id?: string | null
+          shopify_variant_id?: string | null
+          sku?: string | null
+          success?: boolean
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_sync_run_items_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_sync_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shopify_sync_runs: {
+        Row: {
+          batch_id: string
+          created_at: string
+          failed: number
+          id: string
+          mode: string
+          status: string
+          store_key: string
+          succeeded: number
+          total_api_calls: number
+          total_duration_ms: number
+          total_items: number
+          triggered_by: string | null
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string
+          failed?: number
+          id?: string
+          mode: string
+          status?: string
+          store_key: string
+          succeeded?: number
+          total_api_calls?: number
+          total_duration_ms?: number
+          total_items?: number
+          triggered_by?: string | null
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string
+          failed?: number
+          id?: string
+          mode?: string
+          status?: string
+          store_key?: string
+          succeeded?: number
+          total_api_calls?: number
+          total_duration_ms?: number
+          total_items?: number
+          triggered_by?: string | null
+        }
+        Relationships: []
+      }
       sub_categories: {
         Row: {
           created_at: string | null

@@ -10,6 +10,7 @@ const PendingNotifications = lazy(() => import('@/pages/PendingNotifications'));
 const ShopifyBackfill = lazy(() => import('@/pages/admin/ShopifyBackfill'));
 const InventorySyncDashboard = lazy(() => import('@/pages/admin/InventorySyncDashboard'));
 const SyncHealthPage = lazy(() => import('@/pages/admin/SyncHealthPage'));
+const ShopifySyncDashboard = lazy(() => import('@/pages/admin/ShopifySyncDashboard'));
 
 /**
  * Admin routes - uses AdminLayout which provides its own Suspense boundary
@@ -22,5 +23,6 @@ export const adminRoutes = (
     <Route path="shopify-backfill" element={<ShopifyBackfill />} />
     <Route path="inventory-sync" element={<InventorySyncDashboard />} />
     <Route path="sync-health" element={<SyncHealthPage />} />
+    <Route path="shopify-sync" element={<ShopifySyncDashboard />} />
   </Route>
 );

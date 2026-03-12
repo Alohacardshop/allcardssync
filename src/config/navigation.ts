@@ -191,6 +191,14 @@ export const ADMIN_TOOLS: AdminNavItem[] = [
     description: 'Sync health monitoring',
     keywords: ['health', 'sync', 'monitoring'],
   },
+  { 
+    id: 'shopify-sync', 
+    path: PATHS.adminShopifySync, 
+    title: 'Shopify Sync', 
+    icon: ShoppingBag,
+    description: 'Shopify sync dashboard',
+    keywords: ['shopify', 'sync', 'bulk', 'dashboard'],
+  },
 ];
 
 /** Get all admin navigation items for command palette */
