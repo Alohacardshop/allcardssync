@@ -60,6 +60,10 @@ verify_jwt = false
 [functions.process-shopify-sync-queue]
 verify_jwt = false
 
+# Shopify sync job actions (cancel/resume/retry - admin/staff)
+[functions.shopify-sync-job-action]
+verify_jwt = false
+
 # Shopify webhook handler (public - validates HMAC signature)
 [functions.shopify-webhook]
 verify_jwt = false

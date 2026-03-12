@@ -278,14 +278,12 @@ export function useCancelJob() {
 
   return useMutation({
     mutationFn: async ({ jobId }: { jobId: string }) => {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      // Cancel by updating status - items still queued won't be processed
-      const { error } = await supabase
-        .from('shopify_sync_job_queue' as any)
-        .update({ status: 'cancelled', completed_at: new Date().toISOString() } as any)
-        .eq('id', jobId)
-        .in('status', ['queued', 'running']);
+      const { data, error } = await supabase.functions.invoke('shopify-sync-job-action', {
+        body: { action: 'cancel', job_id: jobId }
+      });
       if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Cancel failed');
+      return data;
     },
     onSuccess: () => {
       toast.success('Job cancelled');
@@ -302,17 +300,12 @@ export function useResumeJob() {
 
   return useMutation({
     mutationFn: async ({ jobId }: { jobId: string }) => {
-      // Reset job status to queued so worker can pick it up
-      await supabase
-        .from('shopify_sync_job_queue' as any)
-        .update({ status: 'queued' } as any)
-        .eq('id', jobId);
-
-      // Trigger the worker
-      const { error } = await supabase.functions.invoke('process-shopify-sync-queue', {
-        body: { job_id: jobId }
+      const { data, error } = await supabase.functions.invoke('shopify-sync-job-action', {
+        body: { action: 'resume', job_id: jobId }
       });
       if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Resume failed');
+      return data;
     },
     onSuccess: () => {
       toast.success('Job resumed');
@@ -329,28 +322,17 @@ export function useRetryFailedJobItems() {
 
   return useMutation({
     mutationFn: async ({ jobId }: { jobId: string }) => {
-      // Reset failed/blocked items back to queued
-      await supabase
-        .from('shopify_sync_job_items' as any)
-        .update({ status: 'queued', last_error: null, failure_code: null } as any)
-        .eq('job_id', jobId)
-        .in('status', ['failed', 'blocked']);
-
-      // Reset job status
-      await supabase
-        .from('shopify_sync_job_queue' as any)
-        .update({ status: 'queued' } as any)
-        .eq('id', jobId);
-
-      // Trigger worker
-      const { error } = await supabase.functions.invoke('process-shopify-sync-queue', {
-        body: { job_id: jobId }
+      const { data, error } = await supabase.functions.invoke('shopify-sync-job-action', {
+        body: { action: 'retry_failed', job_id: jobId }
       });
       if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Retry failed');
+      return data;
     },
     onSuccess: () => {
       toast.success('Retrying failed items');
       queryClient.invalidateQueries({ queryKey: ['shopify-sync-jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['shopify-sync-job-items'] });
     },
     onError: (error: Error) => {
       toast.error(`Retry failed: ${error.message}`);
