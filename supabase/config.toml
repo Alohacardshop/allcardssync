@@ -44,6 +44,10 @@ verify_jwt = true
 [functions.shopify-pull-products-by-tags]
 verify_jwt = true
 
+# Repair broken Shopify linkage (admin/staff only)
+[functions.repair-shopify-linkage]
+verify_jwt = false
+
 # Shopify webhook handler (public - validates HMAC signature)
 [functions.shopify-webhook]
 verify_jwt = false
