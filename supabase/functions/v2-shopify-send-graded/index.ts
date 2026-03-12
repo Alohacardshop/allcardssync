@@ -115,10 +115,12 @@ Deno.serve(async (req) => {
       throw new Error(`Failed to fetch intake item: ${fetchError?.message}`)
     }
 
-    // ── Duplicate protection: if product already exists in Shopify, force update path ──
+    // ── Duplicate protection: compute from shopify_product_id alone ──
+    const hasExistingProduct = !!intakeItem.shopify_product_id
+    const hasExistingVariant = !!intakeItem.shopify_variant_id
     const existingProductId = intakeItem.shopify_product_id
     const existingVariantId = intakeItem.shopify_variant_id
-    const isUpdate = !!(existingProductId && existingVariantId)
+    const isUpdate = hasExistingProduct && hasExistingVariant
 
     // Structured logging: sync start
     console.log(JSON.stringify({
@@ -127,12 +129,36 @@ Deno.serve(async (req) => {
       sku: item.sku,
       store: storeKey,
       isUpdate,
-      existing_product_id: existingProductId || null
+      hasExistingProduct,
+      hasExistingVariant,
+      existing_product_id: existingProductId || null,
+      existing_variant_id: existingVariantId || null
     }))
 
-    if (!isUpdate && intakeItem.shopify_product_id) {
-      // Product ID exists but variant ID is missing — still treat as duplicate prevention
-      console.warn(`[SYNC] Duplicate product creation prevented for item ${item.id} — shopify_product_id already set: ${intakeItem.shopify_product_id}`)
+    // ── GUARD: Block create when product exists but variant linkage is missing ──
+    // This prevents duplicate Shopify products from being created during re-syncs
+    if (hasExistingProduct && !hasExistingVariant) {
+      console.error(JSON.stringify({
+        event: 'shopify_sync_blocked_duplicate_risk',
+        item_id: item.id,
+        sku: item.sku,
+        shopify_product_id: intakeItem.shopify_product_id,
+        reason: 'existing product without variant linkage'
+      }))
+      throw new Error(
+        `Duplicate protection: item ${item.id} already has shopify_product_id ${intakeItem.shopify_product_id} but shopify_variant_id is missing. ` +
+        `Aborting to prevent duplicate. Manual repair required — set shopify_variant_id or clear shopify_product_id to re-sync.`
+      )
+    }
+
+    if (isUpdate) {
+      console.warn(JSON.stringify({
+        event: 'shopify_sync_forced_update_existing_product',
+        item_id: item.id,
+        sku: item.sku,
+        shopify_product_id: intakeItem.shopify_product_id,
+        shopify_variant_id: intakeItem.shopify_variant_id
+      }))
     }
 
     // Use normalized_tags as source of truth for Shopify tags
