@@ -52,6 +52,14 @@ verify_jwt = false
 [functions.bulk-shopify-sync]
 verify_jwt = false
 
+# Queue-based Shopify sync (admin/staff - creates queued jobs)
+[functions.queue-shopify-sync]
+verify_jwt = false
+
+# Process queued Shopify sync jobs (worker - no JWT for cron)
+[functions.process-shopify-sync-queue]
+verify_jwt = false
+
 # Shopify webhook handler (public - validates HMAC signature)
 [functions.shopify-webhook]
 verify_jwt = false
