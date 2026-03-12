@@ -6,6 +6,191 @@ const MAX_CONCURRENCY = 10
 const STALE_RUNNING_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
 const LEASE_DURATION_SECONDS = 300 // 5 minutes
 const HEARTBEAT_INTERVAL_MS = 60_000 // refresh every 60s
+const MAX_ITEM_ATTEMPTS = 5
+const BACKOFF_BASE_MS = 2000
+const BACKOFF_MAX_MS = 60_000
+
+// ── Failure Classification ──
+
+type FailureCode =
+  | 'duplicate'
+  | 'validation_error'
+  | 'rate_limited'
+  | 'shopify_api_error'
+  | 'network_error'
+  | 'missing_inventory_data'
+  | 'blocked_business_rule'
+  | 'unknown_error'
+
+const RETRYABLE_CODES: ReadonlySet<FailureCode> = new Set([
+  'rate_limited',
+  'network_error',
+  'shopify_api_error',
+])
+
+const PERMANENT_CODES: ReadonlySet<FailureCode> = new Set([
+  'duplicate',
+  'validation_error',
+  'missing_inventory_data',
+  'blocked_business_rule',
+])
+
+function isRetryable(code: FailureCode): boolean {
+  return RETRYABLE_CODES.has(code)
+}
+
+function classifyError(errorMsg?: string | null): FailureCode {
+  if (!errorMsg) return 'unknown_error'
+  const msg = errorMsg.toLowerCase()
+
+  if (msg.includes('duplicate protection') || msg.includes('already exists') || msg.includes('duplicate sku'))
+    return 'duplicate'
+  if (msg.includes('throttl') || msg.includes('rate limit') || msg.includes('429') || msg.includes('too many requests'))
+    return 'rate_limited'
+  if (msg.includes('missing') && (msg.includes('sku') || msg.includes('price') || msg.includes('inventory') || msg.includes('data')))
+    return 'missing_inventory_data'
+  if (msg.includes('invalid') || msg.includes('validation') || msg.includes('required field') || msg.includes('must be'))
+    return 'validation_error'
+  if (msg.includes('blocked') || msg.includes('not eligible') || msg.includes('business rule') || msg.includes('cannot sync'))
+    return 'blocked_business_rule'
+  if (msg.includes('fetch') || msg.includes('econnrefused') || msg.includes('timeout') || msg.includes('network') || msg.includes('dns') || msg.includes('enotfound'))
+    return 'network_error'
+  if (msg.includes('shopify') || msg.includes('graphql') || msg.includes('api error') || /\b[45]\d{2}\b/.test(msg))
+    return 'shopify_api_error'
+
+  return 'unknown_error'
+}
+
+/** Calculate next retry delay with exponential backoff + jitter */
+function calcBackoffMs(attemptCount: number): number {
+  const delay = Math.min(BACKOFF_BASE_MS * Math.pow(2, attemptCount - 1), BACKOFF_MAX_MS)
+  const jitter = delay * 0.3 * Math.random()
+  return Math.round(delay + jitter)
+}
+
+// ── Job Status Types ──
+
+type JobStatus = 'queued' | 'running' | 'partial' | 'completed' | 'failed' | 'cancelled'
+
+const TERMINAL_STATUSES: ReadonlySet<JobStatus> = new Set(['completed', 'failed', 'partial', 'cancelled'])
+
+interface ItemCounts {
+  succeeded: number
+  failed: number
+  remaining: number
+  totalApiCalls: number
+  processed: number
+}
+
+function countItems(items: any[]): ItemCounts {
+  const succeeded = items.filter((i: any) => i.status === 'succeeded').length
+  const failed = items.filter((i: any) => i.status === 'failed' || i.status === 'blocked').length
+  const remaining = items.filter((i: any) => i.status === 'queued').length
+  const totalApiCalls = items.reduce((s: number, i: any) => s + (i.api_calls || 0), 0)
+  return { succeeded, failed, remaining, totalApiCalls, processed: succeeded + failed }
+}
+
+function resolveJobStatus(counts: ItemCounts, isCancelled: boolean): JobStatus {
+  if (isCancelled) return 'cancelled'
+  const { succeeded, failed, remaining, processed } = counts
+  if (remaining > 0 && processed > 0) return 'partial'
+  if (remaining > 0 && processed === 0) return 'queued'
+  if (failed > 0 && succeeded === 0) return 'failed'
+  if (failed > 0) return 'partial'
+  return 'completed'
+}
+
+function mapJobStatusToRunStatus(status: JobStatus): string {
+  if (status === 'partial') return 'partial_failure'
+  return status
+}
+
+// ── Finalization ──
+
+async function finalizeJob(supabase: any, jobId: string, durationMs?: number, wasCancelled?: boolean) {
+  let isCancelled = wasCancelled || false
+  const { data: currentJob } = await supabase
+    .from('shopify_sync_job_queue')
+    .select('status, batch_id, store_key, triggered_by, total_items')
+    .eq('id', jobId)
+    .single()
+
+  if (currentJob?.status === 'cancelled') {
+    isCancelled = true
+  }
+
+  const { data: items } = await supabase
+    .from('shopify_sync_job_items')
+    .select('status, api_calls, duration_ms, item_id, last_error, shopify_product_id, shopify_variant_id')
+    .eq('job_id', jobId)
+
+  const allItems = items || []
+  const counts = countItems(allItems)
+  const status = resolveJobStatus(counts, isCancelled)
+  const isTerminal = TERMINAL_STATUSES.has(status)
+
+  await supabase.from('shopify_sync_job_queue').update({
+    status,
+    processed_items: counts.processed,
+    succeeded: counts.succeeded,
+    failed: counts.failed,
+    total_api_calls: counts.totalApiCalls,
+    total_duration_ms: durationMs || 0,
+    completed_at: isTerminal ? new Date().toISOString() : null,
+    heartbeat_at: null,
+    lease_expires_at: null,
+    claimed_by: null
+  }).eq('id', jobId)
+
+  if (!currentJob || !isTerminal) return
+
+  const { data: existingRun } = await supabase
+    .from('shopify_sync_runs')
+    .select('id')
+    .eq('batch_id', currentJob.batch_id)
+    .single()
+
+  const runData = {
+    batch_id: currentJob.batch_id,
+    mode: 'bulk',
+    store_key: currentJob.store_key,
+    total_items: currentJob.total_items,
+    succeeded: counts.succeeded,
+    failed: counts.failed,
+    total_api_calls: counts.totalApiCalls,
+    total_duration_ms: durationMs || 0,
+    triggered_by: currentJob.triggered_by,
+    status: mapJobStatusToRunStatus(status)
+  }
+
+  let runId: string
+  if (existingRun) {
+    await supabase.from('shopify_sync_runs').update(runData).eq('id', existingRun.id)
+    runId = existingRun.id
+  } else {
+    const { data: newRun } = await supabase.from('shopify_sync_runs').insert(runData).select('id').single()
+    runId = newRun?.id
+  }
+
+  if (runId) {
+    for (const item of allItems) {
+      if (item.status === 'succeeded' || item.status === 'failed' || item.status === 'blocked') {
+        await supabase.from('shopify_sync_run_items').upsert({
+          run_id: runId,
+          item_id: item.item_id,
+          success: item.status === 'succeeded',
+          error: item.last_error,
+          shopify_product_id: item.shopify_product_id,
+          shopify_variant_id: item.shopify_variant_id,
+          api_calls: item.api_calls || 0,
+          duration_ms: item.duration_ms || 0
+        }, { onConflict: 'run_id,item_id', ignoreDuplicates: false })
+      }
+    }
+  }
+}
+
+// ── Main Worker ──
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -21,7 +206,6 @@ Deno.serve(async (req) => {
     const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2')
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Parse optional job_id from body (for resume)
     let targetJobId: string | null = null
     try {
       const body = await req.json()
@@ -30,7 +214,6 @@ Deno.serve(async (req) => {
 
     // --- Phase 1: Reclaim stale resources ---
 
-    // Reclaim stale jobs whose lease expired (atomic, moves running items back to queued)
     const { data: reclaimedJobs } = await supabase.rpc('reclaim_stale_shopify_sync_jobs')
     if (reclaimedJobs?.length) {
       console.log(JSON.stringify({
@@ -40,7 +223,6 @@ Deno.serve(async (req) => {
       }))
     }
 
-    // Also reclaim orphaned stale running items (belt-and-suspenders)
     const staleThreshold = new Date(Date.now() - STALE_RUNNING_TIMEOUT_MS).toISOString()
     await supabase
       .from('shopify_sync_job_items')
@@ -127,7 +309,6 @@ Deno.serve(async (req) => {
       const token = tokenSetting?.key_value
       if (!domain || !token) throw new Error(`Missing Shopify credentials for ${job.store_key}`)
 
-      // Helper: check if the job has been cancelled
       async function isJobCancelled(): Promise<boolean> {
         const { data } = await supabase
           .from('shopify_sync_job_queue')
@@ -137,7 +318,6 @@ Deno.serve(async (req) => {
         return data?.status === 'cancelled'
       }
 
-      // Check cancellation before claiming items
       if (await isJobCancelled()) {
         const totalMs = totalTimer()
         stopHeartbeat()
@@ -187,6 +367,7 @@ Deno.serve(async (req) => {
       let succeededCount = job.succeeded || 0
       let failedCount = job.failed || 0
       let totalApiCalls = job.total_api_calls || 0
+      let requeuedCount = 0
       let cancelledDuringProcessing = false
 
       let nextIndex = 0
@@ -209,7 +390,8 @@ Deno.serve(async (req) => {
           console.log(JSON.stringify({
             event: 'shopify_sync_job_item_started',
             job_id: job.id,
-            item_id: jobItem.item_id
+            item_id: jobItem.item_id,
+            attempt: jobItem.attempt_count
           }))
 
           const syncItem = {
@@ -229,57 +411,105 @@ Deno.serve(async (req) => {
             cost: dbItem?.cost
           }
 
+          let failureCode: FailureCode | null = null
+          let errorMsg: string | null = null
+          let result: any = null
+
           try {
-            const result = await syncGradedItemToShopify(syncItem, ctx)
+            result = await syncGradedItemToShopify(syncItem, ctx)
+            if (!result.success) {
+              failureCode = classifyError(result.error)
+              errorMsg = result.error || null
+            }
+          } catch (err) {
+            failureCode = classifyError(err.message)
+            errorMsg = err.message
+          }
 
-            const failureCode = result.success ? null : classifyError(result.error)
-            const itemStatus = result.success ? 'succeeded' :
-              (failureCode === 'duplicate' || failureCode === 'blocked_business_rule' ? 'blocked' : 'failed')
-
+          // Determine outcome
+          if (result?.success) {
+            // ✅ Success
             await supabase.from('shopify_sync_job_items').update({
-              status: itemStatus,
-              failure_code: failureCode,
-              last_error: result.error || null,
+              status: 'succeeded',
+              failure_code: null,
+              last_error: null,
               shopify_product_id: result.shopify_product_id || null,
               shopify_variant_id: result.shopify_variant_id || null,
               api_calls: result.api_calls,
               duration_ms: result.duration_ms,
+              next_retry_at: null,
               updated_at: new Date().toISOString()
             }).eq('id', jobItem.id)
 
-            if (result.success) succeededCount++
-            else failedCount++
-            totalApiCalls += result.api_calls
+            succeededCount++
             processedCount++
 
             console.log(JSON.stringify({
-              event: result.success ? 'shopify_sync_job_item_complete' : 'shopify_sync_job_item_failed',
+              event: 'shopify_sync_job_item_complete',
               job_id: job.id,
               item_id: jobItem.item_id,
-              success: result.success,
-              failure_code: failureCode,
-              error: result.error
+              success: true
             }))
-          } catch (err) {
-            const failureCode = classifyError(err.message)
-            failedCount++
-            processedCount++
+          } else if (failureCode && isRetryable(failureCode) && jobItem.attempt_count < (jobItem.max_attempts || MAX_ITEM_ATTEMPTS)) {
+            // 🔄 Retryable — requeue with backoff
+            const backoffMs = calcBackoffMs(jobItem.attempt_count)
+            const nextRetryAt = new Date(Date.now() + backoffMs).toISOString()
 
             await supabase.from('shopify_sync_job_items').update({
-              status: 'failed',
+              status: 'queued',
               failure_code: failureCode,
-              last_error: err.message,
+              last_error: errorMsg,
+              api_calls: (jobItem.api_calls || 0) + (result?.api_calls || 0),
+              duration_ms: (jobItem.duration_ms || 0) + (result?.duration_ms || 0),
+              next_retry_at: nextRetryAt,
               updated_at: new Date().toISOString()
             }).eq('id', jobItem.id)
+
+            requeuedCount++
+
+            console.log(JSON.stringify({
+              event: 'shopify_sync_job_item_requeued',
+              job_id: job.id,
+              item_id: jobItem.item_id,
+              failure_code: failureCode,
+              attempt: jobItem.attempt_count,
+              max_attempts: jobItem.max_attempts || MAX_ITEM_ATTEMPTS,
+              next_retry_at: nextRetryAt,
+              backoff_ms: backoffMs,
+              error: errorMsg
+            }))
+          } else {
+            // ❌ Permanent failure or max attempts exhausted
+            const isPermanent = failureCode && PERMANENT_CODES.has(failureCode)
+            const itemStatus = (failureCode === 'duplicate' || failureCode === 'blocked_business_rule')
+              ? 'blocked' : 'failed'
+
+            await supabase.from('shopify_sync_job_items').update({
+              status: itemStatus,
+              failure_code: failureCode,
+              last_error: errorMsg,
+              api_calls: (jobItem.api_calls || 0) + (result?.api_calls || 0),
+              duration_ms: (jobItem.duration_ms || 0) + (result?.duration_ms || 0),
+              next_retry_at: null,
+              updated_at: new Date().toISOString()
+            }).eq('id', jobItem.id)
+
+            failedCount++
+            processedCount++
 
             console.log(JSON.stringify({
               event: 'shopify_sync_job_item_failed',
               job_id: job.id,
               item_id: jobItem.item_id,
               failure_code: failureCode,
-              error: err.message
+              permanent: isPermanent,
+              attempt: jobItem.attempt_count,
+              max_attempts: jobItem.max_attempts || MAX_ITEM_ATTEMPTS,
+              error: errorMsg
             }))
           }
+
+          totalApiCalls += result?.api_calls || 0
 
           // Update job progress
           await supabase.from('shopify_sync_job_queue').update({
@@ -326,6 +556,7 @@ Deno.serve(async (req) => {
         processed: processedCount,
         succeeded: succeededCount,
         failed: failedCount,
+        requeued: requeuedCount,
         total_api_calls: totalApiCalls,
         total_duration_ms: totalMs,
         worker_id: workerId
@@ -338,6 +569,7 @@ Deno.serve(async (req) => {
         processed: processedCount,
         succeeded: succeededCount,
         failed: failedCount,
+        requeued: requeuedCount,
         total_api_calls: totalApiCalls,
         total_duration_ms: totalMs,
         cancelled: cancelledDuringProcessing
@@ -346,7 +578,6 @@ Deno.serve(async (req) => {
       })
 
     } finally {
-      // Ensure heartbeat is always cleaned up
       stopHeartbeat()
     }
 
@@ -363,180 +594,3 @@ Deno.serve(async (req) => {
     })
   }
 })
-
-// ── Job Status Types ──
-
-type JobStatus = 'queued' | 'running' | 'partial' | 'completed' | 'failed' | 'cancelled'
-
-const TERMINAL_STATUSES: ReadonlySet<JobStatus> = new Set(['completed', 'failed', 'partial', 'cancelled'])
-
-interface ItemCounts {
-  succeeded: number
-  failed: number
-  remaining: number
-  totalApiCalls: number
-  processed: number
-}
-
-function countItems(items: any[]): ItemCounts {
-  const succeeded = items.filter((i: any) => i.status === 'succeeded').length
-  const failed = items.filter((i: any) => i.status === 'failed' || i.status === 'blocked').length
-  const remaining = items.filter((i: any) => i.status === 'queued').length
-  const totalApiCalls = items.reduce((s: number, i: any) => s + (i.api_calls || 0), 0)
-  return { succeeded, failed, remaining, totalApiCalls, processed: succeeded + failed }
-}
-
-function resolveJobStatus(counts: ItemCounts, isCancelled: boolean): JobStatus {
-  if (isCancelled) return 'cancelled'
-  const { succeeded, failed, remaining, processed } = counts
-  if (remaining > 0 && processed > 0) return 'partial'
-  if (remaining > 0 && processed === 0) return 'queued'
-  if (failed > 0 && succeeded === 0) return 'failed'
-  if (failed > 0) return 'partial'
-  return 'completed'
-}
-
-function mapJobStatusToRunStatus(status: JobStatus): string {
-  if (status === 'partial') return 'partial_failure'
-  return status // completed, failed, cancelled pass through
-}
-
-// ── Finalization ──
-
-async function finalizeJob(supabase: any, jobId: string, durationMs?: number, wasCancelled?: boolean) {
-  // Determine cancellation: caller flag OR current DB state
-  let isCancelled = wasCancelled || false
-  const { data: currentJob } = await supabase
-    .from('shopify_sync_job_queue')
-    .select('status, batch_id, store_key, triggered_by, total_items')
-    .eq('id', jobId)
-    .single()
-
-  if (!isCancelled && currentJob?.status === 'cancelled') {
-    isCancelled = true
-  }
-
-  // Never overwrite a cancellation with another state
-  if (currentJob?.status === 'cancelled') {
-    isCancelled = true
-  }
-
-  // Count item results
-  const { data: items } = await supabase
-    .from('shopify_sync_job_items')
-    .select('status, api_calls, duration_ms, item_id, last_error, shopify_product_id, shopify_variant_id')
-    .eq('job_id', jobId)
-
-  const allItems = items || []
-  const counts = countItems(allItems)
-  const status = resolveJobStatus(counts, isCancelled)
-  const isTerminal = TERMINAL_STATUSES.has(status)
-
-  // Update job record
-  await supabase.from('shopify_sync_job_queue').update({
-    status,
-    processed_items: counts.processed,
-    succeeded: counts.succeeded,
-    failed: counts.failed,
-    total_api_calls: counts.totalApiCalls,
-    total_duration_ms: durationMs || 0,
-    completed_at: isTerminal ? new Date().toISOString() : null,
-    heartbeat_at: null,
-    lease_expires_at: null,
-    claimed_by: null
-  }).eq('id', jobId)
-
-  // Sync results into shopify_sync_runs for dashboard history
-  if (!currentJob || !isTerminal) return
-
-  const { data: existingRun } = await supabase
-    .from('shopify_sync_runs')
-    .select('id')
-    .eq('batch_id', currentJob.batch_id)
-    .single()
-
-  const runData = {
-    batch_id: currentJob.batch_id,
-    mode: 'bulk',
-    store_key: currentJob.store_key,
-    total_items: currentJob.total_items,
-    succeeded: counts.succeeded,
-    failed: counts.failed,
-    total_api_calls: counts.totalApiCalls,
-    total_duration_ms: durationMs || 0,
-    triggered_by: currentJob.triggered_by,
-    status: mapJobStatusToRunStatus(status)
-  }
-
-  let runId: string
-  if (existingRun) {
-    await supabase.from('shopify_sync_runs').update(runData).eq('id', existingRun.id)
-    runId = existingRun.id
-  } else {
-    const { data: newRun } = await supabase.from('shopify_sync_runs').insert(runData).select('id').single()
-    runId = newRun?.id
-  }
-
-  // Upsert processed item results
-  if (runId) {
-    for (const item of allItems) {
-      if (item.status === 'succeeded' || item.status === 'failed' || item.status === 'blocked') {
-        await supabase.from('shopify_sync_run_items').upsert({
-          run_id: runId,
-          item_id: item.item_id,
-          success: item.status === 'succeeded',
-          error: item.last_error,
-          shopify_product_id: item.shopify_product_id,
-          shopify_variant_id: item.shopify_variant_id,
-          api_calls: item.api_calls || 0,
-          duration_ms: item.duration_ms || 0
-        }, { onConflict: 'run_id,item_id', ignoreDuplicates: false })
-      }
-    }
-  }
-}
-
-type FailureCode =
-  | 'duplicate'
-  | 'validation_error'
-  | 'rate_limited'
-  | 'shopify_api_error'
-  | 'network_error'
-  | 'missing_inventory_data'
-  | 'blocked_business_rule'
-  | 'unknown_error'
-
-function classifyError(errorMsg?: string | null): FailureCode {
-  if (!errorMsg) return 'unknown_error'
-  const msg = errorMsg.toLowerCase()
-
-  // Duplicate / already exists
-  if (msg.includes('duplicate protection') || msg.includes('already exists') || msg.includes('duplicate sku'))
-    return 'duplicate'
-
-  // Rate limiting
-  if (msg.includes('throttl') || msg.includes('rate limit') || msg.includes('429') || msg.includes('too many requests'))
-    return 'rate_limited'
-
-  // Missing data needed for sync
-  if (msg.includes('missing') && (msg.includes('sku') || msg.includes('price') || msg.includes('inventory') || msg.includes('data')))
-    return 'missing_inventory_data'
-
-  // Validation errors
-  if (msg.includes('invalid') || msg.includes('validation') || msg.includes('required field') || msg.includes('must be'))
-    return 'validation_error'
-
-  // Business rule blocks
-  if (msg.includes('blocked') || msg.includes('not eligible') || msg.includes('business rule') || msg.includes('cannot sync'))
-    return 'blocked_business_rule'
-
-  // Network errors
-  if (msg.includes('fetch') || msg.includes('econnrefused') || msg.includes('timeout') || msg.includes('network') || msg.includes('dns') || msg.includes('enotfound'))
-    return 'network_error'
-
-  // Shopify API errors (status codes or explicit API messages)
-  if (msg.includes('shopify') || msg.includes('graphql') || msg.includes('api error') || /\b[45]\d{2}\b/.test(msg))
-    return 'shopify_api_error'
-
-  return 'unknown_error'
-}

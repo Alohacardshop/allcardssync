@@ -2912,6 +2912,8 @@ export type Database = {
           item_id: string
           job_id: string
           last_error: string | null
+          max_attempts: number
+          next_retry_at: string | null
           shopify_product_id: string | null
           shopify_variant_id: string | null
           status: string
@@ -2927,6 +2929,8 @@ export type Database = {
           item_id: string
           job_id: string
           last_error?: string | null
+          max_attempts?: number
+          next_retry_at?: string | null
           shopify_product_id?: string | null
           shopify_variant_id?: string | null
           status?: string
@@ -2942,6 +2946,8 @@ export type Database = {
           item_id?: string
           job_id?: string
           last_error?: string | null
+          max_attempts?: number
+          next_retry_at?: string | null
           shopify_product_id?: string | null
           shopify_variant_id?: string | null
           status?: string
@@ -4348,6 +4354,8 @@ export type Database = {
           item_id: string
           job_id: string
           last_error: string | null
+          max_attempts: number
+          next_retry_at: string | null
           shopify_product_id: string | null
           shopify_variant_id: string | null
           status: string
