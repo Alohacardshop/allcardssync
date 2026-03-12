@@ -33,31 +33,18 @@ Deno.serve(async (req) => {
       .eq('status', 'running')
       .lt('updated_at', staleThreshold)
 
-    // Claim next job: specific or oldest queued/partial
-    let jobQuery = supabase
-      .from('shopify_sync_job_queue')
-      .select('*')
+    // Atomically claim the next job via RPC
+    const { data: claimedJobs, error: claimErr } = await supabase
+      .rpc('claim_shopify_sync_job', { target_job_id: targetJobId || undefined })
 
-    if (targetJobId) {
-      jobQuery = jobQuery.eq('id', targetJobId).in('status', ['queued', 'partial', 'running'])
-    } else {
-      jobQuery = jobQuery.in('status', ['queued', 'partial']).order('created_at', { ascending: true }).limit(1)
-    }
-
-    const { data: jobs, error: jobErr } = await jobQuery
-    if (jobErr) throw new Error(`Failed to fetch job: ${jobErr.message}`)
-    if (!jobs?.length) {
+    if (claimErr) throw new Error(`Failed to claim job: ${claimErr.message}`)
+    if (!claimedJobs?.length) {
       return new Response(JSON.stringify({ success: true, message: 'No jobs to process' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
 
-    const job = jobs[0]
-
-    // Mark job as running
-    await supabase.from('shopify_sync_job_queue')
-      .update({ status: 'running', started_at: job.started_at || new Date().toISOString() })
-      .eq('id', job.id)
+    const job = claimedJobs[0]
 
     console.log(JSON.stringify({
       event: 'shopify_sync_job_started',
@@ -78,16 +65,13 @@ Deno.serve(async (req) => {
     const token = tokenSetting?.key_value
     if (!domain || !token) throw new Error(`Missing Shopify credentials for ${job.store_key}`)
 
-    // Get queued items for this job
-    const { data: queuedItems, error: itemsErr } = await supabase
-      .from('shopify_sync_job_items')
-      .select('*')
-      .eq('job_id', job.id)
-      .eq('status', 'queued')
-      .order('created_at', { ascending: true })
+    // Atomically claim queued items for this job via RPC
+    const concurrency = Math.min(DEFAULT_CONCURRENCY, MAX_CONCURRENCY)
+    const { data: claimedItems, error: itemsErr } = await supabase
+      .rpc('claim_shopify_sync_job_items', { p_job_id: job.id, p_limit: 500 })
 
-    if (itemsErr) throw new Error(`Failed to fetch job items: ${itemsErr.message}`)
-    if (!queuedItems?.length) {
+    if (itemsErr) throw new Error(`Failed to claim job items: ${itemsErr.message}`)
+    if (!claimedItems?.length) {
       // All items already processed, finalize
       await finalizeJob(supabase, job.id)
       return new Response(JSON.stringify({ success: true, message: 'Job already complete' }), {
@@ -95,8 +79,8 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Fetch intake item data for all queued items
-    const itemIds = queuedItems.map((qi: any) => qi.item_id)
+    // Fetch intake item data for all claimed items
+    const itemIds = claimedItems.map((qi: any) => qi.item_id)
     const { data: intakeItems } = await supabase
       .from('intake_items')
       .select('id, sku, price, cost, psa_cert, grade, year, brand_title, subject, card_number, variant, category, image_url')
@@ -114,7 +98,6 @@ Deno.serve(async (req) => {
     }
 
     // Process with controlled concurrency
-    const concurrency = Math.min(DEFAULT_CONCURRENCY, MAX_CONCURRENCY)
     let processedCount = job.processed_items || 0
     let succeededCount = job.succeeded || 0
     let failedCount = job.failed || 0
@@ -123,15 +106,10 @@ Deno.serve(async (req) => {
     let nextIndex = 0
 
     async function worker() {
-      while (nextIndex < queuedItems.length) {
+      while (nextIndex < claimedItems.length) {
         const idx = nextIndex++
-        const jobItem = queuedItems[idx]
+        const jobItem = claimedItems[idx]
         const dbItem = itemMap.get(jobItem.item_id)
-
-        // Mark item as running
-        await supabase.from('shopify_sync_job_items')
-          .update({ status: 'running', attempt_count: jobItem.attempt_count + 1, updated_at: new Date().toISOString() })
-          .eq('id', jobItem.id)
 
         console.log(JSON.stringify({
           event: 'shopify_sync_job_item_started',
@@ -213,7 +191,7 @@ Deno.serve(async (req) => {
     }
 
     const workers = Array.from(
-      { length: Math.min(concurrency, queuedItems.length) },
+      { length: Math.min(concurrency, claimedItems.length) },
       () => worker()
     )
     await Promise.all(workers)
