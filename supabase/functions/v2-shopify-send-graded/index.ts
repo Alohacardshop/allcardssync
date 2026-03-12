@@ -11,30 +11,22 @@ Deno.serve(async (req) => {
   const totalTimer = timer()
 
   try {
-    // 1. Authenticate user and validate JWT
     const user = await requireAuth(req)
-    
-    // 2. Verify user has staff/admin role
     await requireRole(user.id, ['admin', 'staff'])
 
-    // 3. Validate input with Zod schema
     const body = await req.json()
     const input: SendGradedInput = SendGradedSchema.parse(body)
     const { storeKey, locationGid, vendor, item } = input
 
-    // 4. Verify user has access to this store/location
     await requireStoreAccess(user.id, storeKey, locationGid)
 
-    // 5. Log audit trail
     console.log(`[AUDIT] User ${user.id} (${user.email}) triggered shopify-send-graded for store ${storeKey}, item ${item.id}`)
 
-    // Get Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2')
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Get Shopify credentials
     const storeUpper = storeKey.toUpperCase()
     const [{ data: domainSetting }, { data: tokenSetting }] = await Promise.all([
       supabase.from('system_settings').select('key_value').eq('key_name', `SHOPIFY_${storeUpper}_STORE_DOMAIN`).single(),
@@ -48,13 +40,55 @@ Deno.serve(async (req) => {
       throw new Error(`Missing Shopify credentials for ${storeKey}`)
     }
 
-    // Execute sync using shared helper
+    // Create sync run record
+    const batchId = crypto.randomUUID().slice(0, 8)
+    const { data: runRecord } = await supabase
+      .from('shopify_sync_runs')
+      .insert({
+        batch_id: batchId,
+        mode: 'single',
+        store_key: storeKey,
+        total_items: 1,
+        triggered_by: user.id,
+        status: 'running'
+      })
+      .select('id')
+      .single()
+
+    const runId = runRecord?.id
+
+    // Execute sync
     const result = await syncGradedItemToShopify(item, {
       domain, token, storeKey, locationGid, vendor, userId: user.id, supabase
     })
 
+    const totalMs = totalTimer()
+
+    // Persist item result
+    if (runId) {
+      await supabase.from('shopify_sync_run_items').insert({
+        run_id: runId,
+        item_id: item.id,
+        sku: item.sku,
+        title: item.title,
+        success: result.success,
+        error: result.error,
+        shopify_product_id: result.shopify_product_id,
+        shopify_variant_id: result.shopify_variant_id,
+        api_calls: result.api_calls,
+        duration_ms: result.duration_ms
+      })
+
+      await supabase.from('shopify_sync_runs').update({
+        succeeded: result.success ? 1 : 0,
+        failed: result.success ? 0 : 1,
+        total_api_calls: result.api_calls,
+        total_duration_ms: totalMs,
+        status: result.success ? 'completed' : 'failed'
+      }).eq('id', runId)
+    }
+
     if (!result.success) {
-      // Determine status code from error message
       let status = 500
       const msg = result.error || ''
       if (msg.includes('Duplicate protection')) status = 409
@@ -62,13 +96,9 @@ Deno.serve(async (req) => {
       else if (msg.includes('permissions') || msg.includes('Access denied')) status = 403
 
       return new Response(JSON.stringify({ success: false, error: result.error }), {
-        status,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        status, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
-
-    // Fetch product handle for URL construction
-    const totalMs = totalTimer()
 
     return new Response(JSON.stringify({
       success: true,
@@ -95,8 +125,7 @@ Deno.serve(async (req) => {
     else if (error.message?.includes('Invalid') || error.message?.includes('validation')) status = 400
 
     return new Response(JSON.stringify({ success: false, error: error.message }), {
-      status,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      status, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   }
 })
