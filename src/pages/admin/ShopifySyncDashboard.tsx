@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import {
   Activity, CheckCircle2, XCircle, AlertTriangle, Clock, Zap,
   RefreshCw, Wrench, ChevronDown, ChevronRight, Filter, Search,
-  ShoppingBag, Layers, Ban, Play, RotateCcw
+  ShoppingBag, Layers, Ban, Play, RotateCcw, HeartPulse, Timer
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +24,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import {
   Tabs, TabsContent, TabsList, TabsTrigger,
 } from '@/components/ui/tabs';
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import {
   useSyncRuns,
@@ -36,10 +39,13 @@ import {
   useCancelJob,
   useResumeJob,
   useRetryFailedJobItems,
+  useQueueStatusCounts,
+  useJobHealthMetrics,
   SyncRun,
   SyncJob,
   SyncJobItem,
   SyncDashboardFilters,
+  FAILURE_CODE_LABELS,
 } from '@/hooks/useShopifySyncDashboard';
 
 // ── Status Badges ──
@@ -92,33 +98,106 @@ function JobItemStatusBadge({ status }: { status: string }) {
   return <Badge variant="outline" className={v.class}>{v.label}</Badge>;
 }
 
+// ── Utility ──
+
+function formatAge(ms: number): string {
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  if (ms < 3600_000) return `${Math.round(ms / 60_000)}m`;
+  return `${Math.round(ms / 3600_000 * 10) / 10}h`;
+}
+
 // ── Summary Cards ──
 
 function SummaryCards({ dateFrom }: { dateFrom: string }) {
   const { data: stats, isLoading } = useSyncSummaryStats(dateFrom);
-
-  const cards = [
-    { label: 'Synced Today', value: stats?.totalSynced ?? '—', icon: CheckCircle2, color: 'text-emerald-600' },
-    { label: 'Failed Today', value: stats?.totalFailed ?? '—', icon: XCircle, color: 'text-red-600' },
-    { label: 'Queued', value: stats?.totalQueued ?? '—', icon: Layers, color: 'text-slate-600' },
-    { label: 'Blocked (Dup)', value: stats?.totalBlocked ?? '—', icon: AlertTriangle, color: 'text-orange-600' },
-    { label: 'Avg API Calls', value: stats?.avgApiCalls ?? '—', icon: Zap, color: 'text-purple-600' },
-    { label: 'Avg Duration', value: stats?.avgDuration ? `${stats.avgDuration}ms` : '—', icon: Activity, color: 'text-indigo-600' },
-  ];
+  const { data: queueCounts } = useQueueStatusCounts();
+  const { data: health } = useJobHealthMetrics();
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-      {cards.map((c) => (
-        <Card key={c.label} className="border-border/50">
+    <div className="space-y-3">
+      {/* Primary stats */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {[
+          { label: 'Synced Today', value: stats?.totalSynced ?? '—', icon: CheckCircle2, color: 'text-emerald-600' },
+          { label: 'Failed Today', value: stats?.totalFailed ?? '—', icon: XCircle, color: 'text-red-600' },
+          { label: 'Queued', value: queueCounts?.counts.queued ?? stats?.totalQueued ?? '—', icon: Layers, color: 'text-slate-600' },
+          { label: 'Running', value: queueCounts?.counts.running ?? '—', icon: Activity, color: 'text-blue-600' },
+          { label: 'Blocked', value: queueCounts?.counts.blocked ?? stats?.totalBlocked ?? '—', icon: AlertTriangle, color: 'text-orange-600' },
+          { label: 'Avg Duration', value: stats?.avgDuration ? `${stats.avgDuration}ms` : '—', icon: Zap, color: 'text-purple-600' },
+        ].map((c) => (
+          <Card key={c.label} className="border-border/50">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <c.icon className={cn('h-4 w-4', c.color)} />
+              </div>
+              <div className="text-2xl font-bold tracking-tight">{isLoading ? '…' : c.value}</div>
+              <p className="text-xs text-muted-foreground mt-1">{c.label}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Health & Failure Breakdown row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Job Health */}
+        <Card className="border-border/50">
           <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-2">
-              <c.icon className={cn('h-4 w-4', c.color)} />
+            <div className="flex items-center gap-2 mb-3">
+              <HeartPulse className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium">Job Health</span>
             </div>
-            <div className="text-2xl font-bold tracking-tight">{isLoading ? '…' : c.value}</div>
-            <p className="text-xs text-muted-foreground mt-1">{c.label}</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground">Active Jobs</p>
+                <p className="text-lg font-bold">{health?.activeCount ?? '—'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Oldest Job Age</p>
+                <p className="text-lg font-bold">
+                  {health?.oldestJobAgeMs ? formatAge(health.oldestJobAgeMs) : '—'}
+                </p>
+              </div>
+            </div>
+            {health?.staleJobs && health.staleJobs.length > 0 && (
+              <div className="mt-3 p-2 rounded-md bg-amber-500/10 border border-amber-500/20">
+                <div className="flex items-center gap-1.5 text-amber-700 text-xs font-medium mb-1">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  {health.staleJobs.length} stale job{health.staleJobs.length > 1 ? 's' : ''} detected
+                </div>
+                {health.staleJobs.map(sj => (
+                  <p key={sj.id} className="text-[11px] text-amber-600 font-mono">
+                    {sj.id.slice(0, 8)}… — last heartbeat {sj.ageSec}s ago
+                  </p>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
-      ))}
+
+        {/* Failure Breakdown */}
+        <Card className="border-border/50">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <XCircle className="h-4 w-4 text-red-500" />
+              <span className="text-sm font-medium">Failure Breakdown</span>
+            </div>
+            {queueCounts?.failureBreakdown && Object.keys(queueCounts.failureBreakdown).length > 0 ? (
+              <div className="space-y-2">
+                {Object.entries(queueCounts.failureBreakdown)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([code, count]) => (
+                    <div key={code} className="flex items-center justify-between">
+                      <FailureCodeBadge code={code} />
+                      <span className="text-sm font-bold tabular-nums">{count}</span>
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No failures in queue</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -186,6 +265,40 @@ function FiltersBar({
               <SelectItem value="failed">Failed</SelectItem>
               <SelectItem value="partial_failure">Partial</SelectItem>
               <SelectItem value="running">Running</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={filters.queueStatus || 'all'}
+            onValueChange={(v) => setFilters(f => ({ ...f, queueStatus: v === 'all' ? undefined : v }))}
+          >
+            <SelectTrigger className="w-[140px] h-8">
+              <SelectValue placeholder="Queue status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All queue</SelectItem>
+              <SelectItem value="queued">Queued</SelectItem>
+              <SelectItem value="running">Running</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="failed">Failed</SelectItem>
+              <SelectItem value="partial">Partial</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={filters.failureCode || 'all'}
+            onValueChange={(v) => setFilters(f => ({ ...f, failureCode: v === 'all' ? undefined : v }))}
+          >
+            <SelectTrigger className="w-[140px] h-8">
+              <SelectValue placeholder="Failure code" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All failures</SelectItem>
+              {Object.entries(FAILURE_CODE_LABELS).map(([code, label]) => (
+                <SelectItem key={code} value={code}>{label}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
@@ -279,7 +392,22 @@ function JobItemsTable({ jobId }: { jobId: string }) {
               <TableCell className="font-mono text-xs">{item.shopify_product_id || '—'}</TableCell>
               <TableCell className="text-xs">{item.api_calls}</TableCell>
               <TableCell className="text-xs">{item.duration_ms}ms</TableCell>
-              <TableCell className="text-xs max-w-[200px] truncate text-red-600">{item.last_error || '—'}</TableCell>
+              <TableCell>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-xs max-w-[200px] truncate block text-red-600 cursor-help">
+                        {item.last_error || '—'}
+                      </span>
+                    </TooltipTrigger>
+                    {item.last_error && (
+                      <TooltipContent side="left" className="max-w-[400px] text-xs">
+                        {item.last_error}
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                </TooltipProvider>
+              </TableCell>
               <TableCell>
                 {(item.failure_code === 'duplicate' || item.last_error?.includes('Duplicate protection')) && (
                   <Button
@@ -312,9 +440,21 @@ function JobRow({ job }: { job: SyncJob }) {
   const canResume = job.status === 'partial' || job.status === 'failed';
   const hasFailed = job.failed > 0 && !isActive;
 
+  // Heartbeat staleness
+  const isStale = job.status === 'running' && job.heartbeat_at &&
+    (Date.now() - new Date(job.heartbeat_at).getTime()) > 120_000;
+
+  // Error/cancel summary
+  const jobSummary = job.status === 'cancelled'
+    ? (job.error || 'Cancelled by user')
+    : job.error;
+
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <TableRow className="cursor-pointer hover:bg-muted/50" onClick={() => setOpen(!open)}>
+      <TableRow className={cn(
+        "cursor-pointer hover:bg-muted/50",
+        isStale && "bg-amber-500/5"
+      )} onClick={() => setOpen(!open)}>
         <TableCell>
           <CollapsibleTrigger asChild>
             <span className="inline-flex items-center">
@@ -336,7 +476,35 @@ function JobRow({ job }: { job: SyncJob }) {
         <TableCell className="text-xs text-emerald-600 font-medium">{job.succeeded}</TableCell>
         <TableCell className="text-xs text-red-600 font-medium">{job.failed}</TableCell>
         <TableCell className="text-xs">{job.total_api_calls}</TableCell>
-        <TableCell><StatusBadge status={job.status} /></TableCell>
+        <TableCell>
+          <div className="flex items-center gap-1.5">
+            <StatusBadge status={job.status} />
+            {isStale && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <HeartPulse className="h-3.5 w-3.5 text-amber-500" />
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs">
+                    Stale — last heartbeat {job.heartbeat_at ? formatDistanceToNow(new Date(job.heartbeat_at)) + ' ago' : 'unknown'}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </div>
+        </TableCell>
+        <TableCell className="text-xs max-w-[150px]">
+          {jobSummary && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="truncate block text-muted-foreground cursor-help">{jobSummary}</span>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="max-w-[300px] text-xs">{jobSummary}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </TableCell>
         <TableCell>
           <div className="flex gap-1">
             {isActive && (
@@ -368,7 +536,7 @@ function JobRow({ job }: { job: SyncJob }) {
       </TableRow>
       <CollapsibleContent asChild>
         <tr>
-          <td colSpan={11} className="p-0">
+          <td colSpan={12} className="p-0">
             <JobItemsTable jobId={job.id} />
           </td>
         </tr>
@@ -410,7 +578,22 @@ function RunItemsTable({ runId }: { runId: string }) {
               <TableCell className="font-mono text-xs">{item.shopify_product_id || '—'}</TableCell>
               <TableCell className="text-xs">{item.api_calls}</TableCell>
               <TableCell className="text-xs">{item.duration_ms}ms</TableCell>
-              <TableCell className="text-xs max-w-[200px] truncate text-red-600">{item.error || '—'}</TableCell>
+              <TableCell>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-xs max-w-[200px] truncate block text-red-600 cursor-help">
+                        {item.error || '—'}
+                      </span>
+                    </TooltipTrigger>
+                    {item.error && (
+                      <TooltipContent side="left" className="max-w-[400px] text-xs">
+                        {item.error}
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                </TooltipProvider>
+              </TableCell>
               <TableCell>
                 {item.error?.includes('Duplicate protection') && (
                   <Button size="sm" variant="outline" className="h-6 text-xs gap-1"
@@ -483,7 +666,7 @@ export default function ShopifySyncDashboard() {
   const today = format(new Date(), 'yyyy-MM-dd');
   const [filters, setFilters] = useState<SyncDashboardFilters>({});
   const { data: runs, isLoading: runsLoading } = useSyncRuns(filters);
-  const { data: jobs, isLoading: jobsLoading } = useSyncJobs();
+  const { data: jobs, isLoading: jobsLoading } = useSyncJobs(filters);
 
   const activeJobs = (jobs || []).filter(j => j.status === 'queued' || j.status === 'running');
   const recentJobs = jobs || [];
@@ -538,14 +721,15 @@ export default function ShopifySyncDashboard() {
                     <TableHead className="text-xs">✗</TableHead>
                     <TableHead className="text-xs">API</TableHead>
                     <TableHead className="text-xs">Status</TableHead>
+                    <TableHead className="text-xs">Info</TableHead>
                     <TableHead className="text-xs">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {jobsLoading ? (
-                    <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Loading…</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">Loading…</TableCell></TableRow>
                   ) : !recentJobs.length ? (
-                    <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No queued jobs</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">No queued jobs</TableCell></TableRow>
                   ) : (
                     recentJobs.map((job) => <JobRow key={job.id} job={job} />)
                   )}
