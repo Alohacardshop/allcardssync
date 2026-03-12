@@ -330,6 +330,7 @@ export function useRetryFailedItems() {
 
   return useMutation({
     mutationFn: async ({ runId }: { runId: string }) => {
+      // Fetch failed items from the historical run
       const { data: failedItems, error } = await supabase
         .from('shopify_sync_run_items' as any)
         .select('item_id')
@@ -339,24 +340,44 @@ export function useRetryFailedItems() {
       if (error) throw error;
       if (!failedItems?.length) throw new Error('No failed items to retry');
 
+      // Fetch run context (store_key) for the retry job
       const { data: run } = await supabase
         .from('shopify_sync_runs' as any)
-        .select('store_key')
+        .select('store_key, batch_id')
         .eq('id', runId)
+        .single();
+
+      if (!run) throw new Error('Could not find sync run');
+      const runData = run as any;
+
+      // Look up the original job to get location_gid and vendor
+      const { data: originalJob } = await supabase
+        .from('shopify_sync_job_queue' as any)
+        .select('location_gid, vendor')
+        .eq('batch_id', runData.batch_id)
+        .limit(1)
         .single();
 
       const itemIds = (failedItems as any[]).map((i: any) => i.item_id);
 
-      const { data, error: invokeError } = await supabase.functions.invoke('bulk-shopify-sync', {
-        body: { item_ids: itemIds, storeKey: (run as any)?.store_key }
+      // Create a new queued job through queue-shopify-sync (fully tracked)
+      const { data, error: invokeError } = await supabase.functions.invoke('queue-shopify-sync', {
+        body: {
+          item_ids: itemIds,
+          storeKey: runData.store_key,
+          locationGid: (originalJob as any)?.location_gid,
+          vendor: (originalJob as any)?.vendor || null,
+        }
       });
 
       if (invokeError) throw invokeError;
+      if (!data?.success) throw new Error(data?.error || 'Failed to queue retry job');
       return data;
     },
-    onSuccess: () => {
-      toast.success('Retry started for failed items');
+    onSuccess: (data) => {
+      toast.success(`Retry job queued (${data.total_items} items)`);
       queryClient.invalidateQueries({ queryKey: ['shopify-sync-runs'] });
+      queryClient.invalidateQueries({ queryKey: ['shopify-sync-jobs'] });
     },
     onError: (error: Error) => {
       toast.error(`Retry failed: ${error.message}`);
