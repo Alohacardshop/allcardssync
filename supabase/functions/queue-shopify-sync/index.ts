@@ -143,6 +143,30 @@ Deno.serve(async (req) => {
       deduped_count: item_ids.length - uniqueItemIds.length
     }))
 
+    // Fire-and-forget: trigger the worker to start processing immediately
+    const workerUrl = `${supabaseUrl}/functions/v1/process-shopify-sync-queue`
+    fetch(workerUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseServiceKey}`
+      },
+      body: JSON.stringify({ job_id: job.id })
+    }).then(() => {
+      console.log(JSON.stringify({
+        event: 'shopify_sync_worker_triggered',
+        job_id: job.id,
+        batch_id: batchId
+      }))
+    }).catch(err => {
+      console.error(JSON.stringify({
+        event: 'shopify_sync_worker_trigger_failed',
+        job_id: job.id,
+        batch_id: batchId,
+        error: err.message
+      }))
+    })
+
     return new Response(JSON.stringify({
       success: true,
       job_id: job.id,

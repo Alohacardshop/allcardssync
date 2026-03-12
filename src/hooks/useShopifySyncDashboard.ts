@@ -223,9 +223,26 @@ export function useQueueStatusCounts() {
   return useQuery({
     queryKey: ['shopify-queue-status-counts'],
     queryFn: async () => {
+      // Only fetch items from active (non-terminal) jobs to avoid scanning the entire table
+      const { data: activeJobs, error: jobsErr } = await supabase
+        .from('shopify_sync_job_queue' as any)
+        .select('id')
+        .in('status', ['queued', 'running']);
+
+      if (jobsErr) throw jobsErr;
+      const activeJobIds = (activeJobs || []).map((j: any) => j.id);
+
+      if (activeJobIds.length === 0) {
+        return {
+          counts: { queued: 0, running: 0, succeeded: 0, failed: 0, blocked: 0 },
+          failureBreakdown: {},
+        };
+      }
+
       const { data, error } = await supabase
         .from('shopify_sync_job_items' as any)
-        .select('status, failure_code');
+        .select('status, failure_code')
+        .in('job_id', activeJobIds);
       if (error) throw error;
 
       const items = (data || []) as any[];
