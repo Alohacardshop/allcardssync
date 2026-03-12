@@ -58,10 +58,26 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge variant="outline" className={v.class}>{v.label}</Badge>;
 }
 
-function ResultBadge({ success, error }: { success: boolean; error?: string | null }) {
+function ResultBadge({ success, error, failureCode }: { success: boolean; error?: string | null; failureCode?: string | null }) {
   if (success) return <Badge variant="outline" className="bg-emerald-500/15 text-emerald-700 border-emerald-500/30">Success</Badge>;
+  if (failureCode) return <FailureCodeBadge code={failureCode} />;
   if (error?.includes('Duplicate protection')) return <Badge variant="outline" className="bg-orange-500/15 text-orange-700 border-orange-500/30">Blocked</Badge>;
   return <Badge variant="outline" className="bg-red-500/15 text-red-700 border-red-500/30">Failed</Badge>;
+}
+
+function FailureCodeBadge({ code }: { code: string }) {
+  const variants: Record<string, { class: string; label: string }> = {
+    duplicate: { class: 'bg-orange-500/15 text-orange-700 border-orange-500/30', label: 'Duplicate' },
+    validation_error: { class: 'bg-yellow-500/15 text-yellow-700 border-yellow-500/30', label: 'Validation' },
+    rate_limited: { class: 'bg-purple-500/15 text-purple-700 border-purple-500/30', label: 'Rate Limited' },
+    shopify_api_error: { class: 'bg-red-500/15 text-red-700 border-red-500/30', label: 'API Error' },
+    network_error: { class: 'bg-sky-500/15 text-sky-700 border-sky-500/30', label: 'Network' },
+    missing_inventory_data: { class: 'bg-amber-500/15 text-amber-700 border-amber-500/30', label: 'Missing Data' },
+    blocked_business_rule: { class: 'bg-orange-500/15 text-orange-700 border-orange-500/30', label: 'Blocked' },
+    unknown_error: { class: 'bg-gray-500/15 text-gray-600 border-gray-500/30', label: 'Unknown' },
+  };
+  const v = variants[code] || { class: 'bg-muted text-muted-foreground', label: code };
+  return <Badge variant="outline" className={v.class}>{v.label}</Badge>;
 }
 
 function JobItemStatusBadge({ status }: { status: string }) {
