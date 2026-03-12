@@ -16,6 +16,7 @@ interface MediaOrderArgs {
   productId: string                 // numeric Shopify product ID
   intendedFrontUrl: string          // the URL we consider "front" (index 0 of our sorted array)
   apiVersion?: string
+  expectedMediaCount?: number       // optional: how many media items we expect
 }
 
 interface MediaNode {
@@ -89,17 +90,42 @@ function findMediaByFilename(nodes: MediaNode[], filename: string): MediaNode | 
   })
 }
 
+/**
+ * Poll Shopify for media until expectedCount items appear or max attempts reached.
+ * Replaces the fixed 3-second delay for more reliable media detection.
+ */
+async function pollForMedia(
+  domain: string, token: string, productGid: string, apiVersion: string,
+  expectedCount: number, maxAttempts = 5, intervalMs = 2000
+): Promise<any> {
+  for (let i = 0; i < maxAttempts; i++) {
+    // Wait before querying (gives Shopify time to process uploads)
+    await new Promise(r => setTimeout(r, intervalMs))
+
+    const result = await graphql(domain, token, FULL_PRODUCT_MEDIA_QUERY, { id: productGid }, apiVersion)
+    const mediaCount = result?.data?.product?.media?.nodes?.length || 0
+
+    console.log(`[MEDIA POLL] Attempt ${i + 1}/${maxAttempts}: found ${mediaCount}/${expectedCount} media items`)
+
+    if (mediaCount >= expectedCount) {
+      return result
+    }
+  }
+
+  // Return last result even if count didn't match
+  console.warn(`[MEDIA POLL] Max attempts reached, proceeding with available media`)
+  return await graphql(domain, token, FULL_PRODUCT_MEDIA_QUERY, { id: productGid }, apiVersion)
+}
+
 export async function ensureMediaOrder(args: MediaOrderArgs): Promise<MediaOrderResult> {
-  const { domain, token, productId, intendedFrontUrl, apiVersion = '2024-07' } = args
+  const { domain, token, productId, intendedFrontUrl, apiVersion = '2024-07', expectedMediaCount = 1 } = args
   const productGid = `gid://shopify/Product/${productId}`
   const frontFilename = extractFilename(intendedFrontUrl)
 
   console.log(`[MEDIA ORDER] Starting for product ${productId}, front filename: ${frontFilename}`)
 
-  // ── Step 1: Query current media state ──
-  await new Promise(r => setTimeout(r, 3000)) // Wait for Shopify to finish processing uploads
-  
-  const auditResult = await graphql(domain, token, FULL_PRODUCT_MEDIA_QUERY, { id: productGid }, apiVersion)
+  // ── Step 1: Poll for media instead of fixed delay ──
+  const auditResult = await pollForMedia(domain, token, productGid, apiVersion, expectedMediaCount)
   const productData = auditResult?.data?.product
   if (!productData) {
     return { success: false, message: `Product ${productId} not found via GraphQL` }
@@ -167,13 +193,11 @@ export async function ensureMediaOrder(args: MediaOrderArgs): Promise<MediaOrder
   }
 
   // ── Step 4: Fix variant featuredMedia override ──
-  // If the first variant has a different featured media, update it to point to front
   for (const variant of variants) {
     const variantMediaId = variant.media?.nodes?.[0]?.id
     if (variantMediaId && variantMediaId !== frontMedia.id) {
       console.log(`[MEDIA ORDER] Fixing variant ${variant.id} media: ${variantMediaId} → ${frontMedia.id}`)
       try {
-        // Detach wrong media, attach correct one
         const detachResult = await graphql(domain, token, `
           mutation($productId: ID!, $variantMedia: [ProductVariantDetachMediaInput!]!) {
             productVariantDetachMedia(productId: $productId, variantMedia: $variantMedia) {
@@ -242,11 +266,37 @@ export async function ensureMediaOrder(args: MediaOrderArgs): Promise<MediaOrder
 }
 
 /**
+ * Find the best front-image candidate from a list of URLs.
+ * Priority:
+ *   1. URLs containing "front" or "cover" (likely front image)
+ *   2. First URL that does NOT contain "back" or "rear"
+ *   3. Fallback to first URL
+ */
+function findFrontCandidate(urls: string[]): string {
+  // Prefer URLs with front/cover in the name
+  const front = urls.find(u => /front|cover/i.test(u))
+  if (front) return front
+
+  // Avoid URLs with back/rear in the name
+  const notBack = urls.find(u => !/back|rear/i.test(u))
+  if (notBack) return notBack
+
+  // Last resort: first URL
+  return urls[0]
+}
+
+/**
  * Determine the intended front image URL for an intake item.
  * Handles both PSA API items (with IsFrontImage flags) and scraped comics.
+ *
+ * Priority order:
+ *   1. PSA snapshot images with IsFrontImage === true (most reliable for graded cards)
+ *   2. Explicit front_image_url field (set during intake or manual override)
+ *   3. For comics: smart URL analysis to pick front cover over back cover
+ *   4. Default: first available image
  */
 export function determineFrontImageUrl(intakeItem: any): string {
-  // 1. PSA snapshot with IsFrontImage flags (most reliable)
+  // 1. PSA snapshot with IsFrontImage flags (most reliable for graded cards)
   if (intakeItem.psa_snapshot?.images && Array.isArray(intakeItem.psa_snapshot.images)) {
     const frontImg = intakeItem.psa_snapshot.images.find((img: any) => img.IsFrontImage === true)
     if (frontImg?.ImageURL) return frontImg.ImageURL
@@ -256,16 +306,26 @@ export function determineFrontImageUrl(intakeItem: any): string {
     if (sorted[0]?.ImageURL) return sorted[0].ImageURL
   }
 
-  // 2. Comics without psa_snapshot: first image is the front cover
+  // 2. Explicit front_image_url (manual override or set during intake)
+  if (intakeItem.front_image_url) {
+    return intakeItem.front_image_url
+  }
+
+  // 3. Comics: intelligently pick front cover from image_urls
+  // Sometimes ingestion stores back image first, so we can't blindly use index 0
   const isComic = intakeItem.main_category === 'comics' ||
                   intakeItem.catalog_snapshot?.type === 'graded_comic' ||
                   intakeItem.catalog_snapshot?.type === 'psa_comic'
-  
-  const imageUrls = intakeItem.image_urls || []
+
+  const imageUrls: string[] = intakeItem.image_urls || []
   if (isComic && imageUrls.length >= 1) {
-    return imageUrls[0] // First image is the front for comics
+    return findFrontCandidate(imageUrls)
   }
 
-  // 3. Default: first image_url
+  // 4. Default: use smart candidate selection if multiple URLs, otherwise first available
+  if (imageUrls.length > 1) {
+    return findFrontCandidate(imageUrls)
+  }
+
   return imageUrls[0] || intakeItem.image_url || ''
 }
