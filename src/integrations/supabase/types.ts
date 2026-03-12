@@ -2962,6 +2962,7 @@ export type Database = {
           error: string | null
           failed: number
           id: string
+          idempotency_key: string | null
           location_gid: string
           processed_items: number
           started_at: string | null
@@ -2981,6 +2982,7 @@ export type Database = {
           error?: string | null
           failed?: number
           id?: string
+          idempotency_key?: string | null
           location_gid: string
           processed_items?: number
           started_at?: string | null
@@ -3000,6 +3002,7 @@ export type Database = {
           error?: string | null
           failed?: number
           id?: string
+          idempotency_key?: string | null
           location_gid?: string
           processed_items?: number
           started_at?: string | null
@@ -4261,6 +4264,7 @@ export type Database = {
           error: string | null
           failed: number
           id: string
+          idempotency_key: string | null
           location_gid: string
           processed_items: number
           started_at: string | null
