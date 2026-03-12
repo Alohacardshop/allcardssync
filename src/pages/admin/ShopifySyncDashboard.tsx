@@ -1,14 +1,15 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { format } from 'date-fns';
 import {
   Activity, CheckCircle2, XCircle, AlertTriangle, Clock, Zap,
   RefreshCw, Wrench, ChevronDown, ChevronRight, Filter, Search,
-  ShoppingBag
+  ShoppingBag, Layers, Ban, Play, RotateCcw
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -20,6 +21,9 @@ import {
 } from '@/components/ui/collapsible';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Tabs, TabsContent, TabsList, TabsTrigger,
+} from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import {
   useSyncRuns,
@@ -27,41 +31,60 @@ import {
   useSyncSummaryStats,
   useRetryFailedItems,
   useRepairLinkage,
+  useSyncJobs,
+  useSyncJobItems,
+  useCancelJob,
+  useResumeJob,
+  useRetryFailedJobItems,
   SyncRun,
-  SyncRunItem,
+  SyncJob,
+  SyncJobItem,
   SyncDashboardFilters,
 } from '@/hooks/useShopifySyncDashboard';
 
-// ── Status Badge ──
+// ── Status Badges ──
+
 function StatusBadge({ status }: { status: string }) {
   const variants: Record<string, { class: string; label: string }> = {
     completed: { class: 'bg-emerald-500/15 text-emerald-700 border-emerald-500/30', label: 'Completed' },
     failed: { class: 'bg-red-500/15 text-red-700 border-red-500/30', label: 'Failed' },
     partial_failure: { class: 'bg-amber-500/15 text-amber-700 border-amber-500/30', label: 'Partial' },
-    running: { class: 'bg-blue-500/15 text-blue-700 border-blue-500/30', label: 'Running' },
+    partial: { class: 'bg-amber-500/15 text-amber-700 border-amber-500/30', label: 'Partial' },
+    running: { class: 'bg-blue-500/15 text-blue-700 border-blue-500/30 animate-pulse', label: 'Running' },
+    queued: { class: 'bg-slate-500/15 text-slate-700 border-slate-500/30', label: 'Queued' },
+    cancelled: { class: 'bg-gray-500/15 text-gray-500 border-gray-500/30', label: 'Cancelled' },
   };
   const v = variants[status] || { class: 'bg-muted text-muted-foreground', label: status };
   return <Badge variant="outline" className={v.class}>{v.label}</Badge>;
 }
 
 function ResultBadge({ success, error }: { success: boolean; error?: string | null }) {
-  if (success) {
-    return <Badge variant="outline" className="bg-emerald-500/15 text-emerald-700 border-emerald-500/30">Success</Badge>;
-  }
-  if (error?.includes('Duplicate protection')) {
-    return <Badge variant="outline" className="bg-orange-500/15 text-orange-700 border-orange-500/30">Blocked</Badge>;
-  }
+  if (success) return <Badge variant="outline" className="bg-emerald-500/15 text-emerald-700 border-emerald-500/30">Success</Badge>;
+  if (error?.includes('Duplicate protection')) return <Badge variant="outline" className="bg-orange-500/15 text-orange-700 border-orange-500/30">Blocked</Badge>;
   return <Badge variant="outline" className="bg-red-500/15 text-red-700 border-red-500/30">Failed</Badge>;
 }
 
+function JobItemStatusBadge({ status }: { status: string }) {
+  const variants: Record<string, { class: string; label: string }> = {
+    queued: { class: 'bg-slate-500/15 text-slate-600 border-slate-500/30', label: 'Queued' },
+    running: { class: 'bg-blue-500/15 text-blue-700 border-blue-500/30 animate-pulse', label: 'Running' },
+    succeeded: { class: 'bg-emerald-500/15 text-emerald-700 border-emerald-500/30', label: 'Success' },
+    failed: { class: 'bg-red-500/15 text-red-700 border-red-500/30', label: 'Failed' },
+    blocked: { class: 'bg-orange-500/15 text-orange-700 border-orange-500/30', label: 'Blocked' },
+  };
+  const v = variants[status] || { class: 'bg-muted text-muted-foreground', label: status };
+  return <Badge variant="outline" className={v.class}>{v.label}</Badge>;
+}
+
 // ── Summary Cards ──
+
 function SummaryCards({ dateFrom }: { dateFrom: string }) {
   const { data: stats, isLoading } = useSyncSummaryStats(dateFrom);
 
   const cards = [
     { label: 'Synced Today', value: stats?.totalSynced ?? '—', icon: CheckCircle2, color: 'text-emerald-600' },
     { label: 'Failed Today', value: stats?.totalFailed ?? '—', icon: XCircle, color: 'text-red-600' },
-    { label: 'Running', value: stats?.totalRetrying ?? '—', icon: Clock, color: 'text-blue-600' },
+    { label: 'Queued', value: stats?.totalQueued ?? '—', icon: Layers, color: 'text-slate-600' },
     { label: 'Blocked (Dup)', value: stats?.totalBlocked ?? '—', icon: AlertTriangle, color: 'text-orange-600' },
     { label: 'Avg API Calls', value: stats?.avgApiCalls ?? '—', icon: Zap, color: 'text-purple-600' },
     { label: 'Avg Duration', value: stats?.avgDuration ? `${stats.avgDuration}ms` : '—', icon: Activity, color: 'text-indigo-600' },
@@ -85,6 +108,7 @@ function SummaryCards({ dateFrom }: { dateFrom: string }) {
 }
 
 // ── Filters Bar ──
+
 function FiltersBar({
   filters,
   setFilters,
@@ -174,12 +198,7 @@ function FiltersBar({
           </div>
 
           {Object.values(filters).some(Boolean) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8"
-              onClick={() => setFilters({})}
-            >
+            <Button variant="ghost" size="sm" className="h-8" onClick={() => setFilters({})}>
               Clear
             </Button>
           )}
@@ -189,7 +208,139 @@ function FiltersBar({
   );
 }
 
-// ── Run Items Table ──
+// ── Job Items Table ──
+
+function JobItemsTable({ jobId }: { jobId: string }) {
+  const { data: items, isLoading } = useSyncJobItems(jobId);
+  const repairLinkage = useRepairLinkage();
+
+  if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading items…</div>;
+  if (!items?.length) return <div className="p-4 text-sm text-muted-foreground">No items</div>;
+
+  return (
+    <div className="border-t border-border/50">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-muted/30">
+            <TableHead className="text-xs">Item ID</TableHead>
+            <TableHead className="text-xs">Status</TableHead>
+            <TableHead className="text-xs">Attempts</TableHead>
+            <TableHead className="text-xs">Product ID</TableHead>
+            <TableHead className="text-xs">API Calls</TableHead>
+            <TableHead className="text-xs">Duration</TableHead>
+            <TableHead className="text-xs">Error</TableHead>
+            <TableHead className="text-xs">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {items.map((item) => (
+            <TableRow key={item.id} className={item.status === 'failed' || item.status === 'blocked' ? 'bg-red-500/5' : ''}>
+              <TableCell className="font-mono text-xs">{item.item_id.slice(0, 8)}…</TableCell>
+              <TableCell><JobItemStatusBadge status={item.status} /></TableCell>
+              <TableCell className="text-xs">{item.attempt_count}</TableCell>
+              <TableCell className="font-mono text-xs">{item.shopify_product_id || '—'}</TableCell>
+              <TableCell className="text-xs">{item.api_calls}</TableCell>
+              <TableCell className="text-xs">{item.duration_ms}ms</TableCell>
+              <TableCell className="text-xs max-w-[200px] truncate text-red-600">{item.last_error || '—'}</TableCell>
+              <TableCell>
+                {item.last_error?.includes('Duplicate protection') && (
+                  <Button
+                    size="sm" variant="outline" className="h-6 text-xs gap-1"
+                    onClick={() => repairLinkage.mutate({ itemId: item.item_id })}
+                    disabled={repairLinkage.isPending}
+                  >
+                    <Wrench className="h-3 w-3" /> Repair
+                  </Button>
+                )}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+// ── Job Row ──
+
+function JobRow({ job }: { job: SyncJob }) {
+  const [open, setOpen] = useState(false);
+  const cancelJob = useCancelJob();
+  const resumeJob = useResumeJob();
+  const retryFailed = useRetryFailedJobItems();
+
+  const progress = job.total_items > 0 ? Math.round((job.processed_items / job.total_items) * 100) : 0;
+  const isActive = job.status === 'queued' || job.status === 'running';
+  const canResume = job.status === 'partial' || job.status === 'failed';
+  const hasFailed = job.failed > 0 && !isActive;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <TableRow className="cursor-pointer hover:bg-muted/50" onClick={() => setOpen(!open)}>
+        <TableCell>
+          <CollapsibleTrigger asChild>
+            <span className="inline-flex items-center">
+              {open ? <ChevronDown className="h-4 w-4 mr-1" /> : <ChevronRight className="h-4 w-4 mr-1" />}
+            </span>
+          </CollapsibleTrigger>
+        </TableCell>
+        <TableCell className="text-xs">{format(new Date(job.created_at), 'MMM d, HH:mm:ss')}</TableCell>
+        <TableCell className="font-mono text-xs">{job.batch_id}</TableCell>
+        <TableCell className="text-xs">{job.store_key}</TableCell>
+        <TableCell className="min-w-[120px]">
+          <div className="space-y-1">
+            <Progress value={progress} className="h-2" />
+            <span className="text-[10px] text-muted-foreground">
+              {job.processed_items}/{job.total_items} ({progress}%)
+            </span>
+          </div>
+        </TableCell>
+        <TableCell className="text-xs text-emerald-600 font-medium">{job.succeeded}</TableCell>
+        <TableCell className="text-xs text-red-600 font-medium">{job.failed}</TableCell>
+        <TableCell className="text-xs">{job.total_api_calls}</TableCell>
+        <TableCell><StatusBadge status={job.status} /></TableCell>
+        <TableCell>
+          <div className="flex gap-1">
+            {isActive && (
+              <Button size="sm" variant="outline" className="h-6 text-xs gap-1"
+                onClick={(e) => { e.stopPropagation(); cancelJob.mutate({ jobId: job.id }); }}
+                disabled={cancelJob.isPending}
+              >
+                <Ban className="h-3 w-3" /> Cancel
+              </Button>
+            )}
+            {canResume && (
+              <Button size="sm" variant="outline" className="h-6 text-xs gap-1"
+                onClick={(e) => { e.stopPropagation(); resumeJob.mutate({ jobId: job.id }); }}
+                disabled={resumeJob.isPending}
+              >
+                <Play className="h-3 w-3" /> Resume
+              </Button>
+            )}
+            {hasFailed && (
+              <Button size="sm" variant="outline" className="h-6 text-xs gap-1"
+                onClick={(e) => { e.stopPropagation(); retryFailed.mutate({ jobId: job.id }); }}
+                disabled={retryFailed.isPending}
+              >
+                <RotateCcw className="h-3 w-3" /> Retry
+              </Button>
+            )}
+          </div>
+        </TableCell>
+      </TableRow>
+      <CollapsibleContent asChild>
+        <tr>
+          <td colSpan={10} className="p-0">
+            <JobItemsTable jobId={job.id} />
+          </td>
+        </tr>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+// ── Run Items Table (history) ──
+
 function RunItemsTable({ runId }: { runId: string }) {
   const { data: items, isLoading } = useSyncRunItems(runId);
   const repairLinkage = useRepairLinkage();
@@ -224,15 +375,11 @@ function RunItemsTable({ runId }: { runId: string }) {
               <TableCell className="text-xs max-w-[200px] truncate text-red-600">{item.error || '—'}</TableCell>
               <TableCell>
                 {item.error?.includes('Duplicate protection') && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-6 text-xs gap-1"
+                  <Button size="sm" variant="outline" className="h-6 text-xs gap-1"
                     onClick={() => repairLinkage.mutate({ itemId: item.item_id })}
                     disabled={repairLinkage.isPending}
                   >
-                    <Wrench className="h-3 w-3" />
-                    Repair
+                    <Wrench className="h-3 w-3" /> Repair
                   </Button>
                 )}
               </TableCell>
@@ -244,7 +391,8 @@ function RunItemsTable({ runId }: { runId: string }) {
   );
 }
 
-// ── Expandable Run Row ──
+// ── Run Row (history) ──
+
 function RunRow({ run }: { run: SyncRun }) {
   const [open, setOpen] = useState(false);
   const retryFailed = useRetryFailedItems();
@@ -261,11 +409,7 @@ function RunRow({ run }: { run: SyncRun }) {
         </TableCell>
         <TableCell className="text-xs">{format(new Date(run.created_at), 'MMM d, HH:mm:ss')}</TableCell>
         <TableCell className="font-mono text-xs">{run.batch_id}</TableCell>
-        <TableCell>
-          <Badge variant="outline" className="text-xs">
-            {run.mode}
-          </Badge>
-        </TableCell>
+        <TableCell><Badge variant="outline" className="text-xs">{run.mode}</Badge></TableCell>
         <TableCell className="text-xs">{run.store_key}</TableCell>
         <TableCell className="text-xs">{run.total_items}</TableCell>
         <TableCell className="text-xs text-emerald-600 font-medium">{run.succeeded}</TableCell>
@@ -275,18 +419,11 @@ function RunRow({ run }: { run: SyncRun }) {
         <TableCell><StatusBadge status={run.status} /></TableCell>
         <TableCell>
           {run.failed > 0 && run.status !== 'running' && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-6 text-xs gap-1"
-              onClick={(e) => {
-                e.stopPropagation();
-                retryFailed.mutate({ runId: run.id });
-              }}
+            <Button size="sm" variant="outline" className="h-6 text-xs gap-1"
+              onClick={(e) => { e.stopPropagation(); retryFailed.mutate({ runId: run.id }); }}
               disabled={retryFailed.isPending}
             >
-              <RefreshCw className="h-3 w-3" />
-              Retry
+              <RefreshCw className="h-3 w-3" /> Retry
             </Button>
           )}
         </TableCell>
@@ -303,10 +440,15 @@ function RunRow({ run }: { run: SyncRun }) {
 }
 
 // ── Main Dashboard ──
+
 export default function ShopifySyncDashboard() {
   const today = format(new Date(), 'yyyy-MM-dd');
   const [filters, setFilters] = useState<SyncDashboardFilters>({});
-  const { data: runs, isLoading } = useSyncRuns(filters);
+  const { data: runs, isLoading: runsLoading } = useSyncRuns(filters);
+  const { data: jobs, isLoading: jobsLoading } = useSyncJobs();
+
+  const activeJobs = (jobs || []).filter(j => j.status === 'queued' || j.status === 'running');
+  const recentJobs = jobs || [];
 
   return (
     <div className="p-6 space-y-6 max-w-[1400px] mx-auto">
@@ -316,56 +458,103 @@ export default function ShopifySyncDashboard() {
           <ShoppingBag className="h-6 w-6 text-primary" />
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Shopify Sync Dashboard</h1>
-            <p className="text-sm text-muted-foreground">Monitor single-item and bulk sync activity</p>
+            <p className="text-sm text-muted-foreground">Monitor single-item, bulk, and queued sync activity</p>
           </div>
         </div>
       </div>
 
-      {/* Summary Cards */}
       <SummaryCards dateFrom={today + 'T00:00:00Z'} />
-
-      {/* Filters */}
       <FiltersBar filters={filters} setFilters={setFilters} />
 
-      {/* Runs Table */}
-      <Card className="border-border/50">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Sync Runs</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-8"></TableHead>
-                <TableHead className="text-xs">Time</TableHead>
-                <TableHead className="text-xs">Batch</TableHead>
-                <TableHead className="text-xs">Mode</TableHead>
-                <TableHead className="text-xs">Store</TableHead>
-                <TableHead className="text-xs">Total</TableHead>
-                <TableHead className="text-xs">✓</TableHead>
-                <TableHead className="text-xs">✗</TableHead>
-                <TableHead className="text-xs">API</TableHead>
-                <TableHead className="text-xs">Duration</TableHead>
-                <TableHead className="text-xs">Status</TableHead>
-                <TableHead className="text-xs">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">Loading…</TableCell>
-                </TableRow>
-              ) : !runs?.length ? (
-                <TableRow>
-                  <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">No sync runs found</TableCell>
-                </TableRow>
-              ) : (
-                runs.map((run) => <RunRow key={run.id} run={run} />)
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <Tabs defaultValue={activeJobs.length > 0 ? 'queue' : 'history'} className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="queue" className="gap-1.5">
+            <Layers className="h-3.5 w-3.5" />
+            Job Queue
+            {activeJobs.length > 0 && (
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">{activeJobs.length}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="history" className="gap-1.5">
+            <Clock className="h-3.5 w-3.5" />
+            Run History
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Queue Tab */}
+        <TabsContent value="queue">
+          <Card className="border-border/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Sync Job Queue</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8"></TableHead>
+                    <TableHead className="text-xs">Time</TableHead>
+                    <TableHead className="text-xs">Batch</TableHead>
+                    <TableHead className="text-xs">Store</TableHead>
+                    <TableHead className="text-xs">Progress</TableHead>
+                    <TableHead className="text-xs">✓</TableHead>
+                    <TableHead className="text-xs">✗</TableHead>
+                    <TableHead className="text-xs">API</TableHead>
+                    <TableHead className="text-xs">Status</TableHead>
+                    <TableHead className="text-xs">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {jobsLoading ? (
+                    <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Loading…</TableCell></TableRow>
+                  ) : !recentJobs.length ? (
+                    <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No queued jobs</TableCell></TableRow>
+                  ) : (
+                    recentJobs.map((job) => <JobRow key={job.id} job={job} />)
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* History Tab */}
+        <TabsContent value="history">
+          <Card className="border-border/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Sync Runs</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8"></TableHead>
+                    <TableHead className="text-xs">Time</TableHead>
+                    <TableHead className="text-xs">Batch</TableHead>
+                    <TableHead className="text-xs">Mode</TableHead>
+                    <TableHead className="text-xs">Store</TableHead>
+                    <TableHead className="text-xs">Total</TableHead>
+                    <TableHead className="text-xs">✓</TableHead>
+                    <TableHead className="text-xs">✗</TableHead>
+                    <TableHead className="text-xs">API</TableHead>
+                    <TableHead className="text-xs">Duration</TableHead>
+                    <TableHead className="text-xs">Status</TableHead>
+                    <TableHead className="text-xs">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {runsLoading ? (
+                    <TableRow><TableCell colSpan={12} className="text-center py-8 text-muted-foreground">Loading…</TableCell></TableRow>
+                  ) : !runs?.length ? (
+                    <TableRow><TableCell colSpan={12} className="text-center py-8 text-muted-foreground">No sync runs found</TableCell></TableRow>
+                  ) : (
+                    runs.map((run) => <RunRow key={run.id} run={run} />)
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

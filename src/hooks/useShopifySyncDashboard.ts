@@ -32,6 +32,41 @@ export interface SyncRunItem {
   created_at: string;
 }
 
+export interface SyncJob {
+  id: string;
+  batch_id: string;
+  store_key: string;
+  location_gid: string;
+  vendor: string | null;
+  status: string;
+  total_items: number;
+  processed_items: number;
+  succeeded: number;
+  failed: number;
+  total_api_calls: number;
+  total_duration_ms: number;
+  triggered_by: string | null;
+  error: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface SyncJobItem {
+  id: string;
+  job_id: string;
+  item_id: string;
+  status: string;
+  attempt_count: number;
+  last_error: string | null;
+  shopify_product_id: string | null;
+  shopify_variant_id: string | null;
+  api_calls: number;
+  duration_ms: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface SyncDashboardFilters {
   dateFrom?: string;
   dateTo?: string;
@@ -43,6 +78,8 @@ export interface SyncDashboardFilters {
   blockedOnly?: boolean;
 }
 
+// ── Sync Runs (history) ──
+
 export function useSyncRuns(filters: SyncDashboardFilters) {
   return useQuery({
     queryKey: ['shopify-sync-runs', filters],
@@ -53,21 +90,11 @@ export function useSyncRuns(filters: SyncDashboardFilters) {
         .order('created_at', { ascending: false })
         .limit(100);
 
-      if (filters.dateFrom) {
-        query = query.gte('created_at', filters.dateFrom);
-      }
-      if (filters.dateTo) {
-        query = query.lte('created_at', filters.dateTo + 'T23:59:59Z');
-      }
-      if (filters.status) {
-        query = query.eq('status', filters.status);
-      }
-      if (filters.storeKey) {
-        query = query.eq('store_key', filters.storeKey);
-      }
-      if (filters.batchId) {
-        query = query.eq('batch_id', filters.batchId);
-      }
+      if (filters.dateFrom) query = query.gte('created_at', filters.dateFrom);
+      if (filters.dateTo) query = query.lte('created_at', filters.dateTo + 'T23:59:59Z');
+      if (filters.status) query = query.eq('status', filters.status);
+      if (filters.storeKey) query = query.eq('store_key', filters.storeKey);
+      if (filters.batchId) query = query.eq('batch_id', filters.batchId);
 
       const { data, error } = await query;
       if (error) throw error;
@@ -113,7 +140,13 @@ export function useSyncSummaryStats(dateFrom: string) {
       const totalItems = allRuns.reduce((s, r) => s + r.total_items, 0);
       const totalDuration = allRuns.reduce((s, r) => s + r.total_duration_ms, 0);
 
-      // Count blocked items from failed run items
+      // Count queued jobs
+      const { data: queuedJobs } = await supabase
+        .from('shopify_sync_job_queue' as any)
+        .select('id')
+        .in('status', ['queued', 'running']);
+      const totalQueued = (queuedJobs || []).length;
+
       const failedRunIds = allRuns.filter(r => r.failed > 0).map(r => r.id);
       let totalBlocked = 0;
       if (failedRunIds.length > 0) {
@@ -132,20 +165,58 @@ export function useSyncSummaryStats(dateFrom: string) {
         totalFailed,
         totalRetrying,
         totalBlocked,
+        totalQueued,
         avgApiCalls: totalItems > 0 ? Math.round(totalApiCalls / totalItems * 10) / 10 : 0,
         avgDuration: totalItems > 0 ? Math.round(totalDuration / totalItems) : 0,
       };
     },
-    refetchInterval: 30000,
+    refetchInterval: 15000,
   });
 }
+
+// ── Sync Jobs (queue) ──
+
+export function useSyncJobs() {
+  return useQuery({
+    queryKey: ['shopify-sync-jobs'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('shopify_sync_job_queue' as any)
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return (data || []) as unknown as SyncJob[];
+    },
+    refetchInterval: 5000, // Fast refresh for active jobs
+  });
+}
+
+export function useSyncJobItems(jobId: string | null) {
+  return useQuery({
+    queryKey: ['shopify-sync-job-items', jobId],
+    queryFn: async () => {
+      if (!jobId) return [];
+      const { data, error } = await supabase
+        .from('shopify_sync_job_items' as any)
+        .select('*')
+        .eq('job_id', jobId)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return (data || []) as unknown as SyncJobItem[];
+    },
+    enabled: !!jobId,
+    refetchInterval: 5000,
+  });
+}
+
+// ── Mutations ──
 
 export function useRetryFailedItems() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ runId }: { runId: string }) => {
-      // Get failed items from this run
       const { data: failedItems, error } = await supabase
         .from('shopify_sync_run_items' as any)
         .select('item_id')
@@ -155,7 +226,6 @@ export function useRetryFailedItems() {
       if (error) throw error;
       if (!failedItems?.length) throw new Error('No failed items to retry');
 
-      // Get the run to find store/location
       const { data: run } = await supabase
         .from('shopify_sync_runs' as any)
         .select('store_key')
@@ -164,13 +234,8 @@ export function useRetryFailedItems() {
 
       const itemIds = (failedItems as any[]).map((i: any) => i.item_id);
 
-      // Call bulk sync for the failed items
       const { data, error: invokeError } = await supabase.functions.invoke('bulk-shopify-sync', {
-        body: {
-          item_ids: itemIds,
-          storeKey: (run as any)?.store_key,
-          // locationGid will need to be provided — for now use a placeholder
-        }
+        body: { item_ids: itemIds, storeKey: (run as any)?.store_key }
       });
 
       if (invokeError) throw invokeError;
@@ -203,6 +268,91 @@ export function useRepairLinkage() {
     },
     onError: (error: Error) => {
       toast.error(`Repair failed: ${error.message}`);
+    },
+  });
+}
+
+export function useCancelJob() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ jobId }: { jobId: string }) => {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      // Cancel by updating status - items still queued won't be processed
+      const { error } = await supabase
+        .from('shopify_sync_job_queue' as any)
+        .update({ status: 'cancelled', completed_at: new Date().toISOString() } as any)
+        .eq('id', jobId)
+        .in('status', ['queued', 'running']);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Job cancelled');
+      queryClient.invalidateQueries({ queryKey: ['shopify-sync-jobs'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Cancel failed: ${error.message}`);
+    },
+  });
+}
+
+export function useResumeJob() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ jobId }: { jobId: string }) => {
+      // Reset job status to queued so worker can pick it up
+      await supabase
+        .from('shopify_sync_job_queue' as any)
+        .update({ status: 'queued' } as any)
+        .eq('id', jobId);
+
+      // Trigger the worker
+      const { error } = await supabase.functions.invoke('process-shopify-sync-queue', {
+        body: { job_id: jobId }
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Job resumed');
+      queryClient.invalidateQueries({ queryKey: ['shopify-sync-jobs'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Resume failed: ${error.message}`);
+    },
+  });
+}
+
+export function useRetryFailedJobItems() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ jobId }: { jobId: string }) => {
+      // Reset failed/blocked items back to queued
+      await supabase
+        .from('shopify_sync_job_items' as any)
+        .update({ status: 'queued', last_error: null } as any)
+        .eq('job_id', jobId)
+        .in('status', ['failed', 'blocked']);
+
+      // Reset job status
+      await supabase
+        .from('shopify_sync_job_queue' as any)
+        .update({ status: 'queued' } as any)
+        .eq('id', jobId);
+
+      // Trigger worker
+      const { error } = await supabase.functions.invoke('process-shopify-sync-queue', {
+        body: { job_id: jobId }
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Retrying failed items');
+      queryClient.invalidateQueries({ queryKey: ['shopify-sync-jobs'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Retry failed: ${error.message}`);
     },
   });
 }
