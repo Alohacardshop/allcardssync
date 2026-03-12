@@ -2957,12 +2957,15 @@ export type Database = {
       shopify_sync_job_queue: {
         Row: {
           batch_id: string
+          claimed_by: string | null
           completed_at: string | null
           created_at: string
           error: string | null
           failed: number
+          heartbeat_at: string | null
           id: string
           idempotency_key: string | null
+          lease_expires_at: string | null
           location_gid: string
           processed_items: number
           started_at: string | null
@@ -2977,12 +2980,15 @@ export type Database = {
         }
         Insert: {
           batch_id: string
+          claimed_by?: string | null
           completed_at?: string | null
           created_at?: string
           error?: string | null
           failed?: number
+          heartbeat_at?: string | null
           id?: string
           idempotency_key?: string | null
+          lease_expires_at?: string | null
           location_gid: string
           processed_items?: number
           started_at?: string | null
@@ -2997,12 +3003,15 @@ export type Database = {
         }
         Update: {
           batch_id?: string
+          claimed_by?: string | null
           completed_at?: string | null
           created_at?: string
           error?: string | null
           failed?: number
+          heartbeat_at?: string | null
           id?: string
           idempotency_key?: string | null
+          lease_expires_at?: string | null
           location_gid?: string
           processed_items?: number
           started_at?: string | null
@@ -4255,35 +4264,75 @@ export type Database = {
           isSetofReturn: true
         }
       }
-      claim_shopify_sync_job: {
-        Args: { target_job_id?: string }
-        Returns: {
-          batch_id: string
-          completed_at: string | null
-          created_at: string
-          error: string | null
-          failed: number
-          id: string
-          idempotency_key: string | null
-          location_gid: string
-          processed_items: number
-          started_at: string | null
-          status: string
-          store_key: string
-          succeeded: number
-          total_api_calls: number
-          total_duration_ms: number
-          total_items: number
-          triggered_by: string | null
-          vendor: string | null
-        }[]
-        SetofOptions: {
-          from: "*"
-          to: "shopify_sync_job_queue"
-          isOneToOne: false
-          isSetofReturn: true
-        }
-      }
+      claim_shopify_sync_job:
+        | {
+            Args: { target_job_id?: string }
+            Returns: {
+              batch_id: string
+              claimed_by: string | null
+              completed_at: string | null
+              created_at: string
+              error: string | null
+              failed: number
+              heartbeat_at: string | null
+              id: string
+              idempotency_key: string | null
+              lease_expires_at: string | null
+              location_gid: string
+              processed_items: number
+              started_at: string | null
+              status: string
+              store_key: string
+              succeeded: number
+              total_api_calls: number
+              total_duration_ms: number
+              total_items: number
+              triggered_by: string | null
+              vendor: string | null
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "shopify_sync_job_queue"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
+        | {
+            Args: {
+              lease_duration_seconds?: number
+              target_job_id?: string
+              worker_id?: string
+            }
+            Returns: {
+              batch_id: string
+              claimed_by: string | null
+              completed_at: string | null
+              created_at: string
+              error: string | null
+              failed: number
+              heartbeat_at: string | null
+              id: string
+              idempotency_key: string | null
+              lease_expires_at: string | null
+              location_gid: string
+              processed_items: number
+              started_at: string | null
+              status: string
+              store_key: string
+              succeeded: number
+              total_api_calls: number
+              total_duration_ms: number
+              total_items: number
+              triggered_by: string | null
+              vendor: string | null
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "shopify_sync_job_queue"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
       claim_shopify_sync_job_items: {
         Args: { p_job_id: string; p_limit?: number }
         Returns: {
@@ -4546,6 +4595,14 @@ export type Database = {
         Args: { p_sku: string; p_store_key: string }
         Returns: Json
       }
+      reclaim_stale_shopify_sync_jobs: {
+        Args: never
+        Returns: {
+          job_id: string
+          new_status: string
+          previous_status: string
+        }[]
+      }
       record_location_enforcement: {
         Args: {
           p_desired_location_id: string
@@ -4562,6 +4619,10 @@ export type Database = {
           p_store_key?: string
         }
         Returns: number
+      }
+      refresh_shopify_sync_job_lease: {
+        Args: { lease_duration_seconds?: number; p_job_id: string }
+        Returns: boolean
       }
       release_inventory_locks: {
         Args: { p_batch_id?: string; p_skus?: string[]; p_store_key?: string }
