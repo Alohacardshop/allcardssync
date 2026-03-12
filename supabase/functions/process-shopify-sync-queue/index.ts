@@ -232,11 +232,13 @@ Deno.serve(async (req) => {
           try {
             const result = await syncGradedItemToShopify(syncItem, ctx)
 
+            const failureCode = result.success ? null : classifyError(result.error)
             const itemStatus = result.success ? 'succeeded' :
-              (result.error?.includes('Duplicate protection') ? 'blocked' : 'failed')
+              (failureCode === 'duplicate' || failureCode === 'blocked_business_rule' ? 'blocked' : 'failed')
 
             await supabase.from('shopify_sync_job_items').update({
               status: itemStatus,
+              failure_code: failureCode,
               last_error: result.error || null,
               shopify_product_id: result.shopify_product_id || null,
               shopify_variant_id: result.shopify_variant_id || null,
@@ -255,14 +257,17 @@ Deno.serve(async (req) => {
               job_id: job.id,
               item_id: jobItem.item_id,
               success: result.success,
+              failure_code: failureCode,
               error: result.error
             }))
           } catch (err) {
+            const failureCode = classifyError(err.message)
             failedCount++
             processedCount++
 
             await supabase.from('shopify_sync_job_items').update({
               status: 'failed',
+              failure_code: failureCode,
               last_error: err.message,
               updated_at: new Date().toISOString()
             }).eq('id', jobItem.id)
@@ -271,6 +276,7 @@ Deno.serve(async (req) => {
               event: 'shopify_sync_job_item_failed',
               job_id: job.id,
               item_id: jobItem.item_id,
+              failure_code: failureCode,
               error: err.message
             }))
           }
