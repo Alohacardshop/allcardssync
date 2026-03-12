@@ -65,6 +65,26 @@ Deno.serve(async (req) => {
     const token = tokenSetting?.key_value
     if (!domain || !token) throw new Error(`Missing Shopify credentials for ${job.store_key}`)
 
+    // Helper: check if the job has been cancelled
+    async function isJobCancelled(): Promise<boolean> {
+      const { data } = await supabase
+        .from('shopify_sync_job_queue')
+        .select('status')
+        .eq('id', job.id)
+        .single()
+      return data?.status === 'cancelled'
+    }
+
+    // Check cancellation before claiming items
+    if (await isJobCancelled()) {
+      const totalMs = totalTimer()
+      await finalizeJob(supabase, job.id, totalMs, true)
+      console.log(JSON.stringify({ event: 'shopify_sync_job_cancelled', job_id: job.id }))
+      return new Response(JSON.stringify({ success: true, job_id: job.id, message: 'Job was cancelled before processing' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
     // Atomically claim queued items for this job via RPC
     const concurrency = Math.min(DEFAULT_CONCURRENCY, MAX_CONCURRENCY)
     const { data: claimedItems, error: itemsErr } = await supabase
@@ -102,12 +122,24 @@ Deno.serve(async (req) => {
     let succeededCount = job.succeeded || 0
     let failedCount = job.failed || 0
     let totalApiCalls = job.total_api_calls || 0
+    let cancelledDuringProcessing = false
 
     let nextIndex = 0
 
     async function worker() {
       while (nextIndex < claimedItems.length) {
+        // Check for cancellation before each item
+        if (cancelledDuringProcessing) break
+
+        // Re-check job status from DB periodically (every item)
+        if (await isJobCancelled()) {
+          cancelledDuringProcessing = true
+          console.log(JSON.stringify({ event: 'shopify_sync_job_cancelled_mid_processing', job_id: job.id }))
+          break
+        }
+
         const idx = nextIndex++
+        if (idx >= claimedItems.length) break
         const jobItem = claimedItems[idx]
         const dbItem = itemMap.get(jobItem.item_id)
 
@@ -196,12 +228,29 @@ Deno.serve(async (req) => {
     )
     await Promise.all(workers)
 
+    // If cancelled mid-processing, release unclaimed running items back to queued
+    if (cancelledDuringProcessing) {
+      // Release items that were claimed (marked running) but never processed back to queued
+      const processedItemIds = new Set(
+        claimedItems.slice(0, nextIndex).map((i: any) => i.id)
+      )
+      const unprocessedItems = claimedItems.filter((i: any) => !processedItemIds.has(i.id))
+      if (unprocessedItems.length > 0) {
+        const unprocessedIds = unprocessedItems.map((i: any) => i.id)
+        await supabase.from('shopify_sync_job_items')
+          .update({ status: 'queued', updated_at: new Date().toISOString() })
+          .in('id', unprocessedIds)
+          .eq('status', 'running')
+      }
+    }
+
     // Finalize job
     const totalMs = totalTimer()
-    await finalizeJob(supabase, job.id, totalMs)
+    await finalizeJob(supabase, job.id, totalMs, cancelledDuringProcessing)
 
+    const finalEvent = cancelledDuringProcessing ? 'shopify_sync_job_cancelled' : 'shopify_sync_job_completed'
     console.log(JSON.stringify({
-      event: 'shopify_sync_job_completed',
+      event: finalEvent,
       job_id: job.id,
       batch_id: job.batch_id,
       processed: processedCount,
@@ -219,7 +268,8 @@ Deno.serve(async (req) => {
       succeeded: succeededCount,
       failed: failedCount,
       total_api_calls: totalApiCalls,
-      total_duration_ms: totalMs
+      total_duration_ms: totalMs,
+      cancelled: cancelledDuringProcessing
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
@@ -237,7 +287,18 @@ Deno.serve(async (req) => {
   }
 })
 
-async function finalizeJob(supabase: any, jobId: string, durationMs?: number) {
+async function finalizeJob(supabase: any, jobId: string, durationMs?: number, wasCancelled?: boolean) {
+  // Check if the job was cancelled (either passed in or from DB)
+  let isCancelled = wasCancelled || false
+  if (!isCancelled) {
+    const { data: currentJob } = await supabase
+      .from('shopify_sync_job_queue')
+      .select('status')
+      .eq('id', jobId)
+      .single()
+    isCancelled = currentJob?.status === 'cancelled'
+  }
+
   // Get final counts from items
   const { data: items } = await supabase
     .from('shopify_sync_job_items')
@@ -251,11 +312,22 @@ async function finalizeJob(supabase: any, jobId: string, durationMs?: number) {
   const totalApiCalls = allItems.reduce((s: number, i: any) => s + (i.api_calls || 0), 0)
   const processed = succeeded + failed
 
-  let status = 'completed'
-  if (remaining > 0 && processed > 0) status = 'partial'
-  else if (remaining > 0 && processed === 0) status = 'queued'
-  else if (failed > 0 && succeeded === 0) status = 'failed'
-  else if (failed > 0) status = 'partial'
+  let status: string
+  if (isCancelled) {
+    status = 'cancelled'
+  } else if (remaining > 0 && processed > 0) {
+    status = 'partial'
+  } else if (remaining > 0 && processed === 0) {
+    status = 'queued'
+  } else if (failed > 0 && succeeded === 0) {
+    status = 'failed'
+  } else if (failed > 0) {
+    status = 'partial'
+  } else {
+    status = 'completed'
+  }
+
+  const isTerminal = status === 'completed' || status === 'failed' || status === 'cancelled'
 
   const { data: job } = await supabase
     .from('shopify_sync_job_queue')
@@ -270,16 +342,18 @@ async function finalizeJob(supabase: any, jobId: string, durationMs?: number) {
     failed,
     total_api_calls: totalApiCalls,
     total_duration_ms: durationMs || 0,
-    completed_at: status === 'completed' || status === 'failed' ? new Date().toISOString() : null
+    completed_at: isTerminal ? new Date().toISOString() : null
   }).eq('id', jobId)
 
   // Roll results into shopify_sync_runs for dashboard history
-  if (job && (status === 'completed' || status === 'failed' || status === 'partial')) {
+  if (job && (status === 'completed' || status === 'failed' || status === 'partial' || status === 'cancelled')) {
     const { data: existingRun } = await supabase
       .from('shopify_sync_runs')
       .select('id')
       .eq('batch_id', job.batch_id)
       .single()
+
+    const runStatus = status === 'partial' ? 'partial_failure' : status
 
     const runData = {
       batch_id: job.batch_id,
@@ -291,7 +365,7 @@ async function finalizeJob(supabase: any, jobId: string, durationMs?: number) {
       total_api_calls: totalApiCalls,
       total_duration_ms: durationMs || 0,
       triggered_by: job.triggered_by,
-      status: status === 'partial' ? 'partial_failure' : status
+      status: runStatus
     }
 
     let runId: string
@@ -303,7 +377,7 @@ async function finalizeJob(supabase: any, jobId: string, durationMs?: number) {
       runId = newRun?.id
     }
 
-    // Upsert run items
+    // Upsert run items (only for items that were actually processed)
     if (runId) {
       for (const item of allItems) {
         if (item.status === 'succeeded' || item.status === 'failed' || item.status === 'blocked') {
