@@ -195,19 +195,96 @@ export function useSyncSummaryStats(dateFrom: string) {
 
 // ── Sync Jobs (queue) ──
 
-export function useSyncJobs() {
+export function useSyncJobs(filters?: SyncDashboardFilters) {
   return useQuery({
-    queryKey: ['shopify-sync-jobs'],
+    queryKey: ['shopify-sync-jobs', filters],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('shopify_sync_job_queue' as any)
         .select('*')
         .order('created_at', { ascending: false })
         .limit(50);
+
+      if (filters?.queueStatus) query = query.eq('status', filters.queueStatus);
+      if (filters?.storeKey) query = query.eq('store_key', filters.storeKey);
+      if (filters?.batchId) query = query.eq('batch_id', filters.batchId);
+
+      const { data, error } = await query;
       if (error) throw error;
       return (data || []) as unknown as SyncJob[];
     },
-    refetchInterval: 5000, // Fast refresh for active jobs
+    refetchInterval: 5000,
+  });
+}
+
+// ── Queue Status Counts ──
+
+export function useQueueStatusCounts() {
+  return useQuery({
+    queryKey: ['shopify-queue-status-counts'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('shopify_sync_job_items' as any)
+        .select('status, failure_code');
+      if (error) throw error;
+
+      const items = (data || []) as any[];
+      const counts = { queued: 0, running: 0, succeeded: 0, failed: 0, blocked: 0 };
+      const failureBreakdown: Record<string, number> = {};
+
+      items.forEach((item: any) => {
+        const s = item.status as string;
+        if (s in counts) counts[s as keyof typeof counts]++;
+        if (item.failure_code) {
+          failureBreakdown[item.failure_code] = (failureBreakdown[item.failure_code] || 0) + 1;
+        }
+      });
+
+      return { counts, failureBreakdown };
+    },
+    refetchInterval: 5000,
+  });
+}
+
+// ── Job Health Metrics ──
+
+export function useJobHealthMetrics() {
+  return useQuery({
+    queryKey: ['shopify-job-health'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('shopify_sync_job_queue' as any)
+        .select('id, status, created_at, heartbeat_at, lease_expires_at, claimed_by')
+        .in('status', ['queued', 'running'])
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+
+      const activeJobs = (data || []) as any[];
+      const now = Date.now();
+
+      let oldestJobAge: number | null = null;
+      const staleJobs: Array<{ id: string; lastHeartbeat: string; ageSec: number }> = [];
+
+      activeJobs.forEach((job: any) => {
+        const createdMs = new Date(job.created_at).getTime();
+        const ageMs = now - createdMs;
+        if (oldestJobAge === null || ageMs > oldestJobAge) oldestJobAge = ageMs;
+
+        if (job.status === 'running' && job.heartbeat_at) {
+          const hbAge = now - new Date(job.heartbeat_at).getTime();
+          if (hbAge > 120_000) { // stale if >2min since heartbeat
+            staleJobs.push({ id: job.id, lastHeartbeat: job.heartbeat_at, ageSec: Math.round(hbAge / 1000) });
+          }
+        }
+      });
+
+      return {
+        activeCount: activeJobs.length,
+        oldestJobAgeMs: oldestJobAge,
+        staleJobs,
+      };
+    },
+    refetchInterval: 10000,
   });
 }
 
