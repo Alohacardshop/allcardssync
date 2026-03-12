@@ -4,19 +4,70 @@ import { SendGradedSchema, SendGradedInput } from '../_shared/validation.ts'
 import { writeInventory, generateRequestId, locationGidToId } from '../_shared/inventory-write.ts'
 import { ensureMediaOrder, determineFrontImageUrl } from '../_shared/shopify-media-order.ts'
 
+/**
+ * Retry wrapper for Shopify API calls.
+ * Retries on transient errors (429, 500, 502, 503, 504) with exponential backoff.
+ * Max 3 retries: immediate → 1s → 2s → 4s
+ */
+async function shopifyFetchWithRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
+  const retryDelays = [0, 1000, 2000, 4000]
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      const delay = retryDelays[attempt] || 4000
+      console.log(`[RETRY] Attempt ${attempt + 1}/${maxRetries + 1} for ${url}, waiting ${delay}ms`)
+      await new Promise(r => setTimeout(r, delay))
+    }
+
+    try {
+      const response = await fetch(url, options)
+      
+      // Don't retry on success or non-retryable errors
+      if (response.ok || ![429, 500, 502, 503, 504].includes(response.status)) {
+        return response
+      }
+
+      // Log retryable failure
+      console.warn(`[RETRY] HTTP ${response.status} from ${url} (attempt ${attempt + 1}/${maxRetries + 1})`)
+      
+      if (attempt >= maxRetries) {
+        return response // Return last failed response
+      }
+    } catch (err) {
+      console.warn(`[RETRY] Network error for ${url} (attempt ${attempt + 1}/${maxRetries + 1}):`, err)
+      if (attempt >= maxRetries) throw err
+    }
+  }
+
+  // Should never reach here, but TypeScript needs it
+  throw new Error(`[RETRY] Exhausted all retries for ${url}`)
+}
+
 // Helper function to generate barcode for graded items
 // Priority: Certificate number (PSA/CGC) > SKU
 function generateBarcodeForGradedItem(item: any, intakeItem: any): string {
-  // Check for PSA certificate
   const psaCert = item.psa_cert || intakeItem.psa_cert || intakeItem.psa_cert_number;
   if (psaCert) return psaCert;
-  
-  // Check for CGC certificate
   const cgcCert = intakeItem.cgc_cert || intakeItem.catalog_snapshot?.cgc_cert;
   if (cgcCert) return cgcCert;
-  
-  // Fallback to SKU
   return item.sku || intakeItem.sku || '';
+}
+
+/**
+ * Deduplicate title parts while preserving original casing.
+ * Prevents titles like "2023 Pokemon Pikachu #25 holo holo PSA 10"
+ */
+function deduplicateParts(parts: string[]): string[] {
+  const seen = new Set<string>()
+  const cleaned: string[] = []
+  for (const part of parts) {
+    const key = part.toLowerCase()
+    if (!seen.has(key)) {
+      seen.add(key)
+      cleaned.push(part)
+    }
+  }
+  return cleaned
 }
 
 Deno.serve(async (req) => {
@@ -64,8 +115,27 @@ Deno.serve(async (req) => {
       throw new Error(`Failed to fetch intake item: ${fetchError?.message}`)
     }
 
+    // ── Duplicate protection: if product already exists in Shopify, force update path ──
+    const existingProductId = intakeItem.shopify_product_id
+    const existingVariantId = intakeItem.shopify_variant_id
+    const isUpdate = !!(existingProductId && existingVariantId)
+
+    // Structured logging: sync start
+    console.log(JSON.stringify({
+      event: 'shopify_sync_start',
+      item_id: item.id,
+      sku: item.sku,
+      store: storeKey,
+      isUpdate,
+      existing_product_id: existingProductId || null
+    }))
+
+    if (!isUpdate && intakeItem.shopify_product_id) {
+      // Product ID exists but variant ID is missing — still treat as duplicate prevention
+      console.warn(`[SYNC] Duplicate product creation prevented for item ${item.id} — shopify_product_id already set: ${intakeItem.shopify_product_id}`)
+    }
+
     // Use normalized_tags as source of truth for Shopify tags
-    // Fall back to shopify_tags if normalized_tags not yet populated
     const tagsForShopify = intakeItem.normalized_tags || intakeItem.shopify_tags || [];
 
     // Extract PSA URL and image from snapshots
@@ -74,12 +144,12 @@ Deno.serve(async (req) => {
                    (intakeItem.psa_cert ? `https://www.psacard.com/cert/${intakeItem.psa_cert}` : null)
 
     // Extract primary image URL - prioritize PSA primary image first
-    const imageUrl = intakeItem.psa_snapshot?.image_url ||  // PSA primary image (preferred)
-                     intakeItem.image_url ||                // Database primary image
-                     item.image_url ||                      // Function parameter image
-                     intakeItem.catalog_snapshot?.image_url || // Catalog image
+    const imageUrl = intakeItem.psa_snapshot?.image_url ||
+                     intakeItem.image_url ||
+                     item.image_url ||
+                     intakeItem.catalog_snapshot?.image_url ||
                      (intakeItem.image_urls && Array.isArray(intakeItem.image_urls) && intakeItem.image_urls.length > 0 ? 
-                       intakeItem.image_urls[0] : null)     // First image from array as fallback
+                       intakeItem.image_urls[0] : null)
 
     // Get Shopify credentials from system_settings table
     const storeUpper = storeKey.toUpperCase()
@@ -103,7 +173,13 @@ Deno.serve(async (req) => {
       throw new Error(`Missing Shopify credentials for ${storeKey}`)
     }
 
-    // Create graded card title in proper format: "YEAR BRAND SUBJECT #CARDNUMBER VARIANT PSA X"
+    // Shopify API request helpers (with retry)
+    const shopifyHeaders = {
+      'X-Shopify-Access-Token': token,
+      'Content-Type': 'application/json'
+    }
+
+    // Create graded card title in proper format
     const year = item.year || intakeItem.year || 
                  intakeItem.catalog_snapshot?.year || 
                  intakeItem.psa_snapshot?.year || ''
@@ -115,7 +191,6 @@ Deno.serve(async (req) => {
     const category = item.category_tag || intakeItem.category || ''
     const gradingCompany = intakeItem.grading_company || 'PSA'
     
-    // Extract purchase location
     const purchaseLocation = Array.isArray(intakeItem.purchase_location) 
       ? intakeItem.purchase_location[0]?.name 
       : intakeItem.purchase_location?.name
@@ -131,7 +206,9 @@ Deno.serve(async (req) => {
       if (category && category !== 'Normal') parts.push(category.toLowerCase())
       if (grade) parts.push(`${gradingCompany} ${grade}`)
       
-      title = parts.filter(Boolean).join(' ')
+      // Deduplicate parts to prevent titles like "holo holo"
+      const cleanedParts = deduplicateParts(parts.filter(Boolean))
+      title = cleanedParts.join(' ')
     }
 
     // Create product description with PSA cert number
@@ -139,7 +216,6 @@ Deno.serve(async (req) => {
     let description = title
     if (psaCert) description += ` ${psaCert}`
     
-    // Add detailed description
     description += `\n\nGraded ${brandTitle} ${subject}`
     if (year) description += ` from ${year}`
     if (grade) description += `, ${gradingCompany} Grade ${grade}`
@@ -148,11 +224,6 @@ Deno.serve(async (req) => {
     // Check if this is a comic
     const isComic = intakeItem.main_category === 'comics' || 
                     intakeItem.catalog_snapshot?.type === 'graded_comic'
-
-    // Check if product already exists in Shopify
-    const existingProductId = intakeItem.shopify_product_id
-    const existingVariantId = intakeItem.shopify_variant_id
-    const isUpdate = !!(existingProductId && existingVariantId)
 
     // Build comprehensive metafields array
     const metafields = [
@@ -170,155 +241,54 @@ Deno.serve(async (req) => {
       }
     ];
 
-    // Core classification
     if (intakeItem.main_category) {
-      metafields.push({
-        namespace: 'acs.sync',
-        key: 'main_category',
-        type: 'single_line_text_field',
-        value: intakeItem.main_category
-      });
+      metafields.push({ namespace: 'acs.sync', key: 'main_category', type: 'single_line_text_field', value: intakeItem.main_category });
     }
-
     if (intakeItem.sub_category) {
-      metafields.push({
-        namespace: 'acs.sync',
-        key: 'sub_category',
-        type: 'single_line_text_field',
-        value: intakeItem.sub_category
-      });
+      metafields.push({ namespace: 'acs.sync', key: 'sub_category', type: 'single_line_text_field', value: intakeItem.sub_category });
     }
-
-    metafields.push({
-      namespace: 'acs.sync',
-      key: 'item_type',
-      type: 'single_line_text_field',
-      value: 'graded'
-    });
-
-    // Grading information
+    metafields.push({ namespace: 'acs.sync', key: 'item_type', type: 'single_line_text_field', value: 'graded' });
     if (gradingCompany) {
-      metafields.push({
-        namespace: 'acs.sync',
-        key: 'grading_company',
-        type: 'single_line_text_field',
-        value: gradingCompany
-      });
+      metafields.push({ namespace: 'acs.sync', key: 'grading_company', type: 'single_line_text_field', value: gradingCompany });
     }
-
     if (grade) {
-      metafields.push({
-        namespace: 'acs.sync',
-        key: 'grade',
-        type: 'single_line_text_field',
-        value: grade
-      });
+      metafields.push({ namespace: 'acs.sync', key: 'grade', type: 'single_line_text_field', value: grade });
     }
-
     if (psaCert) {
-      metafields.push({
-        namespace: 'acs.sync',
-        key: 'cert_number',
-        type: 'single_line_text_field',
-        value: psaCert
-      });
+      metafields.push({ namespace: 'acs.sync', key: 'cert_number', type: 'single_line_text_field', value: psaCert });
     }
-
     if (psaUrl) {
-      metafields.push({
-        namespace: 'acs.sync',
-        key: 'cert_url',
-        type: 'url',
-        value: psaUrl
-      });
+      metafields.push({ namespace: 'acs.sync', key: 'cert_url', type: 'url', value: psaUrl });
     }
-
-    // Card details
     if (brandTitle) {
-      metafields.push({
-        namespace: 'acs.sync',
-        key: 'brand_title',
-        type: 'single_line_text_field',
-        value: brandTitle
-      });
+      metafields.push({ namespace: 'acs.sync', key: 'brand_title', type: 'single_line_text_field', value: brandTitle });
     }
-
     if (cardNumber) {
-      metafields.push({
-        namespace: 'acs.sync',
-        key: 'card_number',
-        type: 'single_line_text_field',
-        value: cardNumber
-      });
+      metafields.push({ namespace: 'acs.sync', key: 'card_number', type: 'single_line_text_field', value: cardNumber });
     }
-
     if (year) {
-      metafields.push({
-        namespace: 'acs.sync',
-        key: 'year',
-        type: 'single_line_text_field',
-        value: year
-      });
+      metafields.push({ namespace: 'acs.sync', key: 'year', type: 'single_line_text_field', value: year });
     }
-
     if (cardVariant) {
-      metafields.push({
-        namespace: 'acs.sync',
-        key: 'variant',
-        type: 'single_line_text_field',
-        value: cardVariant
-      });
+      metafields.push({ namespace: 'acs.sync', key: 'variant', type: 'single_line_text_field', value: cardVariant });
     }
-
     if (subject) {
-      metafields.push({
-        namespace: 'acs.sync',
-        key: 'subject',
-        type: 'single_line_text_field',
-        value: subject
-      });
+      metafields.push({ namespace: 'acs.sync', key: 'subject', type: 'single_line_text_field', value: subject });
     }
-
-    // Rich JSON data
     if (intakeItem.catalog_snapshot) {
-      metafields.push({
-        namespace: 'acs.sync',
-        key: 'catalog_snapshot',
-        type: 'json',
-        value: JSON.stringify(intakeItem.catalog_snapshot)
-      });
+      metafields.push({ namespace: 'acs.sync', key: 'catalog_snapshot', type: 'json', value: JSON.stringify(intakeItem.catalog_snapshot) });
     }
-
     if (intakeItem.psa_snapshot) {
-      metafields.push({
-        namespace: 'acs.sync',
-        key: 'psa_snapshot',
-        type: 'json',
-        value: JSON.stringify(intakeItem.psa_snapshot)
-      });
+      metafields.push({ namespace: 'acs.sync', key: 'psa_snapshot', type: 'json', value: JSON.stringify(intakeItem.psa_snapshot) });
     }
-
     if (intakeItem.grading_data) {
-      metafields.push({
-        namespace: 'acs.sync',
-        key: 'grading_data',
-        type: 'json',
-        value: JSON.stringify(intakeItem.grading_data)
-      });
+      metafields.push({ namespace: 'acs.sync', key: 'grading_data', type: 'json', value: JSON.stringify(intakeItem.grading_data) });
     }
-
-    // Purchase location
     if (purchaseLocation) {
-      metafields.push({
-        namespace: 'acs.sync',
-        key: 'purchase_location',
-        type: 'single_line_text_field',
-        value: purchaseLocation
-      });
+      metafields.push({ namespace: 'acs.sync', key: 'purchase_location', type: 'single_line_text_field', value: purchaseLocation });
     }
 
-    // Build tags array using normalized_tags as source of truth (for sync TO Shopify)
-    // Include additional context tags not in normalized_tags
+    // Build tags array
     const additionalTags = [
       gradingCompany,
       grade ? `Grade ${grade}` : null,
@@ -326,7 +296,6 @@ Deno.serve(async (req) => {
       purchaseLocation ? `Purchased: ${purchaseLocation}` : null
     ].filter(Boolean);
 
-    // Merge normalized tags with additional context tags
     const tagsArray = [...new Set([
       ...tagsForShopify,
       ...additionalTags,
@@ -336,7 +305,7 @@ Deno.serve(async (req) => {
       intakeItem.condition_type
     ].filter(Boolean))];
 
-    // Prepare Shopify product data (without metafields - will add them separately)
+    // Prepare Shopify product data
     const productData = {
       product: {
         title: title,
@@ -348,7 +317,7 @@ Deno.serve(async (req) => {
           sku: item.sku,
           price: item.price?.toString() || '0.00',
           cost: item.cost ? item.cost.toString() : (intakeItem.cost ? intakeItem.cost.toString() : undefined),
-          inventory_quantity: 1, // Graded = 1-of-1, always
+          inventory_quantity: 1,
           inventory_management: 'shopify',
           requires_shipping: true,
           taxable: true,
@@ -358,7 +327,6 @@ Deno.serve(async (req) => {
           weight_unit: isComic ? 'lb' : 'oz'
         }],
         // FRONT-ONLY IMAGE: Send only the front image to Shopify
-        // Customers can look up the cert number to see back image if needed
         images: (() => {
           const frontUrl = determineFrontImageUrl(intakeItem);
           const singleUrl = frontUrl || imageUrl || 
@@ -376,15 +344,11 @@ Deno.serve(async (req) => {
     let product: any, variant: any, shopifyResponse: any
 
     if (isUpdate) {
-      // UPDATE existing product
-      const updateResponse = await fetch(`https://${domain}/admin/api/2024-07/products/${existingProductId}.json`, {
-        method: 'PUT',
-        headers: {
-          'X-Shopify-Access-Token': token,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(productData)
-      })
+      // UPDATE existing product (uses retry wrapper)
+      const updateResponse = await shopifyFetchWithRetry(
+        `https://${domain}/admin/api/2024-07/products/${existingProductId}.json`,
+        { method: 'PUT', headers: shopifyHeaders, body: JSON.stringify(productData) }
+      )
 
       if (!updateResponse.ok) {
         const errorText = await updateResponse.text()
@@ -396,25 +360,25 @@ Deno.serve(async (req) => {
       product = updateResult.product
       variant = product.variants.find((v: any) => v.id.toString() === existingVariantId) || product.variants[0]
       
-      // Update the variant with new price and SKU
-      const variantUpdateResponse = await fetch(`https://${domain}/admin/api/2024-07/variants/${variant.id}.json`, {
-        method: 'PUT',
-        headers: {
-          'X-Shopify-Access-Token': token,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          variant: {
-            id: variant.id,
-            price: item.price?.toString() || '0.00',
-            cost: item.cost ? item.cost.toString() : (intakeItem.cost ? intakeItem.cost.toString() : undefined),
-            sku: item.sku,
-            barcode: generateBarcodeForGradedItem(item, intakeItem),
-            weight: isComic ? 1.5 : (intakeItem.product_weight || 3.5),
-            weight_unit: isComic ? 'lb' : 'oz'
-          }
-        })
-      })
+      // Update the variant with new price and SKU (uses retry wrapper)
+      const variantUpdateResponse = await shopifyFetchWithRetry(
+        `https://${domain}/admin/api/2024-07/variants/${variant.id}.json`,
+        {
+          method: 'PUT',
+          headers: shopifyHeaders,
+          body: JSON.stringify({
+            variant: {
+              id: variant.id,
+              price: item.price?.toString() || '0.00',
+              cost: item.cost ? item.cost.toString() : (intakeItem.cost ? intakeItem.cost.toString() : undefined),
+              sku: item.sku,
+              barcode: generateBarcodeForGradedItem(item, intakeItem),
+              weight: isComic ? 1.5 : (intakeItem.product_weight || 3.5),
+              weight_unit: isComic ? 'lb' : 'oz'
+            }
+          })
+        }
+      )
 
       if (!variantUpdateResponse.ok) {
         const errorText = await variantUpdateResponse.text()
@@ -422,15 +386,11 @@ Deno.serve(async (req) => {
       }
 
     } else {
-      // CREATE new product
-      const createResponse = await fetch(`https://${domain}/admin/api/2024-07/products.json`, {
-        method: 'POST',
-        headers: {
-          'X-Shopify-Access-Token': token,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(productData)
-      })
+      // CREATE new product (uses retry wrapper)
+      const createResponse = await shopifyFetchWithRetry(
+        `https://${domain}/admin/api/2024-07/products.json`,
+        { method: 'POST', headers: shopifyHeaders, body: JSON.stringify(productData) }
+      )
 
       if (!createResponse.ok) {
         const errorText = await createResponse.text()
@@ -442,8 +402,6 @@ Deno.serve(async (req) => {
       product = result.product
       variant = product.variants[0]
     }
-
-    // No deferred image upload needed — front-only strategy sends single image in initial create
 
     // Ensure front image is featured using shared helper (verification/safety net)
     const frontUrl = determineFrontImageUrl(intakeItem)
@@ -459,51 +417,49 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Set inventory level at location using centralized helper
-    const requestId = generateRequestId('send-graded')
-    const locationId = locationGidToId(locationGid)
-    
-    const inventoryResult = await writeInventory({
-      domain,
-      token,
-      inventory_item_id: String(variant.inventory_item_id),
-      location_id: locationId,
-      action: 'initial_set',
-      quantity: 1, // Graded = 1-of-1, always
-      request_id: requestId,
-      store_key: storeKey,
-      item_id: item.id,
-      sku: item.sku,
-      source_function: 'v2-shopify-send-graded',
-      triggered_by: user.id,
-      supabase
-    })
+    // ── Inventory write: only on CREATE, never on UPDATE ──
+    // Prevents accidental inventory resets when re-syncing existing products
+    if (!isUpdate) {
+      const requestId = generateRequestId('send-graded')
+      const locationId = locationGidToId(locationGid)
+      
+      const inventoryResult = await writeInventory({
+        domain,
+        token,
+        inventory_item_id: String(variant.inventory_item_id),
+        location_id: locationId,
+        action: 'initial_set',
+        quantity: 1, // Graded = 1-of-1, always
+        request_id: requestId,
+        store_key: storeKey,
+        item_id: item.id,
+        sku: item.sku,
+        source_function: 'v2-shopify-send-graded',
+        triggered_by: user.id,
+        supabase
+      })
 
-    if (!inventoryResult.success) {
-      console.warn(`Failed to set inventory level: ${inventoryResult.error}`)
+      if (!inventoryResult.success) {
+        console.warn(`Failed to set inventory level: ${inventoryResult.error}`)
+      }
+    } else {
+      console.log(`[INVENTORY] Skipping inventory write for update (product ${product.id}) to prevent reset`)
     }
 
-    // Now create metafields separately after product creation
-    
-    // Add tags as a list metafield (not JSON string)
+    // Create metafields (with retry wrapper)
     metafields.push({
       namespace: 'acs.sync',
       key: 'tags',
       type: 'list.single_line_text_field',
-      value: JSON.stringify(tagsArray) // Shopify REST API expects JSON string for lists
+      value: JSON.stringify(tagsArray)
     });
 
-    // Create each metafield
     for (const metafield of metafields) {
       try {
-        const metafieldResponse = await fetch(`https://${domain}/admin/api/2024-07/products/${product.id}/metafields.json`, {
-          method: 'POST',
-          headers: {
-            'X-Shopify-Access-Token': token,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ metafield })
-        })
+        const metafieldResponse = await shopifyFetchWithRetry(
+          `https://${domain}/admin/api/2024-07/products/${product.id}/metafields.json`,
+          { method: 'POST', headers: shopifyHeaders, body: JSON.stringify({ metafield }) }
+        )
 
         if (!metafieldResponse.ok) {
           const errorText = await metafieldResponse.text()
@@ -516,7 +472,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Update intake item with Shopify IDs and preserve all raw data
+    // Update intake item with Shopify IDs
+    // FIX: Preserve original image_urls array — never overwrite with a single-element array
+    const resolvedFrontUrl = determineFrontImageUrl(intakeItem) || intakeItem.image_url
     const shopifySnapshot = {
       product_data: productData,
       shopify_response: shopifyResponse,
@@ -535,7 +493,10 @@ Deno.serve(async (req) => {
         pushed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         shopify_sync_snapshot: shopifySnapshot,
-        image_urls: imageUrl ? [imageUrl] : intakeItem.image_urls,
+        // Preserve the full image array — never overwrite with a subset
+        image_urls: intakeItem.image_urls,
+        // Save the resolved front image URL for quick reference
+        image_url: resolvedFrontUrl,
         updated_by: 'shopify_sync'
       })
       .eq('id', item.id)
@@ -543,6 +504,17 @@ Deno.serve(async (req) => {
     if (updateError) {
       console.error('Failed to update intake item:', updateError)
     }
+
+    // Structured logging: sync complete
+    console.log(JSON.stringify({
+      event: 'shopify_sync_complete',
+      item_id: item.id,
+      sku: item.sku,
+      shopify_product_id: product.id.toString(),
+      shopify_variant_id: variant.id.toString(),
+      isUpdate,
+      store: storeKey
+    }))
 
     return new Response(JSON.stringify({
       success: true,
@@ -556,9 +528,13 @@ Deno.serve(async (req) => {
     })
 
   } catch (error) {
-    console.error('Error in v2-shopify-send-graded:', error)
+    // Structured error logging
+    console.error(JSON.stringify({
+      event: 'shopify_sync_error',
+      error: error.message,
+      stack: error.stack?.split('\n').slice(0, 3).join(' | ')
+    }))
     
-    // Determine appropriate status code
     let status = 500
     if (error.message?.includes('Authorization') || error.message?.includes('authentication')) {
       status = 401
