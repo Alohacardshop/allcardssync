@@ -75,7 +75,7 @@ async function countTotalComics(supabase: any, storeFilter?: string): Promise<nu
     .not('shopify_product_id', 'is', null)
     .not('shopify_variant_id', 'is', null)
     .is('deleted_at', null)
-    .or('main_category.eq.comics,catalog_snapshot->>type.eq.graded_comic')
+    .eq('main_category', 'comics')
 
   if (storeFilter) {
     q = q.eq('store_key', storeFilter)
@@ -94,7 +94,7 @@ async function countRepairedComics(supabase: any, storeFilter?: string): Promise
     .not('shopify_product_id', 'is', null)
     .not('shopify_variant_id', 'is', null)
     .is('deleted_at', null)
-    .or('main_category.eq.comics,catalog_snapshot->>type.eq.graded_comic')
+    .eq('main_category', 'comics')
     .eq('updated_by', 'comic_bulk_repair')
 
   if (storeFilter) {
@@ -173,7 +173,7 @@ Deno.serve(async (req) => {
       .not('shopify_product_id', 'is', null)
       .not('shopify_variant_id', 'is', null)
       .is('deleted_at', null)
-      .or('main_category.eq.comics,catalog_snapshot->>type.eq.graded_comic')
+      .eq('main_category', 'comics')
       .order('id', { ascending: true })
       .limit(limit)
 
@@ -297,6 +297,37 @@ Deno.serve(async (req) => {
           }
           console.log(JSON.stringify({ event: 'comic_bulk_repair_backoff', item_id: intakeItem.id, sku: intakeItem.sku }))
           await pace(BACKOFF_MS)
+          continue
+        }
+
+        if (productRes.status === 404) {
+          // Product no longer exists in Shopify — clean up stale references
+          console.log(JSON.stringify({
+            event: 'comic_bulk_repair_stale_cleanup',
+            item_id: intakeItem.id,
+            sku: intakeItem.sku,
+            shopify_product_id: intakeItem.shopify_product_id
+          }))
+          await supabase.from('intake_items').update({
+            shopify_product_id: null,
+            shopify_variant_id: null,
+            shopify_inventory_item_id: null,
+            shopify_sync_status: null,
+            updated_by: 'comic_bulk_repair_cleanup',
+            updated_at: new Date().toISOString()
+          }).eq('id', intakeItem.id)
+
+          if (mode === 'preview') {
+            diffs.push({
+              item_id: intakeItem.id, sku: intakeItem.sku,
+              current_title: null, intended_title: intendedTitle,
+              title_changed: false, description_changed: false,
+              image_changed: false, metafields_changed: 0,
+              error: 'Shopify product not found (404) — stale link cleaned'
+            })
+          } else {
+            results.push({ item_id: intakeItem.id, sku: intakeItem.sku, status: 'updated', changes: ['cleaned_stale_shopify_link'], api_calls: 1 })
+          }
           continue
         }
 
