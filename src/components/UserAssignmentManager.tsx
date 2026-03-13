@@ -12,7 +12,8 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Separator } from "@/components/ui/separator";
-import { Users, Plus, Pencil, Trash2, ShieldCheck, Store, MapPin, KeyRound, RotateCcw } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, ShieldCheck, Store, MapPin, KeyRound, RotateCcw, Copy, Check } from "lucide-react";
+import { DialogFooter } from "@/components/ui/dialog";
 import { logger } from "@/lib/logger";
 
 interface UserAssignment {
