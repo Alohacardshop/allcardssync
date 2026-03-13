@@ -340,7 +340,9 @@ Deno.serve(async (req) => {
           metafields_changed: metafieldsChangedCount
         }
 
-        const hasAnyChange = titleChanged || descChanged || imageChanged || metafieldsChangedCount > 0
+        // Always check for back image cleanup even if title/desc/metafields unchanged
+        const hasTextOrMetaChange = titleChanged || descChanged || metafieldsChangedCount > 0
+        const hasAnyChange = hasTextOrMetaChange || imageChanged
 
         if (mode === 'preview') {
           diffs.push(diff)
@@ -348,19 +350,7 @@ Deno.serve(async (req) => {
         }
 
         // ── Execute mode ──
-        if (!hasAnyChange) {
-          // Mark as repaired even if unchanged so we skip it next run
-          await supabase
-            .from('intake_items')
-            .update({
-              updated_by: 'comic_bulk_repair',
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', intakeItem.id)
-
-          results.push({ item_id: intakeItem.id, sku: intakeItem.sku, status: 'unchanged', changes: [], api_calls: 0 })
-          continue
-        }
+        // Even if no text changes, we still run image cleanup below to remove back images
 
         const changes: string[] = []
         let itemApiCalls = 0
