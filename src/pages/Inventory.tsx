@@ -22,7 +22,7 @@ import { ShopifyRemovalDialog } from '@/components/ShopifyRemovalDialog';
 import { ShopifySyncDetailsDialog } from '@/components/ShopifySyncDetailsDialog';
 import { InventoryDeleteDialog } from '@/components/InventoryDeleteDialog';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
-import { BulkActionsToolbar } from '@/components/inventory/BulkActionsToolbar';
+import { BulkActionsToolbar, type ResyncTarget } from '@/components/inventory/BulkActionsToolbar';
 import { QuickFilterPresets, QuickFilterState } from '@/components/inventory/QuickFilterPresets';
 import { PrintFromInventoryDialog } from '@/components/inventory/PrintFromInventoryDialog';
 import { ActiveFilterChips } from '@/components/inventory/ActiveFilterChips';
