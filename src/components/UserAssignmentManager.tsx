@@ -472,7 +472,10 @@ export function UserAssignmentManager() {
         body: { action: "delete", userId }
       });
 
-      if (error) throw error;
+      if (error) {
+        const errorBody = await (error as any).context?.json?.().catch(() => null);
+        throw new Error(errorBody?.error || error.message);
+      }
       if (!data.ok) throw new Error(data.error);
 
       toast.success("User deleted successfully");
