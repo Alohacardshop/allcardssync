@@ -4,9 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { BookOpen, Eye, Wrench, ChevronDown, ChevronRight, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
+import { BookOpen, Eye, Wrench, ChevronDown, ChevronRight, AlertCircle, CheckCircle, RefreshCw, ImageIcon } from 'lucide-react';
 import { useStore } from '@/contexts/StoreContext';
 
 interface RepairDiff {
@@ -49,6 +51,7 @@ export function ComicBulkRepairPanel() {
   const [diffs, setDiffs] = useState<RepairDiff[]>([]);
   const [results, setResults] = useState<RepairResult[]>([]);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const [forceImage, setForceImage] = useState(false);
 
   const storeKey = assignedStore || 'hawaii';
 
@@ -61,7 +64,12 @@ export function ComicBulkRepairPanel() {
 
     try {
       const { data, error } = await supabase.functions.invoke('bulk-comic-repair', {
-        body: { mode: runMode, store_key: storeKey }
+        body: {
+          mode: runMode,
+          store_key: storeKey,
+          force_image: forceImage,
+          skip_repaired: !forceImage,  // when forcing images, re-process all comics
+        }
       });
 
       if (error) throw error;
