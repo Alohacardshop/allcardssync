@@ -834,6 +834,7 @@ const Inventory = () => {
     }
 
     setBulkSyncing(true);
+    const toastId = toast.loading(`Queuing ${selectedItems.size} items for eBay sync...`);
 
     try {
       // Fetch fresh data to check list_on_ebay and ebay_listing_id
@@ -856,6 +857,7 @@ const Inventory = () => {
       const allEbayItems = [...existingEbayItems, ...newEbayItems];
 
       if (allEbayItems.length === 0) {
+        toast.dismiss(toastId);
         toast.info('No selected items have list_on_ebay enabled');
         setBulkSyncing(false);
         return;
@@ -892,12 +894,14 @@ const Inventory = () => {
       // Fire-and-forget eBay processor
       supabase.functions.invoke('ebay-sync-processor', { body: { batch_size: allEbayItems.length } }).catch(() => {});
 
+      toast.dismiss(toastId);
       const parts = [];
       if (existingEbayItems.length > 0) parts.push(`${existingEbayItems.length} update`);
       if (newEbayItems.length > 0) parts.push(`${newEbayItems.length} create`);
       toast.success(`eBay sync queued: ${parts.join(', ')}`);
       refetch();
     } catch (error) {
+      toast.dismiss(toastId);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       toast.error('Failed to queue eBay resync', { description: errorMessage });
     } finally {
