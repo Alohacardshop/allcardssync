@@ -2,13 +2,72 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { corsHeaders } from "../_lib/cors.ts";
 import { log, genRequestId } from "../_lib/log.ts";
-import { scrapeComicCert } from "../psa-lookup/scraper.ts";
 import { requireAuth, requireRole } from "../_shared/auth.ts";
 
-const PACE_MS = 2000; // 2s between scrapes to avoid rate limiting from PSA/Firecrawl
-const DEFAULT_LIMIT = 20; // Conservative default — 20 items × ~3s each = ~60s
-
+const PACE_MS = 2000;
+const DEFAULT_LIMIT = 20;
 const pace = () => new Promise(resolve => setTimeout(resolve, PACE_MS));
+
+/**
+ * Scrape PSA cert page for comic images using Firecrawl or direct fetch
+ */
+async function scrapeImages(certNumber: string, requestId: string): Promise<string[]> {
+  const url = `https://www.psacard.com/cert/${certNumber}`;
+  const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY');
+
+  let html = '';
+
+  if (firecrawlApiKey) {
+    try {
+      const resp = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${firecrawlApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url,
+          formats: ['html'],
+          onlyMainContent: false,
+          waitFor: 2000,
+        }),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        html = data.data?.html || data.html || '';
+      }
+    } catch {
+      // Fall through to direct fetch
+    }
+  }
+
+  if (!html) {
+    try {
+      const resp = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'text/html',
+        }
+      });
+      if (resp.ok) html = await resp.text();
+    } catch {
+      return [];
+    }
+  }
+
+  if (!html || html.includes('Certificate Not Found')) return [];
+
+  // Extract cloudfront image URLs
+  const imageUrls: string[] = [];
+  const matches = html.matchAll(/https:\/\/d1htnxwo4o0jhw\.cloudfront\.net\/cert\/\d+\/[^"'\s\)]+\.(?:jpg|png|webp)/gi);
+  for (const m of matches) {
+    const imgUrl = m[0].replace('/thumbnail/', '/').replace('/small/', '/').split('?')[0];
+    if (!imageUrls.includes(imgUrl)) imageUrls.push(imgUrl);
+  }
+
+  // PSA shows front first (left), back second (right) — no reversal needed
+  return imageUrls;
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -18,7 +77,6 @@ Deno.serve(async (req) => {
   const requestId = genRequestId();
 
   try {
-    // Auth required
     const user = await requireAuth(req);
     await requireRole(user.id, ['admin', 'staff']);
 
@@ -27,8 +85,8 @@ Deno.serve(async (req) => {
       limit = DEFAULT_LIMIT,
       after_id,
       store_filter,
-      mode = 'preview', // 'preview' or 'execute'
-      skip_has_images = false, // if true, skip items that already have both images
+      mode = 'preview',
+      skip_has_images = false,
     } = body;
 
     const supabase = createClient(
@@ -37,7 +95,6 @@ Deno.serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // Build query for comics with cert numbers
     let query = supabase
       .from('intake_items')
       .select('id, sku, subject, psa_cert, psa_cert_number, front_image_url, back_image_url, image_urls')
@@ -46,17 +103,8 @@ Deno.serve(async (req) => {
       .order('id', { ascending: true })
       .limit(limit);
 
-    // Only items that have a cert number to look up
-    query = query.or('sku.neq.,psa_cert.neq.,psa_cert_number.neq.');
-
-    if (store_filter) {
-      query = query.eq('store_key', store_filter);
-    }
-
-    if (after_id) {
-      query = query.gt('id', after_id);
-    }
-
+    if (store_filter) query = query.eq('store_key', store_filter);
+    if (after_id) query = query.gt('id', after_id);
     if (skip_has_images) {
       query = query.or('front_image_url.is.null,back_image_url.is.null');
     }
@@ -65,75 +113,44 @@ Deno.serve(async (req) => {
     if (queryError) throw new Error(`Query failed: ${queryError.message}`);
     if (!comics || comics.length === 0) {
       return new Response(JSON.stringify({
-        ok: true,
-        message: 'No comics to process',
-        total_processed: 0,
-        has_more: false,
+        ok: true, message: 'No comics to process', total_processed: 0, has_more: false,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Count totals
     const { count: totalComics } = await supabase
       .from('intake_items')
       .select('id', { count: 'exact', head: true })
       .eq('main_category', 'comics')
       .is('deleted_at', null);
 
-    const results: Array<{
-      id: string;
-      cert: string;
-      subject: string | null;
-      status: string;
-      images_found: number;
-      front_image_url: string | null;
-      back_image_url: string | null;
-      changed: boolean;
-    }> = [];
+    const results: any[] = [];
 
     for (const comic of comics) {
       const certNumber = comic.sku || comic.psa_cert || comic.psa_cert_number;
       if (!certNumber) {
-        results.push({
-          id: comic.id,
-          cert: 'none',
-          subject: comic.subject,
-          status: 'skipped_no_cert',
-          images_found: 0,
-          front_image_url: null,
-          back_image_url: null,
-          changed: false,
-        });
+        results.push({ id: comic.id, cert: 'none', subject: comic.subject, status: 'skipped_no_cert', images_found: 0, changed: false });
         continue;
       }
 
       try {
-        log.info('[comic-rescrape] Scraping cert', { requestId, certNumber, itemId: comic.id });
-        const scraped = await scrapeComicCert(certNumber, requestId);
+        log.info('[comic-rescrape] Scraping', { requestId, certNumber, itemId: comic.id });
+        const imageUrls = await scrapeImages(certNumber, requestId);
 
-        if (!scraped || !scraped.imageUrls || scraped.imageUrls.length === 0) {
-          results.push({
-            id: comic.id,
-            cert: certNumber,
-            subject: comic.subject,
-            status: 'no_images_found',
-            images_found: 0,
-            front_image_url: comic.front_image_url,
-            back_image_url: comic.back_image_url,
-            changed: false,
-          });
+        if (imageUrls.length === 0) {
+          results.push({ id: comic.id, cert: certNumber, subject: comic.subject, status: 'no_images_found', images_found: 0, changed: false });
           await pace();
           continue;
         }
 
-        const newFront = scraped.imageUrls[0] || null;
-        const newBack = scraped.imageUrls[1] || null;
+        const newFront = imageUrls[0] || null;
+        const newBack = imageUrls[1] || null;
         const changed = newFront !== comic.front_image_url || newBack !== comic.back_image_url;
 
-        if (mode === 'execute' && changed) {
+        if (mode === 'execute') {
           const { error: updateError } = await supabase
             .from('intake_items')
             .update({
-              image_urls: scraped.imageUrls,
+              image_urls: imageUrls,
               front_image_url: newFront,
               back_image_url: newBack,
               updated_at: new Date().toISOString(),
@@ -147,49 +164,36 @@ Deno.serve(async (req) => {
         }
 
         results.push({
-          id: comic.id,
-          cert: certNumber,
-          subject: comic.subject,
-          status: mode === 'execute' && changed ? 'updated' : changed ? 'would_update' : 'unchanged',
-          images_found: scraped.imageUrls.length,
-          front_image_url: newFront,
-          back_image_url: newBack,
+          id: comic.id, cert: certNumber, subject: comic.subject,
+          status: mode === 'execute' ? (changed ? 'updated' : 'unchanged') : (changed ? 'would_update' : 'unchanged'),
+          images_found: imageUrls.length,
+          new_front: newFront, new_back: newBack,
+          old_front: comic.front_image_url, old_back: comic.back_image_url,
           changed,
         });
 
         await pace();
       } catch (err) {
-        log.error('[comic-rescrape] Error scraping', { requestId, certNumber, error: String(err) });
-        results.push({
-          id: comic.id,
-          cert: certNumber,
-          subject: comic.subject,
-          status: 'error',
-          images_found: 0,
-          front_image_url: comic.front_image_url,
-          back_image_url: comic.back_image_url,
-          changed: false,
-        });
+        log.error('[comic-rescrape] Error', { requestId, certNumber, error: String(err) });
+        results.push({ id: comic.id, cert: certNumber, subject: comic.subject, status: 'error', images_found: 0, changed: false, error: String(err) });
         await pace();
       }
     }
 
     const lastId = comics[comics.length - 1]?.id;
-    const summary = {
-      total_processed: results.length,
-      updated: results.filter(r => r.status === 'updated').length,
-      would_update: results.filter(r => r.status === 'would_update').length,
-      unchanged: results.filter(r => r.status === 'unchanged').length,
-      no_images: results.filter(r => r.status === 'no_images_found').length,
-      errors: results.filter(r => r.status === 'error').length,
-      skipped: results.filter(r => r.status === 'skipped_no_cert').length,
-    };
 
     return new Response(JSON.stringify({
-      ok: true,
-      mode,
-      summary,
+      ok: true, mode,
+      summary: {
+        total_processed: results.length,
+        updated: results.filter(r => r.status === 'updated').length,
+        would_update: results.filter(r => r.status === 'would_update').length,
+        unchanged: results.filter(r => r.status === 'unchanged').length,
+        no_images: results.filter(r => r.status === 'no_images_found').length,
+        errors: results.filter(r => r.status === 'error').length,
+      },
       total_in_catalog: totalComics,
+      remaining: (totalComics || 0) - (results.length + (after_id ? 1 : 0)),
       has_more: comics.length === limit,
       next_cursor: lastId,
       results,
@@ -198,15 +202,10 @@ Deno.serve(async (req) => {
     });
 
   } catch (error) {
-    log.error('[comic-rescrape] Fatal error', { requestId, error: String(error) });
-
+    log.error('[comic-rescrape] Fatal', { requestId, error: String(error) });
     const status = error.message?.includes('Authorization') || error.message?.includes('permissions') ? 401 : 500;
-    return new Response(JSON.stringify({
-      ok: false,
-      error: status === 401 ? error.message : 'Internal server error',
-    }), {
-      status,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    return new Response(JSON.stringify({ ok: false, error: error.message }), {
+      status, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
 });
