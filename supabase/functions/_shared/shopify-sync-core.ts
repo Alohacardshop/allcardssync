@@ -718,6 +718,8 @@ export async function syncGradedItemToShopify(
         shopify_sync_snapshot: shopifySnapshot,
         image_urls: intakeItem.image_urls,
         image_url: resolvedFrontUrl,
+        front_image_url: intakeItem.front_image_url || (Array.isArray(intakeItem.image_urls) ? intakeItem.image_urls[0] : null),
+        back_image_url: intakeItem.back_image_url || (Array.isArray(intakeItem.image_urls) ? intakeItem.image_urls[1] : null),
         updated_by: 'shopify_sync'
       })
       .eq('id', item.id)

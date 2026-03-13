@@ -150,4 +150,21 @@ export async function cacheCertificateData(
   } catch (err) {
     log.error('[psa-lookup] Failed to cache cert', { requestId, error: String(err) });
   }
+
+  // Populate front/back image columns on intake_items matching this cert
+  try {
+    const frontUrl = responseData.frontImageUrl || responseData.imageUrls?.[0];
+    const backUrl = responseData.backImageUrl || responseData.imageUrls?.[1];
+    if (frontUrl) {
+      await supabase
+        .from('intake_items')
+        .update({
+          front_image_url: frontUrl,
+          back_image_url: backUrl || null,
+        })
+        .or(`psa_cert.eq.${certNumber},psa_cert_number.eq.${certNumber},sku.eq.${certNumber}`);
+    }
+  } catch (err) {
+    log.error('[psa-lookup] Failed to update front/back image on intake_items', { requestId, error: String(err) });
+  }
 }

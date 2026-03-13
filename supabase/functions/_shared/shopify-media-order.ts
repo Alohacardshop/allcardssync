@@ -306,23 +306,23 @@ export function determineFrontImageUrl(intakeItem: any): string {
     if (sorted[0]?.ImageURL) return sorted[0].ImageURL
   }
 
-  // 2. Explicit front_image_url (manual override or set during intake)
+  // 2. Explicit front_image_url (populated during intake or backfilled)
   if (intakeItem.front_image_url) {
     return intakeItem.front_image_url
   }
 
-  // 3. Comics: intelligently pick front cover from image_urls
-  // Sometimes ingestion stores back image first, so we can't blindly use index 0
+  // 3. Comics: use image_urls[0] directly (scraper guarantees front-first ordering)
+  // Skip regex-based findFrontCandidate for comics since PSA cloudfront filenames are random hashes
   const isComic = intakeItem.main_category === 'comics' ||
                   intakeItem.catalog_snapshot?.type === 'graded_comic' ||
                   intakeItem.catalog_snapshot?.type === 'psa_comic'
 
   const imageUrls: string[] = intakeItem.image_urls || []
   if (isComic && imageUrls.length >= 1) {
-    return findFrontCandidate(imageUrls)
+    return imageUrls[0]
   }
 
-  // 4. Default: use smart candidate selection if multiple URLs, otherwise first available
+  // 4. Non-comics: use smart candidate selection if multiple URLs
   if (imageUrls.length > 1) {
     return findFrontCandidate(imageUrls)
   }

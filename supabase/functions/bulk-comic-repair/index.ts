@@ -169,7 +169,7 @@ Deno.serve(async (req) => {
     // ── Query comic items that are already synced ──
     let query = supabase
       .from('intake_items')
-      .select('id, sku, brand_title, subject, card_number, variant, year, grade, grading_company, psa_cert, psa_cert_number, category, main_category, sub_category, catalog_snapshot, psa_snapshot, grading_data, image_urls, shopify_product_id, shopify_variant_id, shopify_sync_snapshot, normalized_tags, shopify_tags, primary_category, condition_type, product_weight, cost, cgc_cert, updated_by')
+      .select('id, sku, brand_title, subject, card_number, variant, year, grade, grading_company, psa_cert, psa_cert_number, category, main_category, sub_category, catalog_snapshot, psa_snapshot, grading_data, image_urls, front_image_url, back_image_url, shopify_product_id, shopify_variant_id, shopify_sync_snapshot, normalized_tags, shopify_tags, primary_category, condition_type, product_weight, cost, cgc_cert, updated_by')
       .not('shopify_product_id', 'is', null)
       .not('shopify_variant_id', 'is', null)
       .is('deleted_at', null)
