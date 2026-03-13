@@ -6,6 +6,7 @@ import ShopifyQueueHealth from "./ShopifyQueueHealth";
 import ShopifyQueueSettings from "./ShopifyQueueSettings";
 import { DeadLetterDashboard } from "./DeadLetterDashboard";
 import { SyncMetricsDashboard } from "./SyncMetricsDashboard";
+import { ComicBulkRepairPanel } from "./ComicBulkRepairPanel";
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from "@/integrations/supabase/client";
 
@@ -37,7 +38,7 @@ export function QueueManagementTabs() {
 
   return (
     <Tabs defaultValue="overview" className="space-y-6">
-      <TabsList className="grid w-full grid-cols-5">
+      <TabsList className="grid w-full grid-cols-6">
         <TabsTrigger value="overview" className="relative">
           Overview
           {stats && stats.queued > 0 && (
@@ -65,6 +66,7 @@ export function QueueManagementTabs() {
             </Badge>
           )}
         </TabsTrigger>
+        <TabsTrigger value="comic-repair">Comic Repair</TabsTrigger>
         <TabsTrigger value="settings">Settings</TabsTrigger>
       </TabsList>
 
@@ -82,6 +84,10 @@ export function QueueManagementTabs() {
 
       <TabsContent value="dead-letter">
         <DeadLetterDashboard />
+      </TabsContent>
+
+      <TabsContent value="comic-repair">
+        <ComicBulkRepairPanel />
       </TabsContent>
 
       <TabsContent value="settings">
