@@ -75,7 +75,7 @@ async function countTotalComics(supabase: any, storeFilter?: string): Promise<nu
     .not('shopify_product_id', 'is', null)
     .not('shopify_variant_id', 'is', null)
     .is('deleted_at', null)
-    .or('main_category.eq.comics,catalog_snapshot->>type.eq.graded_comic')
+    .eq('main_category', 'comics')
 
   if (storeFilter) {
     q = q.eq('store_key', storeFilter)
@@ -94,7 +94,7 @@ async function countRepairedComics(supabase: any, storeFilter?: string): Promise
     .not('shopify_product_id', 'is', null)
     .not('shopify_variant_id', 'is', null)
     .is('deleted_at', null)
-    .or('main_category.eq.comics,catalog_snapshot->>type.eq.graded_comic')
+    .eq('main_category', 'comics')
     .eq('updated_by', 'comic_bulk_repair')
 
   if (storeFilter) {
