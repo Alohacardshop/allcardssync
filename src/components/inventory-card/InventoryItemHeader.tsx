@@ -50,7 +50,7 @@ function getStatusBadge(item: InventoryItem & { sold_at?: string | null }) {
   if (status === 'pending') {
     return <Badge variant="outline">Pending</Badge>;
   }
-  if (item.shopify_product_id && status !== 'synced') {
+  if (item.shopify_product_id && status !== 'synced' && status !== 'completed') {
     return <Badge variant="outline" className="bg-warning/20 text-warning-foreground border-warning">Needs Resync</Badge>;
   }
   return <Badge variant="outline">Not Synced</Badge>;
