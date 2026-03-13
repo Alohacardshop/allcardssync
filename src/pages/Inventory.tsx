@@ -893,12 +893,14 @@ const Inventory = () => {
       // Fire-and-forget eBay processor
       supabase.functions.invoke('ebay-sync-processor', { body: { batch_size: allEbayItems.length } }).catch(() => {});
 
+      toast.dismiss(toastId);
       const parts = [];
       if (existingEbayItems.length > 0) parts.push(`${existingEbayItems.length} update`);
       if (newEbayItems.length > 0) parts.push(`${newEbayItems.length} create`);
       toast.success(`eBay sync queued: ${parts.join(', ')}`);
       refetch();
     } catch (error) {
+      toast.dismiss(toastId);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       toast.error('Failed to queue eBay resync', { description: errorMessage });
     } finally {
