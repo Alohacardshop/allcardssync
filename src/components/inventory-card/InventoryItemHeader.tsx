@@ -36,7 +36,7 @@ function getStatusBadge(item: InventoryItem & { sold_at?: string | null }) {
   if (status === 'error') {
     return <Badge variant="destructive">Sync Error</Badge>;
   }
-  if (status === 'synced' && item.shopify_product_id) {
+  if ((status === 'synced' || status === 'completed') && item.shopify_product_id) {
     return <Badge variant="default">Synced</Badge>;
   }
   if (status === 'queued' || status === 'processing') {
