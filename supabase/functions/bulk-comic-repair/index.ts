@@ -126,6 +126,7 @@ Deno.serve(async (req) => {
     const afterId: string | null = body.after_id || null          // cursor: resume after this item id
     const skipRepaired: boolean = body.skip_repaired !== false     // default true: skip already-repaired items
     const storeFilter: string | null = body.store_filter || null  // optional: filter by store_key on items
+    const forceImage: boolean = body.force_image === true          // force delete+re-upload image on every item
 
     if (!storeKey) {
       return new Response(JSON.stringify({ success: false, error: 'store_key is required' }), {
@@ -369,13 +370,13 @@ Deno.serve(async (req) => {
           intended_title: intendedTitle,
           title_changed: titleChanged,
           description_changed: descChanged,
-          image_changed: imageChanged,
+          image_changed: imageChanged || forceImage,
           metafields_changed: metafieldsChangedCount
         }
 
         // Always check for back image cleanup even if title/desc/metafields unchanged
         const hasTextOrMetaChange = titleChanged || descChanged || metafieldsChangedCount > 0
-        const hasAnyChange = hasTextOrMetaChange || imageChanged
+        const hasAnyChange = hasTextOrMetaChange || imageChanged || forceImage
 
         if (mode === 'preview') {
           diffs.push(diff)
@@ -418,9 +419,9 @@ Deno.serve(async (req) => {
           if (descChanged) changes.push('description')
         }
 
-        // Repair image — replace with new front image if changed, or clean up non-front media
+        // Repair image — replace with new front image if changed (or forced), or clean up non-front media
         if (frontUrl) {
-          if (imageChanged) {
+          if (imageChanged || forceImage) {
             // Image URL has changed (e.g. after rescrape) — delete all existing images and upload new one
             console.log(JSON.stringify({
               event: 'comic_bulk_repair_image_replace',
