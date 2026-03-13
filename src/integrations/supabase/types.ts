@@ -1035,6 +1035,7 @@ export type Database = {
       }
       intake_items: {
         Row: {
+          back_image_url: string | null
           brand_title: string | null
           card_number: string | null
           catalog_snapshot: Json | null
@@ -1057,6 +1058,7 @@ export type Database = {
           ebay_sync_error: string | null
           ebay_sync_snapshot: Json | null
           ebay_sync_status: string | null
+          front_image_url: string | null
           grade: string | null
           grading_company: string
           grading_data: Json | null
@@ -1129,6 +1131,7 @@ export type Database = {
           year: string | null
         }
         Insert: {
+          back_image_url?: string | null
           brand_title?: string | null
           card_number?: string | null
           catalog_snapshot?: Json | null
@@ -1151,6 +1154,7 @@ export type Database = {
           ebay_sync_error?: string | null
           ebay_sync_snapshot?: Json | null
           ebay_sync_status?: string | null
+          front_image_url?: string | null
           grade?: string | null
           grading_company?: string
           grading_data?: Json | null
@@ -1223,6 +1227,7 @@ export type Database = {
           year?: string | null
         }
         Update: {
+          back_image_url?: string | null
           brand_title?: string | null
           card_number?: string | null
           catalog_snapshot?: Json | null
@@ -1245,6 +1250,7 @@ export type Database = {
           ebay_sync_error?: string | null
           ebay_sync_snapshot?: Json | null
           ebay_sync_status?: string | null
+          front_image_url?: string | null
           grade?: string | null
           grading_company?: string
           grading_data?: Json | null
@@ -3996,6 +4002,16 @@ export type Database = {
         Returns: {
           card_id: string
           result: string
+        }[]
+      }
+      audit_comic_image_coverage: {
+        Args: never
+        Returns: {
+          missing_both: number
+          total_comics: number
+          with_back_only: number
+          with_both_images: number
+          with_front_only: number
         }[]
       }
       batch_queue_shopify_sync: {
