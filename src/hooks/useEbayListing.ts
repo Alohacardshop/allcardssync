@@ -94,13 +94,35 @@ export function useEbayListing() {
         .from('intake_items')
         .update({ 
           list_on_ebay: enableEbay,
+          ebay_sync_status: enableEbay ? 'queued' : null,
+          ebay_sync_error: enableEbay ? null : undefined,
           updated_at: new Date().toISOString()
         })
         .in('id', itemIds);
 
       if (error) throw error;
 
-      toast.success(`${itemIds.length} items ${enableEbay ? 'marked for' : 'removed from'} eBay`);
+      if (enableEbay) {
+        // Queue all items for eBay sync
+        const queueRows = itemIds.map((id, i) => ({
+          inventory_item_id: id,
+          action: 'create' as const,
+          status: 'queued' as const,
+          queue_position: i + 1,
+        }));
+
+        await supabase
+          .from('ebay_sync_queue')
+          .upsert(queueRows, { onConflict: 'inventory_item_id' });
+
+        // Smart batch size: scale with item count, cap at 25
+        const batchSize = Math.min(Math.max(itemIds.length, 1), 25);
+        supabase.functions.invoke('ebay-sync-processor', {
+          body: { batch_size: batchSize }
+        }).catch(() => {});
+      }
+
+      toast.success(`${itemIds.length} items ${enableEbay ? 'queued for' : 'removed from'} eBay`);
       queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
     } catch (error: any) {
       toast.error('Failed to update eBay status: ' + error.message);
