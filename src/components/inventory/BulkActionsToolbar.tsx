@@ -1,6 +1,14 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { CheckSquare, RotateCcw, Upload, Trash2, Loader2, ShoppingBag, Printer, Store } from 'lucide-react';
+import { CheckSquare, RotateCcw, Upload, Trash2, Loader2, ShoppingBag, Printer, Store, ChevronDown } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+
+export type ResyncTarget = 'shopify' | 'ebay' | 'both';
 
 interface BulkActionsToolbarProps {
   selectedCount: number;
@@ -13,7 +21,7 @@ interface BulkActionsToolbarProps {
   onClearSelection: () => void;
   onBulkRetrySync: () => void;
   onSyncSelected: () => void;
-  onResyncSelected: () => void;
+  onResyncSelected: (target: ResyncTarget) => void;
   onDeleteSelected: () => void;
   onBulkToggleEbay?: (enable: boolean) => void;
   onPrintSelected?: () => void;
