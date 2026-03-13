@@ -237,7 +237,7 @@ export interface InventoryBulkBarProps {
   onClearSelection: () => void;
   onBulkRetrySync: () => Promise<void>;
   onSyncSelected: () => Promise<void>;
-  onResyncSelected: () => Promise<void>;
+  onResyncSelected: (target?: 'shopify' | 'ebay' | 'both') => Promise<void>;
   onDeleteSelected: () => void;
   onBulkToggleEbay: (enable: boolean) => void;
   onPrintSelected: () => void;
