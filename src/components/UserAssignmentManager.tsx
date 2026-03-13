@@ -528,6 +528,10 @@ export function UserAssignmentManager() {
     setDialogOpen(true);
   };
 
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [resetPasswordResult, setResetPasswordResult] = useState<{ email: string; password: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
   const handleResetPassword = async (userId: string, email: string) => {
     if (!confirm(`Reset password for ${email}? A new temporary password will be generated.`)) {
       return;
@@ -538,14 +542,27 @@ export function UserAssignmentManager() {
         body: { userId }
       });
 
-      if (error) throw error;
+      if (error) {
+        const errorBody = await (error as any).context?.json?.().catch(() => null);
+        throw new Error(errorBody?.error || error.message);
+      }
       if (!data.ok) throw new Error(data.error);
 
-      toast.success(`Password reset for ${email}. New password: ${data.newPassword}`);
+      setResetPasswordResult({ email, password: data.newPassword });
+      setCopied(false);
+      setPasswordDialogOpen(true);
     } catch (error: any) {
       console.error("Failed to reset password:", error);
       toast.error(`Failed to reset password: ${error.message}`);
     }
+  };
+
+  const handleCopyPassword = async () => {
+    if (!resetPasswordResult) return;
+    await navigator.clipboard.writeText(resetPasswordResult.password);
+    setCopied(true);
+    toast.success("Password copied to clipboard");
+    setTimeout(() => setCopied(false), 2000);
   };
 
   useEffect(() => {
