@@ -811,7 +811,7 @@ export function useInventoryMutations({
 
     // Legacy boolean state for backward compatibility
     bulkRetrying: bulkRetrySyncMutation.isPending,
-    bulkSyncing: bulkSyncMutation.isPending || bulkResyncMutation.isPending,
+    bulkSyncing: bulkSyncMutation.isPending || bulkResyncMutation.isPending || bulkResyncEbayMutation.isPending,
     removingFromShopify: removeMutation.isPending,
     deletingItems: deleteMutation.isPending,
 
