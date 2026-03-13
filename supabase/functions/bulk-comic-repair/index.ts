@@ -556,7 +556,7 @@ Deno.serve(async (req) => {
             shopify_sync_snapshot: updatedSnapshot,
             last_shopify_synced_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-            updated_by: 'comic_bulk_repair'
+            updated_by: forceImage ? 'comic_bulk_repair_force_image' : 'comic_bulk_repair'
           })
           .eq('id', intakeItem.id)
 
