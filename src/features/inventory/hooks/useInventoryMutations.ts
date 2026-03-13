@@ -651,9 +651,10 @@ export function useInventoryMutations({
             .in('id', queuedIds);
         }
 
-        // Fire-and-forget processor
+        // Fire-and-forget processor with smart batch size (capped at 25)
+        const batchSize = Math.min(Math.max(queuedIds.length, 1), 25);
         supabase.functions.invoke('ebay-sync-processor', { 
-          body: { batch_size: queuedIds.length } 
+          body: { batch_size: batchSize } 
         }).catch(() => {});
 
         toast.dismiss(toastId);
