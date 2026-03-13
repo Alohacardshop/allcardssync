@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
     // ── Query comic items that are already synced ──
     let query = supabase
       .from('intake_items')
-      .select('id, sku, brand_title, subject, card_number, variant, year, grade, grading_company, psa_cert, psa_cert_number, category, main_category, sub_category, catalog_snapshot, psa_snapshot, grading_data, image_url, image_urls, shopify_product_id, shopify_variant_id, shopify_sync_snapshot, normalized_tags, shopify_tags, primary_category, condition_type, product_weight, cost, psa_snapshot, cgc_cert')
+      .select('id, sku, brand_title, subject, card_number, variant, year, grade, grading_company, psa_cert, psa_cert_number, category, main_category, sub_category, catalog_snapshot, psa_snapshot, grading_data, image_urls, shopify_product_id, shopify_variant_id, shopify_sync_snapshot, normalized_tags, shopify_tags, primary_category, condition_type, product_weight, cost, cgc_cert')
       .not('shopify_product_id', 'is', null)
       .not('shopify_variant_id', 'is', null)
       .is('deleted_at', null)
@@ -139,7 +139,7 @@ Deno.serve(async (req) => {
           year: intakeItem.year,
           grade: intakeItem.grade,
           category_tag: intakeItem.category,
-          image_url: intakeItem.image_url,
+          image_url: Array.isArray(intakeItem.image_urls) ? intakeItem.image_urls[0] : '',
           cost: intakeItem.cost,
           price: undefined
         }
