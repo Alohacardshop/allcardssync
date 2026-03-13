@@ -71,7 +71,11 @@ const corsHeaders = {
 interface ProcessorRequest {
   batch_size?: number
   store_key?: string
+  depth?: number
 }
+
+const MAX_CHAIN_DEPTH = 5
+const PARALLEL_CONCURRENCY = 3
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
