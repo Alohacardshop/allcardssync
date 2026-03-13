@@ -17,6 +17,7 @@ interface MediaOrderArgs {
   intendedFrontUrl: string          // the URL we consider "front" (index 0 of our sorted array)
   apiVersion?: string
   expectedMediaCount?: number       // optional: how many media items we expect
+  deleteNonFront?: boolean          // if true, delete all non-front media from the product
 }
 
 interface MediaNode {
