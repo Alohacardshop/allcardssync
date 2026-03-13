@@ -845,23 +845,37 @@ const Inventory = () => {
 
       if (fetchError) throw fetchError;
 
-      const ebayItems = freshItems.filter(item => 
+      // Split into items that already have an eBay listing (update) vs new (create)
+      const existingEbayItems = freshItems.filter(item => 
         item.list_on_ebay && (item.ebay_listing_id || item.ebay_offer_id || item.ebay_inventory_item_sku)
       );
+      const newEbayItems = freshItems.filter(item => 
+        item.list_on_ebay && !item.ebay_listing_id && !item.ebay_offer_id && !item.ebay_inventory_item_sku
+      );
 
-      if (ebayItems.length === 0) {
-        toast.info('No selected items are listed on eBay');
+      const allEbayItems = [...existingEbayItems, ...newEbayItems];
+
+      if (allEbayItems.length === 0) {
+        toast.info('No selected items have list_on_ebay enabled');
         setBulkSyncing(false);
         return;
       }
 
-      // Upsert into ebay_sync_queue
-      const queueEntries = ebayItems.map(item => ({
-        inventory_item_id: item.id,
-        action: 'update' as const,
-        status: 'queued' as const,
-        queue_position: 1,
-      }));
+      // Upsert into ebay_sync_queue - existing get 'update', new get 'create'
+      const queueEntries = [
+        ...existingEbayItems.map(item => ({
+          inventory_item_id: item.id,
+          action: 'update' as const,
+          status: 'queued' as const,
+          queue_position: 1,
+        })),
+        ...newEbayItems.map(item => ({
+          inventory_item_id: item.id,
+          action: 'create' as const,
+          status: 'queued' as const,
+          queue_position: 1,
+        })),
+      ];
 
       const { error: queueError } = await supabase
         .from('ebay_sync_queue')
@@ -873,12 +887,15 @@ const Inventory = () => {
       await supabase
         .from('intake_items')
         .update({ ebay_sync_status: 'queued' })
-        .in('id', ebayItems.map(i => i.id));
+        .in('id', allEbayItems.map(i => i.id));
 
       // Fire-and-forget eBay processor
-      supabase.functions.invoke('ebay-sync-processor', { body: { batch_size: ebayItems.length } }).catch(() => {});
+      supabase.functions.invoke('ebay-sync-processor', { body: { batch_size: allEbayItems.length } }).catch(() => {});
 
-      toast.success(`${ebayItems.length} items queued for eBay resync`);
+      const parts = [];
+      if (existingEbayItems.length > 0) parts.push(`${existingEbayItems.length} update`);
+      if (newEbayItems.length > 0) parts.push(`${newEbayItems.length} create`);
+      toast.success(`eBay sync queued: ${parts.join(', ')}`);
       refetch();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
