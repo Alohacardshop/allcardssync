@@ -155,6 +155,43 @@ export async function ensureMediaOrder(args: MediaOrderArgs): Promise<MediaOrder
     return { success: true, message: 'Single or no media, nothing to reorder' }
   }
 
+  // ── Step 2a: Delete non-front media if requested ──
+  if (args.deleteNonFront) {
+    const nonFrontMedia = mediaNodes.filter(n => {
+      const nFilename = extractFilename(n.url)
+      return nFilename !== frontFilename && !n.url.includes(frontFilename)
+    })
+    
+    if (nonFrontMedia.length > 0) {
+      console.log(`[MEDIA ORDER] Deleting ${nonFrontMedia.length} non-front media items`)
+      for (const media of nonFrontMedia) {
+        try {
+          const deleteResult = await graphql(domain, token, `
+            mutation fileDelete($fileIds: [ID!]!) {
+              fileDelete(fileIds: $fileIds) {
+                deletedFileIds
+                userErrors { field message }
+              }
+            }
+          `, { fileIds: [media.id] }, apiVersion)
+          
+          const deleteErrs = deleteResult?.data?.fileDelete?.userErrors || []
+          if (deleteErrs.length > 0) {
+            console.warn(`[MEDIA ORDER] Delete error for ${media.id}:`, JSON.stringify(deleteErrs))
+          } else {
+            console.log(`[MEDIA ORDER] ✅ Deleted non-front media: ${extractFilename(media.url)} (${media.id})`)
+          }
+          await new Promise(r => setTimeout(r, 300))
+        } catch (err) {
+          console.warn(`[MEDIA ORDER] Failed to delete media ${media.id}:`, err)
+        }
+      }
+      
+      // After deletion, only front image remains — no reorder needed
+      return { success: true, frontMediaId: frontMedia!.id, message: `Deleted ${nonFrontMedia.length} non-front images, front image retained` }
+    }
+  }
+
   // ── Step 2: Identify front media node ──
   const frontMedia = findMediaByFilename(mediaNodes, frontFilename)
   if (!frontMedia) {
