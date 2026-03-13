@@ -44,7 +44,7 @@ export function ComicImageRescrape() {
   const [currentBatch, setCurrentBatch] = useState(0);
   const abortRef = useRef(false);
 
-  const BATCH_SIZE = 20;
+  const BATCH_SIZE = 5;
 
   const runRescrape = useCallback(async (selectedMode: 'preview' | 'execute') => {
     setIsRunning(true);

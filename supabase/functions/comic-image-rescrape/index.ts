@@ -5,7 +5,7 @@ import { log, genRequestId } from "../_lib/log.ts";
 import { requireAuth, requireRole } from "../_shared/auth.ts";
 
 const PACE_MS = 2000;
-const DEFAULT_LIMIT = 20;
+const DEFAULT_LIMIT = 5;
 const pace = () => new Promise(resolve => setTimeout(resolve, PACE_MS));
 
 /**
