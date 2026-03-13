@@ -419,9 +419,9 @@ Deno.serve(async (req) => {
           if (descChanged) changes.push('description')
         }
 
-        // Repair image — replace with new front image if changed, or clean up non-front media
+        // Repair image — replace with new front image if changed (or forced), or clean up non-front media
         if (frontUrl) {
-          if (imageChanged) {
+          if (imageChanged || forceImage) {
             // Image URL has changed (e.g. after rescrape) — delete all existing images and upload new one
             console.log(JSON.stringify({
               event: 'comic_bulk_repair_image_replace',
