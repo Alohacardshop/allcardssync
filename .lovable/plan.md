@@ -1,33 +1,30 @@
 
 
-# Split Bulk Resync into Shopify / eBay / Both
+## Problem
 
-## Current State
-The "Resync" button in the bulk actions toolbar only syncs selected items to **Shopify**. There is no bulk eBay resync option — only individual item resync exists via `useEbayListing.resyncToEbay()`.
+Only `services.ebay_sync` rows exist in the database for both regions. When you click "Shopify Sync" or "Discord Notifications," the upsert tries to INSERT a new row. The code and RLS policies look correct (admin has ALL access, unique constraint exists for upsert), so the issue is likely **not** a permissions problem.
+
+The real issue is that `services.shopify_sync` and `services.discord_notifications` rows simply don't exist yet. The upsert *should* create them, but the button click may be silently failing or the accordion is swallowing the click event before it reaches the button.
+
+Looking at the code, I notice the `isSaving` variable depends on `savingKey === saveKey`. If a previous save attempt failed and `savingKey` got stuck (or if the error handler doesn't run), subsequent clicks would find the button `disabled={isSaving}` permanently.
 
 ## Plan
 
-### 1. Replace single Resync button with a dropdown menu
-In `BulkActionsToolbar.tsx`, replace the current "Resync" button with a dropdown (using the existing `DropdownMenu` component) containing three options:
-- **Resync Shopify** — current behavior
-- **Resync eBay** — new: queues selected items for eBay update sync
-- **Resync Both** — runs both Shopify + eBay resync
+### 1. Seed the missing service toggle rows
+Insert the missing `services.shopify_sync` and `services.discord_notifications` rows for both regions via a database migration. This ensures the upsert always hits an UPDATE (not INSERT), matching how `services.ebay_sync` already works.
 
-### 2. Add bulk eBay resync handler
-In the inventory page (`src/pages/Inventory.tsx` and `src/features/inventory/hooks/useInventoryMutations.ts`), add a `handleResyncEbay` function that:
-- Filters selected items to those with `list_on_ebay = true` and an existing eBay listing
-- For each item, upserts into `ebay_sync_queue` with action `'update'` and status `'queued'`
-- Updates `ebay_sync_status` to `'queued'` on the intake items
-- Fires `ebay-sync-processor` (fire-and-forget) to kick off processing
-- Shows toast with count of items queued
+```sql
+INSERT INTO region_settings (region_id, setting_key, setting_value, description)
+VALUES 
+  ('hawaii', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
+  ('hawaii', 'services.discord_notifications', 'false', 'Enable Discord order notifications'),
+  ('las_vegas', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
+  ('las_vegas', 'services.discord_notifications', 'false', 'Enable Discord order notifications')
+ON CONFLICT (region_id, setting_key) DO NOTHING;
+```
 
-### 3. Update props and wiring
-- Add `onResyncShopify`, `onResyncEbay`, `onResyncBoth` callbacks (or pass a single `onResyncSelected(target: 'shopify' | 'ebay' | 'both')` to keep it simple)
-- Wire through `BulkActionsToolbar` → `InventoryBulkBar` → page-level handlers
-- The "Both" option calls Shopify resync first, then queues eBay resync
+### 2. Add defensive error logging to the toggle click handler
+Update the boolean toggle's `onClick` in `RegionSettingsEditor.tsx` to log the error details to the console. This ensures any future upsert failures are visible rather than silently swallowed.
 
-### 4. UI Details
-- Dropdown trigger shows the `RotateCcw` icon with label "Resync ▾"
-- Three menu items: "Shopify", "eBay", "Both Marketplaces"
-- Disabled state follows existing `bulkSyncing` flag
+This is a small, targeted fix -- seeding the rows is the primary solution.
 

@@ -1,6 +1,14 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { CheckSquare, RotateCcw, Upload, Trash2, Loader2, ShoppingBag, Printer, Store } from 'lucide-react';
+import { CheckSquare, RotateCcw, Upload, Trash2, Loader2, ShoppingBag, Printer, Store, ChevronDown } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+
+export type ResyncTarget = 'shopify' | 'ebay' | 'both';
 
 interface BulkActionsToolbarProps {
   selectedCount: number;
@@ -13,7 +21,7 @@ interface BulkActionsToolbarProps {
   onClearSelection: () => void;
   onBulkRetrySync: () => void;
   onSyncSelected: () => void;
-  onResyncSelected: () => void;
+  onResyncSelected: (target: ResyncTarget) => void;
   onDeleteSelected: () => void;
   onBulkToggleEbay?: (enable: boolean) => void;
   onPrintSelected?: () => void;
@@ -83,20 +91,38 @@ export const BulkActionsToolbar = React.memo(({
           {bulkSyncing ? 'Syncing...' : 'Sync to Shopify'}
         </Button>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onResyncSelected}
-          disabled={bulkSyncing}
-          className="h-8"
-        >
-          {bulkSyncing ? (
-            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-          ) : (
-            <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-          )}
-          Resync
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={bulkSyncing}
+              className="h-8"
+            >
+              {bulkSyncing ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Resync
+              <ChevronDown className="h-3 w-3 ml-1" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={() => onResyncSelected('shopify')}>
+              <Store className="h-3.5 w-3.5 mr-2" />
+              Shopify
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onResyncSelected('ebay')}>
+              <ShoppingBag className="h-3.5 w-3.5 mr-2" />
+              eBay
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onResyncSelected('both')}>
+              <RotateCcw className="h-3.5 w-3.5 mr-2" />
+              Both Marketplaces
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {statusFilter === 'errors' && (
           <Button
