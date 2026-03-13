@@ -2,29 +2,35 @@
 
 ## Problem
 
-Only `services.ebay_sync` rows exist in the database for both regions. When you click "Shopify Sync" or "Discord Notifications," the upsert tries to INSERT a new row. The code and RLS policies look correct (admin has ALL access, unique constraint exists for upsert), so the issue is likely **not** a permissions problem.
+The 3 remaining "unrepaired" items failing with 404 are **not comics** — they're graded Pokemon cards (Lugia V, Mewtwo GX, Rayquaza VMAX). They fail because their Shopify products have been deleted but the database still holds stale `shopify_product_id` references.
 
-The real issue is that `services.shopify_sync` and `services.discord_notifications` rows simply don't exist yet. The upsert *should* create them, but the button click may be silently failing or the accordion is swallowing the click event before it reaches the button.
-
-Looking at the code, I notice the `isSaving` variable depends on `savingKey === saveKey`. If a previous save attempt failed and `savingKey` got stuck (or if the error handler doesn't run), subsequent clicks would find the button `disabled={isSaving}` permanently.
+**Root causes:**
+1. Stale Shopify product links in `intake_items` — products deleted in Shopify but IDs never cleared
+2. The comic repair query filter (`catalog_snapshot->>type.eq.graded_comic`) is too broad and catches graded cards, not just graded comics
 
 ## Plan
 
-### 1. Seed the missing service toggle rows
-Insert the missing `services.shopify_sync` and `services.discord_notifications` rows for both regions via a database migration. This ensures the upsert always hits an UPDATE (not INSERT), matching how `services.ebay_sync` already works.
+### 1. Handle 404s gracefully in bulk-comic-repair
+In `supabase/functions/bulk-comic-repair/index.ts`, when Shopify returns 404:
+- Clear `shopify_product_id` and `shopify_variant_id` on the intake item (product no longer exists)
+- Mark the item status as needing re-sync if desired
+- Log the cleanup and mark as `'cleaned'` instead of `'failed'`
 
-```sql
-INSERT INTO region_settings (region_id, setting_key, setting_value, description)
-VALUES 
-  ('hawaii', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
-  ('hawaii', 'services.discord_notifications', 'false', 'Enable Discord order notifications'),
-  ('las_vegas', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
-  ('las_vegas', 'services.discord_notifications', 'false', 'Enable Discord order notifications')
-ON CONFLICT (region_id, setting_key) DO NOTHING;
+### 2. Tighten the comic filter query
+Update the query in `bulk-comic-repair/index.ts` to exclude non-comic graded items. Add a check like `.eq('main_category', 'comics')` or add a secondary filter ensuring `primary_category` or `sub_category` confirms it's actually a comic, not a Pokemon/sports card.
+
+### 3. Redeploy
+Deploy the updated `bulk-comic-repair` function.
+
+## Technical detail
+
+The 404 handler addition (~10 lines) goes right after the `productRes.ok` check around line 210. On 404, it will:
 ```
-
-### 2. Add defensive error logging to the toggle click handler
-Update the boolean toggle's `onClick` in `RegionSettingsEditor.tsx` to log the error details to the console. This ensures any future upsert failures are visible rather than silently swallowed.
-
-This is a small, targeted fix -- seeding the rows is the primary solution.
+await supabase.from('intake_items').update({
+  shopify_product_id: null,
+  shopify_variant_id: null,
+  updated_by: 'comic_bulk_repair_cleanup'
+}).eq('id', intakeItem.id)
+```
+Then `continue` to the next item with status `'cleaned'`.
 
