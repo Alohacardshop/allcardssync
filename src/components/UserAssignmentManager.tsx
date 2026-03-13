@@ -443,8 +443,11 @@ export function UserAssignmentManager() {
           }
         });
 
-        if (error) throw error;
-        if (!data.ok) throw new Error(data.error);
+        if (error) {
+          const errorBody = await error.context?.json?.().catch(() => null);
+          throw new Error(errorBody?.error || error.message);
+        }
+        if (!data?.ok) throw new Error(data?.error || 'Unknown error');
 
         toast.success("User created successfully!");
       }
