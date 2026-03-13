@@ -149,7 +149,8 @@ export default function DashboardHome() {
         supabase
           .from('intake_lots')
           .select('id', { count: 'exact', head: true })
-          .eq('status', 'active'),
+          .eq('status', 'active')
+          .eq('store_key', assignedStore),
         supabase
           .from('intake_items')
           .select('id', { count: 'exact', head: true })
