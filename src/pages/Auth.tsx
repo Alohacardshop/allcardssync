@@ -44,9 +44,7 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [roleError, setRoleError] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
 
   const mountedRef = useRef(true);
   const subRef = useRef<ReturnType<typeof supabase.auth.onAuthStateChange>["data"]["subscription"] | null>(null);
@@ -72,7 +70,6 @@ export default function Auth() {
   useEffect(() => {
     mountedRef.current = true;
     logger.info('Auth page mounted');
-    setMounted(true);
 
     if (!subRef.current) {
       subRef.current = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -185,26 +182,6 @@ export default function Auth() {
     }
   }
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const redirectUrl = `${window.location.origin}/`;
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo: redirectUrl },
-      });
-      if (error) throw error;
-      toast.success("Check your email to confirm your account");
-    } catch (err: any) {
-      logger.error('Sign up failed', err, { email });
-      toast.error(err?.message || "Sign up failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex flex-col">
       {/* Decorative Background Elements */}
@@ -230,30 +207,22 @@ export default function Auth() {
         <div className="w-full max-w-md space-y-6">
           {/* Welcome Text */}
           <div className="text-center space-y-2">
-            <h1 className="text-3xl font-bold tracking-tight">
-              {mode === 'signin' ? 'Welcome back' : 'Create your account'}
-            </h1>
+            <h1 className="text-3xl font-bold tracking-tight">Welcome back</h1>
             <p className="text-muted-foreground">
-              {mode === 'signin' 
-                ? 'Sign in to access your inventory dashboard' 
-                : 'Get started with Aloha Inventory'}
+              Sign in to access your inventory dashboard
             </p>
           </div>
 
           {/* Auth Card */}
           <Card className="shadow-lg border-border/50 bg-card/80 backdrop-blur-sm">
             <CardHeader className="space-y-1 pb-4">
-              <CardTitle className="text-xl">
-                {mode === 'signin' ? 'Sign In' : 'Sign Up'}
-              </CardTitle>
+              <CardTitle className="text-xl">Sign In</CardTitle>
               <CardDescription>
-                {mode === 'signin' 
-                  ? 'Enter your credentials to continue' 
-                  : 'Fill in your details to create an account'}
+                Enter your credentials to continue
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={mode === 'signin' ? handleSignIn : handleSignUp} className="space-y-4">
+              <form onSubmit={handleSignIn} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
                   <Input 
@@ -296,29 +265,16 @@ export default function Auth() {
                       Please wait...
                     </>
                   ) : (
-                    mode === 'signin' ? 'Sign In' : 'Create Account'
+                    'Sign In'
                   )}
                 </Button>
               </form>
-
-              <div className="mt-6 pt-4 border-t">
-                <Button 
-                  type="button" 
-                  variant="ghost" 
-                  className="w-full text-muted-foreground"
-                  onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
-                >
-                  {mode === 'signin' 
-                    ? "Don't have an account? Sign up" 
-                    : 'Already have an account? Sign in'}
-                </Button>
-              </div>
             </CardContent>
           </Card>
 
           {/* Footer Notice */}
           <p className="text-xs text-center text-muted-foreground px-4">
-            Access is restricted to authorized staff. After signup, an admin must grant the Staff role.
+            Access is restricted to authorized staff. Contact an admin to get an account.
           </p>
 
           {/* Ecosystem Indicators */}

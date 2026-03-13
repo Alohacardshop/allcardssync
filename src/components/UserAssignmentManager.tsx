@@ -608,6 +608,31 @@ export function UserAssignmentManager() {
 
   return (
     <div className="space-y-6">
+      {/* Password Reset Result Dialog */}
+      <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Password Reset Successful</DialogTitle>
+            <DialogDescription>
+              New password for <strong>{resetPasswordResult?.email}</strong>. Copy it now — it won't be shown again.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2 mt-2">
+            <Input
+              readOnly
+              value={resetPasswordResult?.password || ""}
+              className="font-mono text-base tracking-wider"
+            />
+            <Button variant="outline" size="icon" onClick={handleCopyPassword}>
+              {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+            </Button>
+          </div>
+          <DialogFooter className="mt-4">
+            <Button onClick={() => setPasswordDialogOpen(false)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">User Management</h2>
