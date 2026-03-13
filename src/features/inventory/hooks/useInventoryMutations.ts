@@ -800,6 +800,7 @@ export function useInventoryMutations({
     // Bulk mutations
     bulkSyncMutation,
     bulkResyncMutation,
+    bulkResyncEbayMutation,
     bulkRetrySyncMutation,
 
     // State helpers
