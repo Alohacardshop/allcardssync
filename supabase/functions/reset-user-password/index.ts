@@ -18,13 +18,25 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 });
 
 // Generate a secure random password
-function generatePassword(length: number = 12): string {
-  const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+function generatePassword(length: number = 16): string {
+  // Use only unambiguous, copy-paste-safe characters (no special chars, no 0/O/l/1)
+  const lower = "abcdefghjkmnpqrstuvwxyz";
+  const upper = "ABCDEFGHJKMNPQRSTUVWXYZ";
+  const digits = "23456789";
+  const charset = lower + upper + digits;
+  
+  // Ensure at least one of each type
   let password = "";
-  for (let i = 0; i < length; i++) {
+  password += lower.charAt(Math.floor(Math.random() * lower.length));
+  password += upper.charAt(Math.floor(Math.random() * upper.length));
+  password += digits.charAt(Math.floor(Math.random() * digits.length));
+  
+  for (let i = 3; i < length; i++) {
     password += charset.charAt(Math.floor(Math.random() * charset.length));
   }
-  return password;
+  
+  // Shuffle the password
+  return password.split('').sort(() => Math.random() - 0.5).join('');
 }
 
 const handler = async (req: Request): Promise<Response> => {
