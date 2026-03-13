@@ -393,7 +393,7 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
         quantity_in: item.quantity,
         brand_title_in: item.set,
         subject_in: item.name,
-        category_in: gameKey === 'pokemon' ? 'Pokemon' : capitalize(gameKey),
+        category_in: gameKey === 'pokemon' ? 'Pokemon' : gameKey === 'onepiece' ? 'One Piece' : capitalize(gameKey),
         variant_in: `${item.condition}${item.foil ? ' - Foil' : ''}`,
         card_number_in: item.cardNumber,
         grade_in: null, // Raw cards should not have grades
