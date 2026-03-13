@@ -2,31 +2,29 @@
 
 ## Problem
 
-When creating a user, the toast shows a generic error: "Edge Function returned a non-2xx status code" instead of the actual message ("User with this email already exists"). This happens because `supabase.functions.invoke` throws a `FunctionsHttpError` when the edge function returns a non-2xx status, and the response body (which contains the real error) isn't being read.
+Only `services.ebay_sync` rows exist in the database for both regions. When you click "Shopify Sync" or "Discord Notifications," the upsert tries to INSERT a new row. The code and RLS policies look correct (admin has ALL access, unique constraint exists for upsert), so the issue is likely **not** a permissions problem.
 
-The edge function returns `{ ok: false, error: "..." }` with status 500, but the client-side code at line 443 catches the generic `FunctionsHttpError` before it can check `data.ok`.
+The real issue is that `services.shopify_sync` and `services.discord_notifications` rows simply don't exist yet. The upsert *should* create them, but the button click may be silently failing or the accordion is swallowing the click event before it reaches the button.
 
-## Fix
+Looking at the code, I notice the `isSaving` variable depends on `savingKey === saveKey`. If a previous save attempt failed and `savingKey` got stuck (or if the error handler doesn't run), subsequent clicks would find the button `disabled={isSaving}` permanently.
 
-In `UserAssignmentManager.tsx`, update the error handling for both create and update operations to read the response body from `FunctionsHttpError` before throwing:
+## Plan
 
-**File: `src/components/UserAssignmentManager.tsx`** (around lines 434-444 and 396-407)
+### 1. Seed the missing service toggle rows
+Insert the missing `services.shopify_sync` and `services.discord_notifications` rows for both regions via a database migration. This ensures the upsert always hits an UPDATE (not INSERT), matching how `services.ebay_sync` already works.
 
-For the create user call and the update user call, when `error` is a `FunctionsHttpError`, read the JSON body to extract the actual error message:
-
-```typescript
-const { data, error } = await supabase.functions.invoke('create-user-admin', { ... });
-
-if (error) {
-  // Try to read the actual error from the response body
-  const errorBody = await error.context?.json?.().catch(() => null);
-  const message = errorBody?.error || error.message;
-  throw new Error(message);
-}
-if (!data?.ok) throw new Error(data?.error || 'Unknown error');
+```sql
+INSERT INTO region_settings (region_id, setting_key, setting_value, description)
+VALUES 
+  ('hawaii', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
+  ('hawaii', 'services.discord_notifications', 'false', 'Enable Discord order notifications'),
+  ('las_vegas', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
+  ('las_vegas', 'services.discord_notifications', 'false', 'Enable Discord order notifications')
+ON CONFLICT (region_id, setting_key) DO NOTHING;
 ```
 
-Apply the same pattern to the `user-assignment-admin` invoke call.
+### 2. Add defensive error logging to the toggle click handler
+Update the boolean toggle's `onClick` in `RegionSettingsEditor.tsx` to log the error details to the console. This ensures any future upsert failures are visible rather than silently swallowed.
 
-This way, users will see helpful messages like "User with this email already exists" instead of the generic edge function error.
+This is a small, targeted fix -- seeding the rows is the primary solution.
 
