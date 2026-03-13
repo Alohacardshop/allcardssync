@@ -151,17 +151,21 @@ export async function ensureMediaOrder(args: MediaOrderArgs): Promise<MediaOrder
     console.log(`  Variant[0] media: ${v0media ? extractFilename(v0media.preview?.image?.url || '') : 'none'} (${v0media?.id || 'none'})`)
   }
 
-  if (mediaNodes.length < 2) {
+  if (mediaNodes.length < 2 && !args.deleteNonFront) {
     console.log(`[MEDIA ORDER] Only ${mediaNodes.length} media items, skipping reorder`)
     return { success: true, message: 'Single or no media, nothing to reorder' }
   }
 
+  // ── Step 2: Identify front media node ──
+  const frontMedia = findMediaByFilename(mediaNodes, frontFilename)
+  if (!frontMedia) {
+    console.warn(`[MEDIA ORDER] ⚠️ Could not match front filename "${frontFilename}" in Shopify media`)
+    return { success: false, message: `Front image filename "${frontFilename}" not found in product media` }
+  }
+
   // ── Step 2a: Delete non-front media if requested ──
-  if (args.deleteNonFront) {
-    const nonFrontMedia = mediaNodes.filter(n => {
-      const nFilename = extractFilename(n.url)
-      return nFilename !== frontFilename && !n.url.includes(frontFilename)
-    })
+  if (args.deleteNonFront && mediaNodes.length > 1) {
+    const nonFrontMedia = mediaNodes.filter(n => n.id !== frontMedia.id)
     
     if (nonFrontMedia.length > 0) {
       console.log(`[MEDIA ORDER] Deleting ${nonFrontMedia.length} non-front media items`)
@@ -188,16 +192,8 @@ export async function ensureMediaOrder(args: MediaOrderArgs): Promise<MediaOrder
         }
       }
       
-      // After deletion, only front image remains — no reorder needed
-      return { success: true, frontMediaId: frontMedia!.id, message: `Deleted ${nonFrontMedia.length} non-front images, front image retained` }
+      return { success: true, frontMediaId: frontMedia.id, message: `Deleted ${nonFrontMedia.length} non-front images, front image retained` }
     }
-  }
-
-  // ── Step 2: Identify front media node ──
-  const frontMedia = findMediaByFilename(mediaNodes, frontFilename)
-  if (!frontMedia) {
-    console.warn(`[MEDIA ORDER] ⚠️ Could not match front filename "${frontFilename}" in Shopify media`)
-    return { success: false, message: `Front image filename "${frontFilename}" not found in product media` }
   }
 
   const isAlreadyFirst = mediaNodes[0].id === frontMedia.id
