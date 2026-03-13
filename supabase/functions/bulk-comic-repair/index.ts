@@ -186,6 +186,10 @@ Deno.serve(async (req) => {
     if (skipRepaired) {
       query = query.neq('updated_by', 'comic_bulk_repair')
     }
+    // When force_image is on, skip items already force-repaired
+    if (forceImage) {
+      query = query.neq('updated_by', 'comic_bulk_repair_force_image')
+    }
 
     // Cursor-based pagination: fetch items with id > after_id
     if (afterId) {
@@ -552,7 +556,7 @@ Deno.serve(async (req) => {
             shopify_sync_snapshot: updatedSnapshot,
             last_shopify_synced_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-            updated_by: 'comic_bulk_repair'
+            updated_by: forceImage ? 'comic_bulk_repair_force_image' : 'comic_bulk_repair'
           })
           .eq('id', intakeItem.id)
 
