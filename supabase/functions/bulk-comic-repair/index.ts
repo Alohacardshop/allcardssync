@@ -12,8 +12,8 @@ import {
 import { ensureMediaOrder, determineFrontImageUrl } from '../_shared/shopify-media-order.ts'
 
 const API_VERSION = '2024-07'
-const PACE_MS = 300        // ms between Shopify API calls (~3.3/sec)
-const BACKOFF_MS = 2000    // ms to wait after a 429
+const PACE_MS = 300
+const BACKOFF_MS = 2000
 const PROGRESS_INTERVAL = 10
 
 function pace(ms = PACE_MS) {
@@ -44,8 +44,8 @@ interface RepairResult {
 async function shopifyCallWithPacing(
   url: string,
   init: RequestInit,
-  domain: string,
-  token: string
+  _domain: string,
+  _token: string
 ): Promise<Response> {
   const res = await shopifyFetchWithRetry(url, init)
   await pace()
@@ -59,13 +59,50 @@ async function shopifyCallWithPacing(
       wait_ms: wait
     }))
     await pace(wait)
-    // Retry once after backoff
     const retryRes = await shopifyFetchWithRetry(url, init)
     await pace()
     return retryRes
   }
 
   return res
+}
+
+// ── Helper: count total comics eligible for repair ──
+async function countTotalComics(supabase: any, storeFilter?: string): Promise<number> {
+  let q = supabase
+    .from('intake_items')
+    .select('id', { count: 'exact', head: true })
+    .not('shopify_product_id', 'is', null)
+    .not('shopify_variant_id', 'is', null)
+    .is('deleted_at', null)
+    .or('main_category.eq.comics,catalog_snapshot->>type.eq.graded_comic')
+
+  if (storeFilter) {
+    q = q.eq('store_key', storeFilter)
+  }
+
+  const { count } = await q
+  return count ?? 0
+}
+
+async function countRepairedComics(supabase: any, storeFilter?: string): Promise<number> {
+  // Count comics that have a repair_timestamp in their snapshot
+  // We approximate by checking updated_by = 'comic_bulk_repair'
+  let q = supabase
+    .from('intake_items')
+    .select('id', { count: 'exact', head: true })
+    .not('shopify_product_id', 'is', null)
+    .not('shopify_variant_id', 'is', null)
+    .is('deleted_at', null)
+    .or('main_category.eq.comics,catalog_snapshot->>type.eq.graded_comic')
+    .eq('updated_by', 'comic_bulk_repair')
+
+  if (storeFilter) {
+    q = q.eq('store_key', storeFilter)
+  }
+
+  const { count } = await q
+  return count ?? 0
 }
 
 Deno.serve(async (req) => {
@@ -85,7 +122,10 @@ Deno.serve(async (req) => {
     const mode: 'preview' | 'execute' = body.mode || 'preview'
     const storeKey: string = body.store_key
     const itemIds: string[] | null = body.item_ids || null
-    const limit: number = body.limit || 50  // lowered from 500
+    const limit: number = body.limit || 50
+    const afterId: string | null = body.after_id || null          // cursor: resume after this item id
+    const skipRepaired: boolean = body.skip_repaired !== false     // default true: skip already-repaired items
+    const storeFilter: string | null = body.store_filter || null  // optional: filter by store_key on items
 
     if (!storeKey) {
       return new Response(JSON.stringify({ success: false, error: 'store_key is required' }), {
@@ -98,7 +138,9 @@ Deno.serve(async (req) => {
       mode,
       store_key: storeKey,
       item_ids_count: itemIds?.length || 'all',
-      limit
+      limit,
+      after_id: afterId,
+      skip_repaired: skipRepaired
     }))
 
     // ── Fetch Shopify credentials ──
@@ -118,16 +160,36 @@ Deno.serve(async (req) => {
       'Content-Type': 'application/json'
     }
 
+    // ── Count totals for remaining estimate ──
+    const [totalComics, repairedComics] = await Promise.all([
+      countTotalComics(supabase, storeFilter),
+      countRepairedComics(supabase, storeFilter)
+    ])
+
     // ── Query comic items that are already synced ──
     let query = supabase
       .from('intake_items')
-      .select('id, sku, brand_title, subject, card_number, variant, year, grade, grading_company, psa_cert, psa_cert_number, category, main_category, sub_category, catalog_snapshot, psa_snapshot, grading_data, image_urls, shopify_product_id, shopify_variant_id, shopify_sync_snapshot, normalized_tags, shopify_tags, primary_category, condition_type, product_weight, cost, cgc_cert')
+      .select('id, sku, brand_title, subject, card_number, variant, year, grade, grading_company, psa_cert, psa_cert_number, category, main_category, sub_category, catalog_snapshot, psa_snapshot, grading_data, image_urls, shopify_product_id, shopify_variant_id, shopify_sync_snapshot, normalized_tags, shopify_tags, primary_category, condition_type, product_weight, cost, cgc_cert, updated_by')
       .not('shopify_product_id', 'is', null)
       .not('shopify_variant_id', 'is', null)
       .is('deleted_at', null)
+      .or('main_category.eq.comics,catalog_snapshot->>type.eq.graded_comic')
+      .order('id', { ascending: true })
       .limit(limit)
 
-    query = query.or('main_category.eq.comics,catalog_snapshot->>type.eq.graded_comic')
+    if (storeFilter) {
+      query = query.eq('store_key', storeFilter)
+    }
+
+    // Skip already-repaired items
+    if (skipRepaired) {
+      query = query.neq('updated_by', 'comic_bulk_repair')
+    }
+
+    // Cursor-based pagination: fetch items with id > after_id
+    if (afterId) {
+      query = query.gt('id', afterId)
+    }
 
     if (itemIds && itemIds.length > 0) {
       query = query.in('id', itemIds)
@@ -136,19 +198,35 @@ Deno.serve(async (req) => {
     const { data: comicItems, error: queryError } = await query
 
     if (queryError) throw new Error(`Failed to query comics: ${queryError.message}`)
+
+    const remainingEstimate = totalComics - repairedComics
+
     if (!comicItems || comicItems.length === 0) {
       return new Response(JSON.stringify({
         success: true,
         mode,
-        message: 'No synced comic items found',
-        summary: { total_scanned: 0, total_comics: 0, total_changed: 0, total_unchanged: 0, total_failed: 0, total_skipped: 0, total_rate_limited: 0 }
+        message: remainingEstimate <= 0
+          ? 'All comics have been repaired!'
+          : 'No unrepaired comic items found in this batch (try without after_id or with skip_repaired=false)',
+        summary: {
+          total_scanned: 0, total_comics: 0, total_changed: 0,
+          total_unchanged: 0, total_failed: 0, total_skipped: 0,
+          total_rate_limited: 0,
+          total_in_catalog: totalComics,
+          total_already_repaired: repairedComics,
+          total_remaining: remainingEstimate
+        },
+        pagination: { has_more: false, next_cursor: null }
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     console.log(JSON.stringify({
       event: 'comic_bulk_repair_items_found',
       count: comicItems.length,
-      mode
+      mode,
+      total_in_catalog: totalComics,
+      total_already_repaired: repairedComics,
+      remaining_estimate: remainingEstimate
     }))
 
     // ── Process items sequentially ──
@@ -157,11 +235,12 @@ Deno.serve(async (req) => {
     let totalApiCalls = 0
     let totalRateLimited = 0
     let totalSkipped = 0
+    let lastProcessedId: string | null = null
 
     for (let i = 0; i < comicItems.length; i++) {
       const intakeItem = comicItems[i] as any
+      lastProcessedId = intakeItem.id
 
-      // Progress logging every PROGRESS_INTERVAL items
       if (i > 0 && i % PROGRESS_INTERVAL === 0) {
         console.log(JSON.stringify({
           event: 'comic_bulk_repair_progress',
@@ -189,7 +268,6 @@ Deno.serve(async (req) => {
       }
 
       try {
-        // Generate intended comic data
         const intendedTitle = buildComicTitle(intakeItem, item)
         const intendedDescription = buildComicDescription(intakeItem, item)
         const intendedComicMetafields = buildComicMetafields(intakeItem, item)
@@ -229,12 +307,10 @@ Deno.serve(async (req) => {
 
         const { product: existingProduct } = await productRes.json()
 
-        // Compare
         const titleChanged = existingProduct.title !== intendedTitle
         const descChanged = existingProduct.body_html !== intendedDescription
         const imageChanged = frontUrl ? !productHasCorrectImage(existingProduct, frontUrl) : false
 
-        // Fetch existing metafields
         let metafieldsChangedCount = 0
         const mfRes = await shopifyCallWithPacing(
           `https://${domain}/admin/api/${API_VERSION}/products/${intakeItem.shopify_product_id}/metafields.json`,
@@ -245,7 +321,6 @@ Deno.serve(async (req) => {
 
         if (mfRes.status === 429) {
           totalRateLimited++
-          // Still have product data, just skip metafield comparison
           console.log(JSON.stringify({ event: 'comic_bulk_repair_rate_limited', item_id: intakeItem.id, context: 'metafield_fetch' }))
           await pace(BACKOFF_MS)
         } else if (mfRes.ok) {
@@ -274,6 +349,15 @@ Deno.serve(async (req) => {
 
         // ── Execute mode ──
         if (!hasAnyChange) {
+          // Mark as repaired even if unchanged so we skip it next run
+          await supabase
+            .from('intake_items')
+            .update({
+              updated_by: 'comic_bulk_repair',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', intakeItem.id)
+
           results.push({ item_id: intakeItem.id, sku: intakeItem.sku, status: 'unchanged', changes: [], api_calls: 0 })
           continue
         }
@@ -361,7 +445,7 @@ Deno.serve(async (req) => {
                 totalRateLimited++
                 console.log(JSON.stringify({ event: 'comic_bulk_repair_rate_limited', item_id: intakeItem.id, context: 'metafield_write' }))
                 await pace(BACKOFF_MS)
-                break // stop writing more metafields for this item
+                break
               }
 
               if (!mfWriteRes.ok) {
@@ -375,7 +459,7 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Update intake item sync snapshot
+        // Update intake item sync snapshot + mark as repaired
         const updatedSnapshot = {
           ...(intakeItem.shopify_sync_snapshot || {}),
           product_data: {
@@ -424,6 +508,14 @@ Deno.serve(async (req) => {
     }
 
     const totalMs = totalTimer()
+    const hasMore = comicItems.length === limit
+    const nextCursor = lastProcessedId
+
+    // Re-count repaired after this run (for execute mode)
+    const newRepairedCount = mode === 'execute'
+      ? repairedComics + results.filter(r => r.status === 'updated' || r.status === 'unchanged').length
+      : repairedComics
+    const newRemaining = totalComics - newRepairedCount
 
     if (mode === 'preview') {
       const withChanges = diffs.filter(d => d.title_changed || d.description_changed || d.image_changed || d.metafields_changed > 0)
@@ -437,6 +529,8 @@ Deno.serve(async (req) => {
         total_unchanged: comicItems.length - withChanges.length - withErrors.length,
         total_errors: withErrors.length,
         total_rate_limited: totalRateLimited,
+        total_in_catalog: totalComics,
+        total_remaining: remainingEstimate,
         duration_ms: totalMs,
         api_calls: totalApiCalls
       }))
@@ -451,9 +545,13 @@ Deno.serve(async (req) => {
           total_unchanged: comicItems.length - withChanges.length - withErrors.length,
           total_errors: withErrors.length,
           total_rate_limited: totalRateLimited,
+          total_in_catalog: totalComics,
+          total_already_repaired: repairedComics,
+          total_remaining: remainingEstimate,
           duration_ms: totalMs,
           api_calls: totalApiCalls
         },
+        pagination: { has_more: hasMore, next_cursor: nextCursor },
         diffs
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
@@ -473,6 +571,9 @@ Deno.serve(async (req) => {
       total_failed: failed,
       total_skipped: skipped,
       total_rate_limited: totalRateLimited,
+      total_in_catalog: totalComics,
+      total_remaining: newRemaining,
+      has_more: hasMore,
       duration_ms: totalMs,
       api_calls: totalApiCalls
     }))
@@ -488,9 +589,13 @@ Deno.serve(async (req) => {
         total_failed: failed,
         total_skipped: skipped,
         total_rate_limited: totalRateLimited,
+        total_in_catalog: totalComics,
+        total_already_repaired: newRepairedCount,
+        total_remaining: newRemaining,
         duration_ms: totalMs,
         api_calls: totalApiCalls
       },
+      pagination: { has_more: hasMore, next_cursor: nextCursor },
       results
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
