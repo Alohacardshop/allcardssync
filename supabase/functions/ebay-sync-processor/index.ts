@@ -87,9 +87,9 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
-    const { batch_size = 10, store_key }: ProcessorRequest = await req.json().catch(() => ({}))
+    const { batch_size = 25, store_key, depth = 0 }: ProcessorRequest = await req.json().catch(() => ({}))
 
-    console.log(`[ebay-sync-processor] Starting batch processing, size=${batch_size}`)
+    console.log(`[ebay-sync-processor] Starting batch processing, size=${batch_size}, depth=${depth}`)
 
     // Get queued items
     let query = supabase
