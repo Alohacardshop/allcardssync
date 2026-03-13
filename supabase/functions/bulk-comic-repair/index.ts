@@ -126,6 +126,7 @@ Deno.serve(async (req) => {
     const afterId: string | null = body.after_id || null          // cursor: resume after this item id
     const skipRepaired: boolean = body.skip_repaired !== false     // default true: skip already-repaired items
     const storeFilter: string | null = body.store_filter || null  // optional: filter by store_key on items
+    const forceImage: boolean = body.force_image === true          // force delete+re-upload image on every item
 
     if (!storeKey) {
       return new Response(JSON.stringify({ success: false, error: 'store_key is required' }), {
