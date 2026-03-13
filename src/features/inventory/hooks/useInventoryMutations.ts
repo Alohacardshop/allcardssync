@@ -482,7 +482,7 @@ export function useInventoryMutations({
     },
   });
 
-  // Bulk resync selected items
+  // Bulk resync selected items (Shopify)
   const bulkResyncMutation = useMutation({
     mutationKey: ['inventory-bulk-resync'],
     mutationFn: async (selectedItemIds: string[]) => {
@@ -591,6 +591,85 @@ export function useInventoryMutations({
     },
     onError: (error: Error) => {
       toast.error('Failed to start bulk resync', { description: error.message });
+    },
+  });
+
+  // Bulk resync selected items (eBay)
+  const bulkResyncEbayMutation = useMutation({
+    mutationKey: ['inventory-bulk-resync-ebay'],
+    mutationFn: async (selectedItemIds: string[]) => {
+      const toastId = toast.loading(`Queuing ${selectedItemIds.length} items for eBay sync...`);
+
+      try {
+        const { data: freshItems, error: fetchError } = await supabase
+          .from('intake_items')
+          .select('id, list_on_ebay, ebay_listing_id, ebay_offer_id, ebay_inventory_item_sku, sku')
+          .in('id', selectedItemIds);
+
+        if (fetchError) throw fetchError;
+        if (!freshItems || freshItems.length === 0) {
+          toast.dismiss(toastId);
+          throw new Error('No items found');
+        }
+
+        // Split into update vs create
+        const updateItems = freshItems.filter(
+          item => item.ebay_listing_id || item.ebay_offer_id
+        );
+        const createItems = freshItems.filter(
+          item => !item.ebay_listing_id && !item.ebay_offer_id
+        );
+
+        const queueRows = [
+          ...updateItems.map(item => ({
+            inventory_item_id: item.id,
+            action: 'update' as const,
+            status: 'queued' as const,
+            queue_position: 1,
+          })),
+          ...createItems.map(item => ({
+            inventory_item_id: item.id,
+            action: 'create' as const,
+            status: 'queued' as const,
+            queue_position: 1,
+          })),
+        ];
+
+        const { data: queuedData, error: queueError } = await supabase
+          .from('ebay_sync_queue')
+          .upsert(queueRows, { onConflict: 'inventory_item_id' })
+          .select('inventory_item_id');
+
+        if (queueError) throw new Error(`Failed to queue eBay sync: ${queueError.message}`);
+
+        const queuedIds = (queuedData || []).map(r => r.inventory_item_id);
+
+        if (queuedIds.length > 0) {
+          await supabase
+            .from('intake_items')
+            .update({ ebay_sync_status: 'queued' })
+            .in('id', queuedIds);
+        }
+
+        // Fire-and-forget processor
+        supabase.functions.invoke('ebay-sync-processor', { 
+          body: { batch_size: queuedIds.length } 
+        }).catch(() => {});
+
+        toast.dismiss(toastId);
+        return { queued: queuedIds.length, total: freshItems.length };
+      } catch (error) {
+        toast.dismiss(toastId);
+        throw error;
+      }
+    },
+    onSuccess: ({ queued, total }) => {
+      toast.success(`${queued} of ${total} items queued for eBay sync`);
+      queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
+      onSuccess?.();
+    },
+    onError: (error: Error) => {
+      toast.error('Failed to queue eBay sync', { description: error.message });
     },
   });
 
@@ -721,6 +800,7 @@ export function useInventoryMutations({
     // Bulk mutations
     bulkSyncMutation,
     bulkResyncMutation,
+    bulkResyncEbayMutation,
     bulkRetrySyncMutation,
 
     // State helpers
@@ -731,7 +811,7 @@ export function useInventoryMutations({
 
     // Legacy boolean state for backward compatibility
     bulkRetrying: bulkRetrySyncMutation.isPending,
-    bulkSyncing: bulkSyncMutation.isPending || bulkResyncMutation.isPending,
+    bulkSyncing: bulkSyncMutation.isPending || bulkResyncMutation.isPending || bulkResyncEbayMutation.isPending,
     removingFromShopify: removeMutation.isPending,
     deletingItems: deleteMutation.isPending,
 
@@ -750,12 +830,19 @@ export function useInventoryMutations({
       }
       bulkSyncMutation.mutate(items);
     },
-    handleResyncSelected: (itemIds: string[]) => {
+    handleResyncSelected: async (itemIds: string[], target: 'shopify' | 'ebay' | 'both' = 'shopify') => {
       if (itemIds.length === 0) {
         toast.info('No items selected');
         return;
       }
-      bulkResyncMutation.mutate(itemIds);
+      if (target === 'shopify') {
+        bulkResyncMutation.mutate(itemIds);
+      } else if (target === 'ebay') {
+        bulkResyncEbayMutation.mutate(itemIds);
+      } else if (target === 'both') {
+        await bulkResyncMutation.mutateAsync(itemIds);
+        bulkResyncEbayMutation.mutate(itemIds);
+      }
     },
     handleBulkRetrySync: (errorItems: InventoryListItem[]) => {
       bulkRetrySyncMutation.mutate(errorItems);

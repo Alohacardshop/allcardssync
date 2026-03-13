@@ -251,7 +251,7 @@ export interface InventoryActionHandlers {
   handleRetrySync: (item: InventoryListItem) => void;
   handleResync: (item: InventoryListItem) => void;
   handleSyncSelected: () => void;
-  handleResyncSelected: () => void;
+  handleResyncSelected: (target: 'shopify' | 'ebay' | 'both') => void;
   handleBulkRetrySync: () => void;
   handleRemoveFromShopify: (items: InventoryListItem | InventoryListItem[] | null) => void;
   handleDeleteItems: (items: InventoryListItem[]) => void;
