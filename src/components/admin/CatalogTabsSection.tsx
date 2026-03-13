@@ -1,5 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Database, Upload, ExternalLink, Building2, Tag } from 'lucide-react';
+import { Database, Upload, ExternalLink, Building2, Tag, ImageIcon } from 'lucide-react';
 import TCGDatabaseSettings from './TCGDatabaseSettings';
 import { TCGHealthCheck } from './TCGHealthCheck';
 import { RawIntakeSettings } from './RawIntakeSettings';
@@ -7,11 +7,12 @@ import { BatchProcessingSettings } from './BatchProcessingSettings';
 import { PSAApiSettings } from './PSAApiSettings';
 import { VendorManagement } from './VendorManagement';
 import { CategoryManagement } from './CategoryManagement';
+import { ComicImageRescrape } from './ComicImageRescrape';
 
 export function CatalogTabsSection() {
   return (
     <Tabs defaultValue="database" className="w-full">
-      <TabsList className="grid w-full grid-cols-5">
+      <TabsList className="grid w-full grid-cols-6">
         <TabsTrigger value="database" className="flex items-center gap-2">
           <Database className="w-4 h-4" />
           <span className="hidden sm:inline">Database</span>
@@ -31,6 +32,10 @@ export function CatalogTabsSection() {
         <TabsTrigger value="categories" className="flex items-center gap-2">
           <Tag className="w-4 h-4" />
           <span className="hidden sm:inline">Categories</span>
+        </TabsTrigger>
+        <TabsTrigger value="comics" className="flex items-center gap-2">
+          <ImageIcon className="w-4 h-4" />
+          <span className="hidden sm:inline">Comics</span>
         </TabsTrigger>
       </TabsList>
 
@@ -54,6 +59,10 @@ export function CatalogTabsSection() {
 
       <TabsContent value="categories" className="space-y-4">
         <CategoryManagement />
+      </TabsContent>
+
+      <TabsContent value="comics" className="space-y-4">
+        <ComicImageRescrape />
       </TabsContent>
     </Tabs>
   );
