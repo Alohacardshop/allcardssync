@@ -376,7 +376,7 @@ Deno.serve(async (req) => {
 
         // Always check for back image cleanup even if title/desc/metafields unchanged
         const hasTextOrMetaChange = titleChanged || descChanged || metafieldsChangedCount > 0
-        const hasAnyChange = hasTextOrMetaChange || imageChanged
+        const hasAnyChange = hasTextOrMetaChange || imageChanged || forceImage
 
         if (mode === 'preview') {
           diffs.push(diff)

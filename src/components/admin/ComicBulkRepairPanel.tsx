@@ -114,6 +114,21 @@ export function ComicBulkRepairPanel() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Options */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="force-image"
+              checked={forceImage}
+              onCheckedChange={setForceImage}
+            />
+            <Label htmlFor="force-image" className="text-sm flex items-center gap-1">
+              <ImageIcon className="h-3.5 w-3.5" />
+              Force image replace (all comics)
+            </Label>
+          </div>
+        </div>
+
         {/* Actions */}
         <div className="flex gap-3">
           <Button
