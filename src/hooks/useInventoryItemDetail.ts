@@ -19,6 +19,8 @@ export function useInventoryItemDetail(itemId: string | null, enabled = true) {
           catalog_snapshot,
           psa_snapshot,
           image_urls,
+          front_image_url,
+          back_image_url,
           shopify_snapshot,
           pricing_snapshot,
           label_snapshot,
