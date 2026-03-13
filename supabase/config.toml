@@ -232,3 +232,7 @@ verify_jwt = true
 # eBay merchant location management (list/create locations)
 [functions.ebay-manage-location]
 verify_jwt = false
+
+# Bulk comic repair (admin-only, preview + execute modes)
+[functions.bulk-comic-repair]
+verify_jwt = true
