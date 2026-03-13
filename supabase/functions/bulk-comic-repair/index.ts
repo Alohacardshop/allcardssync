@@ -11,8 +11,14 @@ import {
 } from '../_shared/shopify-sync-core.ts'
 import { ensureMediaOrder, determineFrontImageUrl } from '../_shared/shopify-media-order.ts'
 
-const BATCH_SIZE = 10
 const API_VERSION = '2024-07'
+const PACE_MS = 300        // ms between Shopify API calls (~3.3/sec)
+const BACKOFF_MS = 2000    // ms to wait after a 429
+const PROGRESS_INTERVAL = 10
+
+function pace(ms = PACE_MS) {
+  return new Promise(r => setTimeout(r, ms))
+}
 
 interface RepairDiff {
   item_id: string
@@ -29,10 +35,37 @@ interface RepairDiff {
 interface RepairResult {
   item_id: string
   sku: string | null
-  status: 'updated' | 'unchanged' | 'failed'
+  status: 'updated' | 'unchanged' | 'failed' | 'skipped'
   changes: string[]
   error?: string
   api_calls: number
+}
+
+async function shopifyCallWithPacing(
+  url: string,
+  init: RequestInit,
+  domain: string,
+  token: string
+): Promise<Response> {
+  const res = await shopifyFetchWithRetry(url, init)
+  await pace()
+
+  if (res.status === 429) {
+    const retryAfter = res.headers?.get?.('Retry-After')
+    const wait = retryAfter ? Math.max(parseInt(retryAfter) * 1000, BACKOFF_MS) : BACKOFF_MS
+    console.log(JSON.stringify({
+      event: 'comic_bulk_repair_rate_limited',
+      url,
+      wait_ms: wait
+    }))
+    await pace(wait)
+    // Retry once after backoff
+    const retryRes = await shopifyFetchWithRetry(url, init)
+    await pace()
+    return retryRes
+  }
+
+  return res
 }
 
 Deno.serve(async (req) => {
@@ -51,8 +84,8 @@ Deno.serve(async (req) => {
     const body = await req.json()
     const mode: 'preview' | 'execute' = body.mode || 'preview'
     const storeKey: string = body.store_key
-    const itemIds: string[] | null = body.item_ids || null  // optional filter
-    const limit: number = body.limit || 500
+    const itemIds: string[] | null = body.item_ids || null
+    const limit: number = body.limit || 50  // lowered from 500
 
     if (!storeKey) {
       return new Response(JSON.stringify({ success: false, error: 'store_key is required' }), {
@@ -94,7 +127,6 @@ Deno.serve(async (req) => {
       .is('deleted_at', null)
       .limit(limit)
 
-    // Filter to comics only
     query = query.or('main_category.eq.comics,catalog_snapshot->>type.eq.graded_comic')
 
     if (itemIds && itemIds.length > 0) {
@@ -109,7 +141,7 @@ Deno.serve(async (req) => {
         success: true,
         mode,
         message: 'No synced comic items found',
-        summary: { total_scanned: 0, total_comics: 0, total_changed: 0, total_unchanged: 0, total_failed: 0 }
+        summary: { total_scanned: 0, total_comics: 0, total_changed: 0, total_unchanged: 0, total_failed: 0, total_skipped: 0, total_rate_limited: 0 }
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
@@ -119,255 +151,276 @@ Deno.serve(async (req) => {
       mode
     }))
 
-    // ── Process in batches ──
+    // ── Process items sequentially ──
     const diffs: RepairDiff[] = []
     const results: RepairResult[] = []
     let totalApiCalls = 0
+    let totalRateLimited = 0
+    let totalSkipped = 0
 
-    for (let batchStart = 0; batchStart < comicItems.length; batchStart += BATCH_SIZE) {
-      const batch = comicItems.slice(batchStart, batchStart + BATCH_SIZE)
+    for (let i = 0; i < comicItems.length; i++) {
+      const intakeItem = comicItems[i] as any
 
-      const batchPromises = batch.map(async (intakeItem: any) => {
-        const item = {
-          id: intakeItem.id,
-          sku: intakeItem.sku,
-          psa_cert: intakeItem.psa_cert || intakeItem.psa_cert_number,
-          brand_title: intakeItem.brand_title,
-          subject: intakeItem.subject,
-          card_number: intakeItem.card_number,
-          variant: intakeItem.variant,
-          year: intakeItem.year,
-          grade: intakeItem.grade,
-          category_tag: intakeItem.category,
-          image_url: Array.isArray(intakeItem.image_urls) ? intakeItem.image_urls[0] : '',
-          cost: intakeItem.cost,
-          price: undefined
-        }
+      // Progress logging every PROGRESS_INTERVAL items
+      if (i > 0 && i % PROGRESS_INTERVAL === 0) {
+        console.log(JSON.stringify({
+          event: 'comic_bulk_repair_progress',
+          processed: i,
+          total: comicItems.length,
+          mode,
+          duration_ms: totalTimer()
+        }))
+      }
 
-        try {
-          // Generate intended comic data
-          const intendedTitle = buildComicTitle(intakeItem, item)
-          const intendedDescription = buildComicDescription(intakeItem, item)
-          const intendedComicMetafields = buildComicMetafields(intakeItem, item)
-          const frontUrl = determineFrontImageUrl(intakeItem)
+      const item = {
+        id: intakeItem.id,
+        sku: intakeItem.sku,
+        psa_cert: intakeItem.psa_cert || intakeItem.psa_cert_number,
+        brand_title: intakeItem.brand_title,
+        subject: intakeItem.subject,
+        card_number: intakeItem.card_number,
+        variant: intakeItem.variant,
+        year: intakeItem.year,
+        grade: intakeItem.grade,
+        category_tag: intakeItem.category,
+        image_url: Array.isArray(intakeItem.image_urls) ? intakeItem.image_urls[0] : '',
+        cost: intakeItem.cost,
+        price: undefined
+      }
 
-          // Fetch current Shopify product
-          const productRes = await shopifyFetchWithRetry(
-            `https://${domain}/admin/api/${API_VERSION}/products/${intakeItem.shopify_product_id}.json`,
-            { method: 'GET', headers: shopifyHeaders }
-          )
-          totalApiCalls++
+      try {
+        // Generate intended comic data
+        const intendedTitle = buildComicTitle(intakeItem, item)
+        const intendedDescription = buildComicDescription(intakeItem, item)
+        const intendedComicMetafields = buildComicMetafields(intakeItem, item)
+        const frontUrl = determineFrontImageUrl(intakeItem)
 
-          if (!productRes.ok) {
-            const errText = await productRes.text()
-            throw new Error(`Shopify fetch failed: ${errText}`)
-          }
+        // Fetch current Shopify product
+        const productRes = await shopifyCallWithPacing(
+          `https://${domain}/admin/api/${API_VERSION}/products/${intakeItem.shopify_product_id}.json`,
+          { method: 'GET', headers: shopifyHeaders },
+          domain, token
+        )
+        totalApiCalls++
 
-          const { product: existingProduct } = await productRes.json()
-
-          // Compare
-          const titleChanged = existingProduct.title !== intendedTitle
-          const descChanged = existingProduct.body_html !== intendedDescription
-          const imageChanged = frontUrl ? !productHasCorrectImage(existingProduct, frontUrl) : false
-
-          // Fetch existing metafields for comparison
-          let metafieldsChangedCount = 0
-          if (mode === 'execute' || mode === 'preview') {
-            const mfRes = await shopifyFetchWithRetry(
-              `https://${domain}/admin/api/${API_VERSION}/products/${intakeItem.shopify_product_id}/metafields.json`,
-              { method: 'GET', headers: shopifyHeaders }
-            )
-            totalApiCalls++
-            if (mfRes.ok) {
-              const { metafields: existingMfs } = await mfRes.json()
-              const changedMfs = filterChangedMetafields(intendedComicMetafields, existingMfs || [])
-              metafieldsChangedCount = changedMfs.length
-            }
-          }
-
-          const diff: RepairDiff = {
-            item_id: intakeItem.id,
-            sku: intakeItem.sku,
-            current_title: existingProduct.title,
-            intended_title: intendedTitle,
-            title_changed: titleChanged,
-            description_changed: descChanged,
-            image_changed: imageChanged,
-            metafields_changed: metafieldsChangedCount
-          }
-
-          const hasAnyChange = titleChanged || descChanged || imageChanged || metafieldsChangedCount > 0
-
-          console.log(JSON.stringify({
-            event: 'comic_bulk_repair_item_diff',
-            item_id: intakeItem.id,
-            sku: intakeItem.sku,
-            title_changed: titleChanged,
-            description_changed: descChanged,
-            image_changed: imageChanged,
-            metafields_changed: metafieldsChangedCount,
-            has_change: hasAnyChange
-          }))
-
-          if (mode === 'preview') {
-            diffs.push(diff)
-            return
-          }
-
-          // ── Execute mode ──
-          if (!hasAnyChange) {
-            results.push({ item_id: intakeItem.id, sku: intakeItem.sku, status: 'unchanged', changes: [], api_calls: 0 })
-            return
-          }
-
-          const changes: string[] = []
-          let itemApiCalls = 0
-
-          // Update product title + description
-          if (titleChanged || descChanged) {
-            const productUpdate: any = { id: intakeItem.shopify_product_id }
-            if (titleChanged) productUpdate.title = intendedTitle
-            if (descChanged) productUpdate.body_html = intendedDescription
-
-            const updateRes = await shopifyFetchWithRetry(
-              `https://${domain}/admin/api/${API_VERSION}/products/${intakeItem.shopify_product_id}.json`,
-              { method: 'PUT', headers: shopifyHeaders, body: JSON.stringify({ product: productUpdate }) }
-            )
-            itemApiCalls++
-            totalApiCalls++
-
-            if (!updateRes.ok) {
-              const errText = await updateRes.text()
-              throw new Error(`Product update failed: ${errText}`)
-            }
-
-            if (titleChanged) changes.push('title')
-            if (descChanged) changes.push('description')
-
-            console.log(JSON.stringify({
-              event: 'comic_bulk_repair_item_updated',
-              item_id: intakeItem.id,
-              sku: intakeItem.sku,
-              changes: changes.filter(c => c === 'title' || c === 'description')
-            }))
-          }
-
-          // Repair image
-          if (imageChanged && frontUrl) {
-            const mediaResult = await ensureMediaOrder({
-              domain, token,
-              productId: intakeItem.shopify_product_id,
-              intendedFrontUrl: frontUrl
-            })
-            itemApiCalls++
-            totalApiCalls++
-
-            if (mediaResult.success) {
-              changes.push('image')
-              console.log(JSON.stringify({
-                event: 'comic_bulk_repair_image_repaired',
-                item_id: intakeItem.id,
-                sku: intakeItem.sku,
-                front_url: frontUrl
-              }))
-            } else {
-              console.warn(JSON.stringify({
-                event: 'comic_bulk_repair_image_failed',
-                item_id: intakeItem.id,
-                message: mediaResult.message
-              }))
-            }
-          }
-
-          // Write changed metafields
-          if (metafieldsChangedCount > 0) {
-            const mfRes2 = await shopifyFetchWithRetry(
-              `https://${domain}/admin/api/${API_VERSION}/products/${intakeItem.shopify_product_id}/metafields.json`,
-              { method: 'GET', headers: shopifyHeaders }
-            )
-            totalApiCalls++
-            itemApiCalls++
-
-            if (mfRes2.ok) {
-              const { metafields: existingMfs } = await mfRes2.json()
-              const toWrite = filterChangedMetafields(intendedComicMetafields, existingMfs || [])
-
-              for (const mf of toWrite) {
-                const mfWriteRes = await shopifyFetchWithRetry(
-                  `https://${domain}/admin/api/${API_VERSION}/products/${intakeItem.shopify_product_id}/metafields.json`,
-                  { method: 'POST', headers: shopifyHeaders, body: JSON.stringify({ metafield: mf }) }
-                )
-                itemApiCalls++
-                totalApiCalls++
-                if (!mfWriteRes.ok) {
-                  const t = await mfWriteRes.text()
-                  console.warn(`Metafield write failed for ${mf.key}: ${t}`)
-                }
-              }
-              changes.push(`${toWrite.length} metafields`)
-            }
-          }
-
-          // Update intake item sync snapshot
-          const updatedSnapshot = {
-            ...(intakeItem.shopify_sync_snapshot || {}),
-            product_data: {
-              product: {
-                title: intendedTitle,
-                body_html: intendedDescription,
-                product_type: 'Graded Comic'
-              }
-            },
-            repair_timestamp: new Date().toISOString(),
-            repair_changes: changes
-          }
-
-          await supabase
-            .from('intake_items')
-            .update({
-              shopify_sync_snapshot: updatedSnapshot,
-              last_shopify_synced_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-              updated_by: 'comic_bulk_repair'
-            })
-            .eq('id', intakeItem.id)
-
-          results.push({ item_id: intakeItem.id, sku: intakeItem.sku, status: 'updated', changes, api_calls: itemApiCalls })
-
-        } catch (err: any) {
-          console.error(JSON.stringify({
-            event: 'comic_bulk_repair_item_error',
-            item_id: intakeItem.id,
-            sku: intakeItem.sku,
-            error: err.message
-          }))
-
+        if (productRes.status === 429) {
+          totalRateLimited++
+          totalSkipped++
           if (mode === 'preview') {
             diffs.push({
-              item_id: intakeItem.id,
-              sku: intakeItem.sku,
-              current_title: null,
-              intended_title: '',
-              title_changed: false,
-              description_changed: false,
-              image_changed: false,
-              metafields_changed: 0,
-              error: err.message
+              item_id: intakeItem.id, sku: intakeItem.sku,
+              current_title: null, intended_title: intendedTitle,
+              title_changed: false, description_changed: false,
+              image_changed: false, metafields_changed: 0,
+              error: 'Rate limited - skipped'
             })
           } else {
-            results.push({ item_id: intakeItem.id, sku: intakeItem.sku, status: 'failed', changes: [], error: err.message, api_calls: 0 })
+            results.push({ item_id: intakeItem.id, sku: intakeItem.sku, status: 'skipped', changes: [], error: 'Rate limited after backoff', api_calls: 1 })
+          }
+          console.log(JSON.stringify({ event: 'comic_bulk_repair_backoff', item_id: intakeItem.id, sku: intakeItem.sku }))
+          await pace(BACKOFF_MS)
+          continue
+        }
+
+        if (!productRes.ok) {
+          const errText = await productRes.text()
+          throw new Error(`Shopify fetch failed (${productRes.status}): ${errText}`)
+        }
+
+        const { product: existingProduct } = await productRes.json()
+
+        // Compare
+        const titleChanged = existingProduct.title !== intendedTitle
+        const descChanged = existingProduct.body_html !== intendedDescription
+        const imageChanged = frontUrl ? !productHasCorrectImage(existingProduct, frontUrl) : false
+
+        // Fetch existing metafields
+        let metafieldsChangedCount = 0
+        const mfRes = await shopifyCallWithPacing(
+          `https://${domain}/admin/api/${API_VERSION}/products/${intakeItem.shopify_product_id}/metafields.json`,
+          { method: 'GET', headers: shopifyHeaders },
+          domain, token
+        )
+        totalApiCalls++
+
+        if (mfRes.status === 429) {
+          totalRateLimited++
+          // Still have product data, just skip metafield comparison
+          console.log(JSON.stringify({ event: 'comic_bulk_repair_rate_limited', item_id: intakeItem.id, context: 'metafield_fetch' }))
+          await pace(BACKOFF_MS)
+        } else if (mfRes.ok) {
+          const { metafields: existingMfs } = await mfRes.json()
+          const changedMfs = filterChangedMetafields(intendedComicMetafields, existingMfs || [])
+          metafieldsChangedCount = changedMfs.length
+        }
+
+        const diff: RepairDiff = {
+          item_id: intakeItem.id,
+          sku: intakeItem.sku,
+          current_title: existingProduct.title,
+          intended_title: intendedTitle,
+          title_changed: titleChanged,
+          description_changed: descChanged,
+          image_changed: imageChanged,
+          metafields_changed: metafieldsChangedCount
+        }
+
+        const hasAnyChange = titleChanged || descChanged || imageChanged || metafieldsChangedCount > 0
+
+        if (mode === 'preview') {
+          diffs.push(diff)
+          continue
+        }
+
+        // ── Execute mode ──
+        if (!hasAnyChange) {
+          results.push({ item_id: intakeItem.id, sku: intakeItem.sku, status: 'unchanged', changes: [], api_calls: 0 })
+          continue
+        }
+
+        const changes: string[] = []
+        let itemApiCalls = 0
+
+        // Update product title + description
+        if (titleChanged || descChanged) {
+          const productUpdate: any = { id: intakeItem.shopify_product_id }
+          if (titleChanged) productUpdate.title = intendedTitle
+          if (descChanged) productUpdate.body_html = intendedDescription
+
+          const updateRes = await shopifyCallWithPacing(
+            `https://${domain}/admin/api/${API_VERSION}/products/${intakeItem.shopify_product_id}.json`,
+            { method: 'PUT', headers: shopifyHeaders, body: JSON.stringify({ product: productUpdate }) },
+            domain, token
+          )
+          itemApiCalls++
+          totalApiCalls++
+
+          if (updateRes.status === 429) {
+            totalRateLimited++
+            results.push({ item_id: intakeItem.id, sku: intakeItem.sku, status: 'skipped', changes: [], error: 'Rate limited on product update', api_calls: itemApiCalls })
+            await pace(BACKOFF_MS)
+            continue
+          }
+
+          if (!updateRes.ok) {
+            const errText = await updateRes.text()
+            throw new Error(`Product update failed: ${errText}`)
+          }
+
+          if (titleChanged) changes.push('title')
+          if (descChanged) changes.push('description')
+        }
+
+        // Repair image
+        if (imageChanged && frontUrl) {
+          const mediaResult = await ensureMediaOrder({
+            domain, token,
+            productId: intakeItem.shopify_product_id,
+            intendedFrontUrl: frontUrl
+          })
+          itemApiCalls++
+          totalApiCalls++
+          await pace()
+
+          if (mediaResult.success) {
+            changes.push('image')
+          } else {
+            console.warn(JSON.stringify({
+              event: 'comic_bulk_repair_image_failed',
+              item_id: intakeItem.id,
+              message: mediaResult.message
+            }))
           }
         }
-      })
 
-      await Promise.all(batchPromises)
+        // Write changed metafields sequentially
+        if (metafieldsChangedCount > 0) {
+          const mfRes2 = await shopifyCallWithPacing(
+            `https://${domain}/admin/api/${API_VERSION}/products/${intakeItem.shopify_product_id}/metafields.json`,
+            { method: 'GET', headers: shopifyHeaders },
+            domain, token
+          )
+          totalApiCalls++
+          itemApiCalls++
 
-      console.log(JSON.stringify({
-        event: 'comic_bulk_repair_batch_complete',
-        batch: Math.floor(batchStart / BATCH_SIZE) + 1,
-        processed: Math.min(batchStart + BATCH_SIZE, comicItems.length),
-        total: comicItems.length
-      }))
+          if (mfRes2.ok) {
+            const { metafields: existingMfs } = await mfRes2.json()
+            const toWrite = filterChangedMetafields(intendedComicMetafields, existingMfs || [])
+            let mfWritten = 0
+
+            for (const mf of toWrite) {
+              const mfWriteRes = await shopifyCallWithPacing(
+                `https://${domain}/admin/api/${API_VERSION}/products/${intakeItem.shopify_product_id}/metafields.json`,
+                { method: 'POST', headers: shopifyHeaders, body: JSON.stringify({ metafield: mf }) },
+                domain, token
+              )
+              itemApiCalls++
+              totalApiCalls++
+
+              if (mfWriteRes.status === 429) {
+                totalRateLimited++
+                console.log(JSON.stringify({ event: 'comic_bulk_repair_rate_limited', item_id: intakeItem.id, context: 'metafield_write' }))
+                await pace(BACKOFF_MS)
+                break // stop writing more metafields for this item
+              }
+
+              if (!mfWriteRes.ok) {
+                const t = await mfWriteRes.text()
+                console.warn(`Metafield write failed for ${mf.key}: ${t}`)
+              } else {
+                mfWritten++
+              }
+            }
+            if (mfWritten > 0) changes.push(`${mfWritten} metafields`)
+          }
+        }
+
+        // Update intake item sync snapshot
+        const updatedSnapshot = {
+          ...(intakeItem.shopify_sync_snapshot || {}),
+          product_data: {
+            product: {
+              title: intendedTitle,
+              body_html: intendedDescription,
+              product_type: 'Graded Comic'
+            }
+          },
+          repair_timestamp: new Date().toISOString(),
+          repair_changes: changes
+        }
+
+        await supabase
+          .from('intake_items')
+          .update({
+            shopify_sync_snapshot: updatedSnapshot,
+            last_shopify_synced_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            updated_by: 'comic_bulk_repair'
+          })
+          .eq('id', intakeItem.id)
+
+        results.push({ item_id: intakeItem.id, sku: intakeItem.sku, status: 'updated', changes, api_calls: itemApiCalls })
+
+      } catch (err: any) {
+        console.error(JSON.stringify({
+          event: 'comic_bulk_repair_item_error',
+          item_id: intakeItem.id,
+          sku: intakeItem.sku,
+          error: err.message
+        }))
+
+        if (mode === 'preview') {
+          diffs.push({
+            item_id: intakeItem.id, sku: intakeItem.sku,
+            current_title: null, intended_title: '',
+            title_changed: false, description_changed: false,
+            image_changed: false, metafields_changed: 0,
+            error: err.message
+          })
+        } else {
+          results.push({ item_id: intakeItem.id, sku: intakeItem.sku, status: 'failed', changes: [], error: err.message, api_calls: 0 })
+        }
+      }
     }
 
     const totalMs = totalTimer()
@@ -377,12 +430,13 @@ Deno.serve(async (req) => {
       const withErrors = diffs.filter(d => d.error)
 
       console.log(JSON.stringify({
-        event: 'comic_bulk_repair_preview_completed',
+        event: 'comic_bulk_repair_completed',
+        mode: 'preview',
         total_scanned: comicItems.length,
-        total_comics: comicItems.length,
         total_needing_repair: withChanges.length,
         total_unchanged: comicItems.length - withChanges.length - withErrors.length,
         total_errors: withErrors.length,
+        total_rate_limited: totalRateLimited,
         duration_ms: totalMs,
         api_calls: totalApiCalls
       }))
@@ -396,6 +450,7 @@ Deno.serve(async (req) => {
           total_needing_repair: withChanges.length,
           total_unchanged: comicItems.length - withChanges.length - withErrors.length,
           total_errors: withErrors.length,
+          total_rate_limited: totalRateLimited,
           duration_ms: totalMs,
           api_calls: totalApiCalls
         },
@@ -407,14 +462,17 @@ Deno.serve(async (req) => {
     const updated = results.filter(r => r.status === 'updated').length
     const unchanged = results.filter(r => r.status === 'unchanged').length
     const failed = results.filter(r => r.status === 'failed').length
+    const skipped = results.filter(r => r.status === 'skipped').length
 
     console.log(JSON.stringify({
       event: 'comic_bulk_repair_completed',
+      mode: 'execute',
       total_scanned: comicItems.length,
-      total_comics: comicItems.length,
       total_changed: updated,
       total_unchanged: unchanged,
       total_failed: failed,
+      total_skipped: skipped,
+      total_rate_limited: totalRateLimited,
       duration_ms: totalMs,
       api_calls: totalApiCalls
     }))
@@ -428,6 +486,8 @@ Deno.serve(async (req) => {
         total_changed: updated,
         total_unchanged: unchanged,
         total_failed: failed,
+        total_skipped: skipped,
+        total_rate_limited: totalRateLimited,
         duration_ms: totalMs,
         api_calls: totalApiCalls
       },

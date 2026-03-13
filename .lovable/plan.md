@@ -1,50 +1,30 @@
 
 
-## Fix: Rate-Limiting in `bulk-comic-repair/index.ts`
+## Problem
 
-### Problem
-The function processes 10 items in parallel via `Promise.all`, each triggering 2-7 Shopify API calls. That's up to 70 concurrent calls — far exceeding Shopify's 4 calls/second limit. Results: 429 errors, retries pile up, edge function times out.
+Only `services.ebay_sync` rows exist in the database for both regions. When you click "Shopify Sync" or "Discord Notifications," the upsert tries to INSERT a new row. The code and RLS policies look correct (admin has ALL access, unique constraint exists for upsert), so the issue is likely **not** a permissions problem.
 
-### Changes (single file: `supabase/functions/bulk-comic-repair/index.ts`)
+The real issue is that `services.shopify_sync` and `services.discord_notifications` rows simply don't exist yet. The upsert *should* create them, but the button click may be silently failing or the accordion is swallowing the click event before it reaches the button.
 
-**1. Sequential processing (concurrency = 1)**
-- Remove the `BATCH_SIZE = 10` batching with `Promise.all`
-- Replace with a simple `for...of` loop that processes one comic at a time in execute mode
-- Preview mode can stay parallel (read-only GETs are less rate-sensitive) but will also be made sequential for safety
+Looking at the code, I notice the `isSaving` variable depends on `savingKey === saveKey`. If a previous save attempt failed and `savingKey` got stuck (or if the error handler doesn't run), subsequent clicks would find the button `disabled={isSaving}` permanently.
 
-**2. Pacing between API calls**
-- Add a `pace()` helper: 300ms delay after every Shopify API call (keeps us under 3.3 calls/sec, well within the 4/sec limit)
-- Applied after every `shopifyFetchWithRetry` call and after `ensureMediaOrder`
+## Plan
 
-**3. Rate-limit-aware backoff**
-- After any 429 response, log `comic_bulk_repair_rate_limited` and wait 2 seconds (or `Retry-After` header value) before continuing
-- The item is retried once after the backoff; if it fails again, it's marked failed and processing continues
+### 1. Seed the missing service toggle rows
+Insert the missing `services.shopify_sync` and `services.discord_notifications` rows for both regions via a database migration. This ensures the upsert always hits an UPDATE (not INSERT), matching how `services.ebay_sync` already works.
 
-**4. Lower default limit**
-- Change default `limit` from 500 to 50
-- With ~5 API calls per item at 300ms pacing, 50 items takes ~75 seconds — safely within edge function timeout (~120s)
-
-**5. New structured log events**
-- `comic_bulk_repair_rate_limited` — when a 429 is detected
-- `comic_bulk_repair_backoff` — when backing off after rate limit
-- `comic_bulk_repair_progress` — after every 10 items processed
-- `comic_bulk_repair_completed` — already exists, will add `skipped` count
-
-**6. Summary improvements**
-- Add `total_skipped` to the response summary for items skipped due to rate limiting
-- Add `total_rate_limited` count
-
-### What stays unchanged
-- Preview mode logic (same diff comparison)
-- Comic title/description/metafield generation logic
-- Image resolution via `determineFrontImageUrl`
-- All interfaces (`RepairDiff`, `RepairResult`)
-
-### Technical detail
-
-```text
-BEFORE:  [10 items] → Promise.all → 20-70 API calls burst → 429 → timeout
-AFTER:   [1 item]   → sequential → ~5 calls → 300ms pace → next item → ...
-         50 items × ~5 calls × 300ms = ~75s (within 120s timeout)
+```sql
+INSERT INTO region_settings (region_id, setting_key, setting_value, description)
+VALUES 
+  ('hawaii', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
+  ('hawaii', 'services.discord_notifications', 'false', 'Enable Discord order notifications'),
+  ('las_vegas', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
+  ('las_vegas', 'services.discord_notifications', 'false', 'Enable Discord order notifications')
+ON CONFLICT (region_id, setting_key) DO NOTHING;
 ```
+
+### 2. Add defensive error logging to the toggle click handler
+Update the boolean toggle's `onClick` in `RegionSettingsEditor.tsx` to log the error details to the console. This ensures any future upsert failures are visible rather than silently swallowed.
+
+This is a small, targeted fix -- seeding the rows is the primary solution.
 
