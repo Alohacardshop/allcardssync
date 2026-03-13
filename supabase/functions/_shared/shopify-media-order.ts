@@ -17,6 +17,7 @@ interface MediaOrderArgs {
   intendedFrontUrl: string          // the URL we consider "front" (index 0 of our sorted array)
   apiVersion?: string
   expectedMediaCount?: number       // optional: how many media items we expect
+  deleteNonFront?: boolean          // if true, delete all non-front media from the product
 }
 
 interface MediaNode {
@@ -150,7 +151,7 @@ export async function ensureMediaOrder(args: MediaOrderArgs): Promise<MediaOrder
     console.log(`  Variant[0] media: ${v0media ? extractFilename(v0media.preview?.image?.url || '') : 'none'} (${v0media?.id || 'none'})`)
   }
 
-  if (mediaNodes.length < 2) {
+  if (mediaNodes.length < 2 && !args.deleteNonFront) {
     console.log(`[MEDIA ORDER] Only ${mediaNodes.length} media items, skipping reorder`)
     return { success: true, message: 'Single or no media, nothing to reorder' }
   }
@@ -160,6 +161,39 @@ export async function ensureMediaOrder(args: MediaOrderArgs): Promise<MediaOrder
   if (!frontMedia) {
     console.warn(`[MEDIA ORDER] ⚠️ Could not match front filename "${frontFilename}" in Shopify media`)
     return { success: false, message: `Front image filename "${frontFilename}" not found in product media` }
+  }
+
+  // ── Step 2a: Delete non-front media if requested ──
+  if (args.deleteNonFront && mediaNodes.length > 1) {
+    const nonFrontMedia = mediaNodes.filter(n => n.id !== frontMedia.id)
+    
+    if (nonFrontMedia.length > 0) {
+      console.log(`[MEDIA ORDER] Deleting ${nonFrontMedia.length} non-front media items`)
+      for (const media of nonFrontMedia) {
+        try {
+          const deleteResult = await graphql(domain, token, `
+            mutation fileDelete($fileIds: [ID!]!) {
+              fileDelete(fileIds: $fileIds) {
+                deletedFileIds
+                userErrors { field message }
+              }
+            }
+          `, { fileIds: [media.id] }, apiVersion)
+          
+          const deleteErrs = deleteResult?.data?.fileDelete?.userErrors || []
+          if (deleteErrs.length > 0) {
+            console.warn(`[MEDIA ORDER] Delete error for ${media.id}:`, JSON.stringify(deleteErrs))
+          } else {
+            console.log(`[MEDIA ORDER] ✅ Deleted non-front media: ${extractFilename(media.url)} (${media.id})`)
+          }
+          await new Promise(r => setTimeout(r, 300))
+        } catch (err) {
+          console.warn(`[MEDIA ORDER] Failed to delete media ${media.id}:`, err)
+        }
+      }
+      
+      return { success: true, frontMediaId: frontMedia.id, message: `Deleted ${nonFrontMedia.length} non-front images, front image retained` }
+    }
   }
 
   const isAlreadyFirst = mediaNodes[0].id === frontMedia.id

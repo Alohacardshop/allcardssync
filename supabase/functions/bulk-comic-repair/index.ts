@@ -340,7 +340,9 @@ Deno.serve(async (req) => {
           metafields_changed: metafieldsChangedCount
         }
 
-        const hasAnyChange = titleChanged || descChanged || imageChanged || metafieldsChangedCount > 0
+        // Always check for back image cleanup even if title/desc/metafields unchanged
+        const hasTextOrMetaChange = titleChanged || descChanged || metafieldsChangedCount > 0
+        const hasAnyChange = hasTextOrMetaChange || imageChanged
 
         if (mode === 'preview') {
           diffs.push(diff)
@@ -348,19 +350,7 @@ Deno.serve(async (req) => {
         }
 
         // ── Execute mode ──
-        if (!hasAnyChange) {
-          // Mark as repaired even if unchanged so we skip it next run
-          await supabase
-            .from('intake_items')
-            .update({
-              updated_by: 'comic_bulk_repair',
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', intakeItem.id)
-
-          results.push({ item_id: intakeItem.id, sku: intakeItem.sku, status: 'unchanged', changes: [], api_calls: 0 })
-          continue
-        }
+        // Even if no text changes, we still run image cleanup below to remove back images
 
         const changes: string[] = []
         let itemApiCalls = 0
@@ -395,19 +385,24 @@ Deno.serve(async (req) => {
           if (descChanged) changes.push('description')
         }
 
-        // Repair image
-        if (imageChanged && frontUrl) {
+        // Repair image — always run for comics to ensure only front image remains
+        if (frontUrl) {
           const mediaResult = await ensureMediaOrder({
             domain, token,
             productId: intakeItem.shopify_product_id,
-            intendedFrontUrl: frontUrl
+            intendedFrontUrl: frontUrl,
+            deleteNonFront: true  // Remove back images, keep only front
           })
           itemApiCalls++
           totalApiCalls++
           await pace()
 
           if (mediaResult.success) {
-            changes.push('image')
+            if (mediaResult.message?.includes('Deleted')) {
+              changes.push('removed_back_image')
+            } else if (imageChanged) {
+              changes.push('image')
+            }
           } else {
             console.warn(JSON.stringify({
               event: 'comic_bulk_repair_image_failed',
