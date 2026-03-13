@@ -1063,6 +1063,7 @@ export type Database = {
           grading_company: string
           grading_data: Json | null
           id: string
+          image_url: string | null
           image_urls: Json | null
           intake_batch_id: string | null
           label_snapshot: Json | null
@@ -1159,6 +1160,7 @@ export type Database = {
           grading_company?: string
           grading_data?: Json | null
           id?: string
+          image_url?: string | null
           image_urls?: Json | null
           intake_batch_id?: string | null
           label_snapshot?: Json | null
@@ -1255,6 +1257,7 @@ export type Database = {
           grading_company?: string
           grading_data?: Json | null
           id?: string
+          image_url?: string | null
           image_urls?: Json | null
           intake_batch_id?: string | null
           label_snapshot?: Json | null
