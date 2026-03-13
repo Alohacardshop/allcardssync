@@ -1,6 +1,6 @@
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, Loader2, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { ExternalLink, Loader2, AlertCircle, CheckCircle, Clock, ShoppingBag } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface EbayStatusBadgeProps {
