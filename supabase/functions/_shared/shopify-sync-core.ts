@@ -116,6 +116,138 @@ export function filterChangedMetafields(
   })
 }
 
+// ── Comic helpers ──
+
+const MONTH_NAMES = [
+  'JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE',
+  'JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'
+]
+
+/** Parse "2025-11" or "2025-01" into { month: 'NOVEMBER', year: '2025' } */
+function parsePublicationDate(dateStr?: string | null): { month: string; year: string } | null {
+  if (!dateStr) return null
+  const m = dateStr.match(/^(\d{4})-(\d{1,2})/)
+  if (!m) return null
+  const monthIdx = parseInt(m[2], 10) - 1
+  if (monthIdx < 0 || monthIdx > 11) return null
+  return { month: MONTH_NAMES[monthIdx], year: m[1] }
+}
+
+/** Strip leading junk tokens like "NONE", empty strings */
+function cleanVariant(v?: string | null): string {
+  if (!v) return ''
+  const cleaned = v.trim()
+  if (/^none$/i.test(cleaned)) return ''
+  return cleaned
+}
+
+/** Format issue number — ensure # prefix */
+function formatIssueNumber(num?: string | null): string {
+  if (!num) return ''
+  const n = num.trim().replace(/^#/, '')
+  return n ? `#${n}` : ''
+}
+
+/**
+ * Build a comic-specific Shopify title.
+ * Format: PUBLISHER TITLE #ISSUE MONTH YEAR VARIANT
+ */
+export function buildComicTitle(intakeItem: any, item: any): string {
+  const snapshot = intakeItem.catalog_snapshot || intakeItem.psa_snapshot || {}
+
+  const publisher = (snapshot.brandTitle || intakeItem.brand_title || item.brand_title || '').trim()
+  const comicName = (snapshot.subject || intakeItem.subject || item.subject || '').trim()
+  const issueNum = formatIssueNumber(snapshot.issueNumber || snapshot.cardNumber || intakeItem.card_number || item.card_number)
+  const variant = cleanVariant(snapshot.varietyPedigree || intakeItem.variant || item.variant)
+
+  const pubDate = parsePublicationDate(snapshot.publicationDate || snapshot.year)
+
+  const parts: string[] = []
+  if (publisher) parts.push(publisher)
+  if (comicName) parts.push(comicName)
+  if (issueNum) parts.push(issueNum)
+  if (pubDate) {
+    parts.push(pubDate.month)
+    parts.push(pubDate.year)
+  }
+  if (variant) parts.push(variant)
+
+  const deduped = deduplicateParts(parts.filter(Boolean))
+  return deduped.join(' ').toUpperCase()
+}
+
+/**
+ * Build a comic-specific Shopify description with labeled fields.
+ */
+export function buildComicDescription(intakeItem: any, item: any): string {
+  const snapshot = intakeItem.catalog_snapshot || intakeItem.psa_snapshot || {}
+  const gradingCompany = intakeItem.grading_company || 'PSA'
+  const psaCert = item.psa_cert || intakeItem.psa_cert || intakeItem.psa_cert_number
+  const grade = item.grade || intakeItem.grade || ''
+  const publisher = snapshot.brandTitle || intakeItem.brand_title || item.brand_title || ''
+  const comicName = snapshot.subject || intakeItem.subject || item.subject || ''
+  const issueNum = snapshot.issueNumber || snapshot.cardNumber || intakeItem.card_number || item.card_number || ''
+  const volumeNum = snapshot.cardNumber || intakeItem.card_number || ''
+  const pubDate = snapshot.publicationDate || snapshot.year || intakeItem.year || ''
+  const variant = cleanVariant(snapshot.varietyPedigree || intakeItem.variant || item.variant)
+  const language = snapshot.language || ''
+  const country = snapshot.country || ''
+  const pageQuality = snapshot.pageQuality || ''
+  const category = snapshot.category || intakeItem.category || item.category_tag || ''
+
+  const psaUrl = intakeItem.catalog_snapshot?.psaUrl ||
+    intakeItem.psa_snapshot?.psaUrl ||
+    (psaCert ? `https://www.psacard.com/cert/${psaCert}` : null)
+
+  const lines: string[] = []
+  lines.push(`<strong>Graded Comic — ${gradingCompany}</strong>`)
+  lines.push('')
+  if (psaCert) lines.push(`<strong>Cert Number:</strong> ${psaCert}`)
+  if (grade) lines.push(`<strong>Grade:</strong> ${gradingCompany} ${grade}`)
+  if (comicName) lines.push(`<strong>Name:</strong> ${comicName}`)
+  if (issueNum) lines.push(`<strong>Issue:</strong> #${issueNum.replace(/^#/, '')}`)
+  if (volumeNum && volumeNum !== issueNum) lines.push(`<strong>Volume:</strong> ${volumeNum}`)
+  if (pubDate) lines.push(`<strong>Publication Date:</strong> ${pubDate}`)
+  if (publisher) lines.push(`<strong>Publisher:</strong> ${publisher}`)
+  if (variant) lines.push(`<strong>Variant:</strong> ${variant}`)
+  if (language) lines.push(`<strong>Language:</strong> ${language}`)
+  if (country) lines.push(`<strong>Country:</strong> ${country}`)
+  if (pageQuality) lines.push(`<strong>Page Quality:</strong> ${pageQuality}`)
+  if (category) lines.push(`<strong>Category:</strong> ${category}`)
+  if (psaUrl) {
+    lines.push('')
+    lines.push(`<a href="${psaUrl}">${gradingCompany} Certificate</a>`)
+  }
+
+  return lines.join('<br>')
+}
+
+/**
+ * Build comic-specific metafields (appended to the standard set).
+ */
+export function buildComicMetafields(intakeItem: any, item: any): Array<{ namespace: string; key: string; type: string; value: string }> {
+  const snapshot = intakeItem.catalog_snapshot || intakeItem.psa_snapshot || {}
+  const fields: Array<{ namespace: string; key: string; type: string; value: string }> = []
+
+  const add = (key: string, val?: string | null) => {
+    if (val && val.trim()) {
+      fields.push({ namespace: 'acs.comic', key, type: 'single_line_text_field', value: val.trim() })
+    }
+  }
+
+  add('publisher', snapshot.brandTitle || intakeItem.brand_title)
+  add('comic_title', snapshot.subject || intakeItem.subject)
+  add('issue_number', snapshot.issueNumber || snapshot.cardNumber || intakeItem.card_number)
+  add('publication_date', snapshot.publicationDate || snapshot.year || intakeItem.year)
+  add('variant', snapshot.varietyPedigree || intakeItem.variant)
+  add('language', snapshot.language)
+  add('country', snapshot.country)
+  add('page_quality', snapshot.pageQuality)
+  add('category', snapshot.category || intakeItem.category)
+
+  return fields
+}
+
 // ── Types ──
 
 export interface SyncItemInput {
