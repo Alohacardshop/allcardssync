@@ -139,7 +139,7 @@ Deno.serve(async (req) => {
           year: intakeItem.year,
           grade: intakeItem.grade,
           category_tag: intakeItem.category,
-          image_url: intakeItem.image_url,
+          image_url: Array.isArray(intakeItem.image_urls) ? intakeItem.image_urls[0] : '',
           cost: intakeItem.cost,
           price: undefined
         }
