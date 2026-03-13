@@ -91,20 +91,38 @@ export const BulkActionsToolbar = React.memo(({
           {bulkSyncing ? 'Syncing...' : 'Sync to Shopify'}
         </Button>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onResyncSelected}
-          disabled={bulkSyncing}
-          className="h-8"
-        >
-          {bulkSyncing ? (
-            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-          ) : (
-            <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-          )}
-          Resync
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={bulkSyncing}
+              className="h-8"
+            >
+              {bulkSyncing ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Resync
+              <ChevronDown className="h-3 w-3 ml-1" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={() => onResyncSelected('shopify')}>
+              <Store className="h-3.5 w-3.5 mr-2" />
+              Shopify
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onResyncSelected('ebay')}>
+              <ShoppingBag className="h-3.5 w-3.5 mr-2" />
+              eBay
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onResyncSelected('both')}>
+              <RotateCcw className="h-3.5 w-3.5 mr-2" />
+              Both Marketplaces
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {statusFilter === 'errors' && (
           <Button
