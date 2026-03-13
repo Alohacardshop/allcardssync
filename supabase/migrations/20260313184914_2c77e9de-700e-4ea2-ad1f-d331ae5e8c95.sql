@@ -1,0 +1,1 @@
+UPDATE ebay_sync_queue SET status = 'queued', processor_id = NULL, processor_heartbeat = NULL, started_at = NULL WHERE status = 'processing' AND started_at < now() - interval '10 minutes';
