@@ -379,6 +379,9 @@ export async function syncGradedItemToShopify(
       'Content-Type': 'application/json'
     }
 
+    // ── Detect comic ──
+    const isComic = intakeItem.main_category === 'comics' || intakeItem.catalog_snapshot?.type === 'graded_comic'
+
     // ── Build title, description, tags ──
     const year = item.year || intakeItem.year || intakeItem.catalog_snapshot?.year || intakeItem.psa_snapshot?.year || ''
     const brandTitle = item.brand_title || intakeItem.brand_title || ''
@@ -393,30 +396,40 @@ export async function syncGradedItemToShopify(
       ? intakeItem.purchase_location[0]?.name 
       : intakeItem.purchase_location?.name
 
-    let title = item.title
-    if (!title) {
-      const parts = []
-      if (year) parts.push(year)
-      if (brandTitle) parts.push(brandTitle)
-      if (subject) parts.push(subject)
-      if (cardNumber) parts.push(`#${cardNumber}`)
-      if (cardVariant) parts.push(cardVariant)
-      if (category && category !== 'Normal') parts.push(category.toLowerCase())
-      if (grade) parts.push(`${gradingCompany} ${grade}`)
-      
-      const cleanedParts = deduplicateParts(parts.filter(Boolean))
-      title = cleanedParts.join(' ')
-    }
-
     const psaCert = item.psa_cert || intakeItem.psa_cert || intakeItem.psa_cert_number
-    let description = title
-    if (psaCert) description += ` ${psaCert}`
-    description += `\n\nGraded ${brandTitle} ${subject}`
-    if (year) description += ` from ${year}`
-    if (grade) description += `, ${gradingCompany} Grade ${grade}`
-    if (psaUrl) description += `\n\n${gradingCompany} Certificate: ${psaUrl}`
 
-    const isComic = intakeItem.main_category === 'comics' || intakeItem.catalog_snapshot?.type === 'graded_comic'
+    let title = item.title
+    let description: string
+
+    if (isComic) {
+      // ── Comic-specific title & description ──
+      if (!title) {
+        title = buildComicTitle(intakeItem, item)
+      }
+      description = buildComicDescription(intakeItem, item)
+    } else {
+      // ── Generic graded card title & description ──
+      if (!title) {
+        const parts = []
+        if (year) parts.push(year)
+        if (brandTitle) parts.push(brandTitle)
+        if (subject) parts.push(subject)
+        if (cardNumber) parts.push(`#${cardNumber}`)
+        if (cardVariant) parts.push(cardVariant)
+        if (category && category !== 'Normal') parts.push(category.toLowerCase())
+        if (grade) parts.push(`${gradingCompany} ${grade}`)
+        
+        const cleanedParts = deduplicateParts(parts.filter(Boolean))
+        title = cleanedParts.join(' ')
+      }
+
+      description = title
+      if (psaCert) description += ` ${psaCert}`
+      description += `\n\nGraded ${brandTitle} ${subject}`
+      if (year) description += ` from ${year}`
+      if (grade) description += `, ${gradingCompany} Grade ${grade}`
+      if (psaUrl) description += `\n\n${gradingCompany} Certificate: ${psaUrl}`
+    }
 
     // ── Metafields ──
     const metafields: Array<{ namespace: string; key: string; type: string; value: string }> = [
@@ -440,6 +453,11 @@ export async function syncGradedItemToShopify(
     if (intakeItem.psa_snapshot) metafields.push({ namespace: 'acs.sync', key: 'psa_snapshot', type: 'json', value: JSON.stringify(intakeItem.psa_snapshot) });
     if (intakeItem.grading_data) metafields.push({ namespace: 'acs.sync', key: 'grading_data', type: 'json', value: JSON.stringify(intakeItem.grading_data) });
     if (purchaseLocation) metafields.push({ namespace: 'acs.sync', key: 'purchase_location', type: 'single_line_text_field', value: purchaseLocation });
+
+    // Comic-specific metafields under acs.comic namespace
+    if (isComic) {
+      metafields.push(...buildComicMetafields(intakeItem, item))
+    }
 
     const additionalTags = [
       gradingCompany,
