@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
     const mode: 'preview' | 'execute' = body.mode || 'preview'
     const storeKey: string = body.store_key
     const itemIds: string[] | null = body.item_ids || null
-    const limit: number = body.limit || 50
+    const limit: number = body.limit || 200
     const afterId: string | null = body.after_id || null          // cursor: resume after this item id
     const skipRepaired: boolean = body.skip_repaired !== false     // default true: skip already-repaired items
     const storeFilter: string | null = body.store_filter || null  // optional: filter by store_key on items
