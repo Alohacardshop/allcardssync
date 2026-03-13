@@ -186,9 +186,9 @@ Deno.serve(async (req) => {
     if (skipRepaired) {
       query = query.neq('updated_by', 'comic_bulk_repair')
     }
-    // When force_image is on, skip items already force-repaired (handles both old and new markers)
+    // When force_image is on, skip items already force-image-repaired
     if (forceImage) {
-      query = query.not('updated_by', 'in', '("comic_bulk_repair","comic_bulk_repair_force_image")')
+      query = query.neq('updated_by', 'comic_bulk_repair_force_image')
     }
 
     // Cursor-based pagination: fetch items with id > after_id
