@@ -370,7 +370,7 @@ Deno.serve(async (req) => {
           intended_title: intendedTitle,
           title_changed: titleChanged,
           description_changed: descChanged,
-          image_changed: imageChanged,
+          image_changed: imageChanged || forceImage,
           metafields_changed: metafieldsChangedCount
         }
 
