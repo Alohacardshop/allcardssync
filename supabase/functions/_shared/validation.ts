@@ -9,7 +9,7 @@ export const SendGradedSchema = z.object({
   }),
   locationGid: z.string()
     .regex(/^gid:\/\/shopify\/Location\/\d+$/, 'Invalid Shopify location GID format'),
-  vendor: z.string().max(100).optional(),
+  vendor: z.string().max(100).nullish(),
   item: z.object({
     id: z.string().uuid('Invalid item ID format'),
     sku: z.string().min(1).max(100).optional(),
@@ -40,7 +40,7 @@ export const SendRawSchema = z.object({
   }),
   locationGid: z.string()
     .regex(/^gid:\/\/shopify\/Location\/\d+$/, 'Invalid Shopify location GID format'),
-  vendor: z.string().max(100).optional()
+  vendor: z.string().max(100).nullish()
 })
 
 /**
