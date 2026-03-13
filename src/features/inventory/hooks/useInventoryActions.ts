@@ -2,9 +2,10 @@
  * @deprecated Use useInventoryMutations instead for per-item loading states and better error handling.
  * This hook is kept for backward compatibility during the transition period.
  */
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useInventoryMutations } from './useInventoryMutations';
 import type { InventoryListItem } from '../types';
+import type { ResyncTarget } from '@/components/inventory/BulkActionsToolbar';
 
 interface UseInventoryActionsOptions {
   selectedLocation: string | null;
