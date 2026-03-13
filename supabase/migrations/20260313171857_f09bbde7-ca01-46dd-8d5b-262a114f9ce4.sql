@@ -1,0 +1,1 @@
+ALTER TABLE public.intake_items ADD COLUMN IF NOT EXISTS image_url TEXT;
