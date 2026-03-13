@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { CheckSquare } from 'lucide-react';
-import { BulkActionsToolbar } from '@/components/inventory/BulkActionsToolbar';
+import { BulkActionsToolbar, type ResyncTarget } from '@/components/inventory/BulkActionsToolbar';
 import type { InventoryBulkBarProps, InventoryListItem } from '../types';
 
 interface InventoryBulkBarContainerProps extends InventoryBulkBarProps {
