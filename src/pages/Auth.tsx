@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { logger } from "@/lib/logger";
 import { useAuth } from "@/contexts/AuthContext";
-import { Palmtree, Sparkles, Loader2 } from "lucide-react";
+import { Palmtree, Loader2 } from "lucide-react";
 
 const ROLE_TIMEOUT_MS = 5000;
 const AUTH_CHANGE_GUARD_MS = 4000;
