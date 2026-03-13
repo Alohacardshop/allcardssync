@@ -40,7 +40,7 @@ export const SendRawSchema = z.object({
   }),
   locationGid: z.string()
     .regex(/^gid:\/\/shopify\/Location\/\d+$/, 'Invalid Shopify location GID format'),
-  vendor: z.string().max(100).optional()
+  vendor: z.string().max(100).nullish()
 })
 
 /**
