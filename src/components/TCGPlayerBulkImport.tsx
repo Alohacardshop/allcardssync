@@ -63,6 +63,7 @@ const detectGameFromProductLine = (productLine?: string): string | null => {
   if (normalized.includes('dragon ball')) return 'dragonball';
   if (normalized.includes('digimon')) return 'digimon';
   if (normalized.includes('flesh and blood')) return 'fab';
+  if (normalized.includes('one piece')) return 'onepiece';
   
   return null;
 };
