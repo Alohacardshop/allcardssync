@@ -300,6 +300,37 @@ Deno.serve(async (req) => {
           continue
         }
 
+        if (productRes.status === 404) {
+          // Product no longer exists in Shopify — clean up stale references
+          console.log(JSON.stringify({
+            event: 'comic_bulk_repair_stale_cleanup',
+            item_id: intakeItem.id,
+            sku: intakeItem.sku,
+            shopify_product_id: intakeItem.shopify_product_id
+          }))
+          await supabase.from('intake_items').update({
+            shopify_product_id: null,
+            shopify_variant_id: null,
+            shopify_inventory_item_id: null,
+            shopify_sync_status: null,
+            updated_by: 'comic_bulk_repair_cleanup',
+            updated_at: new Date().toISOString()
+          }).eq('id', intakeItem.id)
+
+          if (mode === 'preview') {
+            diffs.push({
+              item_id: intakeItem.id, sku: intakeItem.sku,
+              current_title: null, intended_title: intendedTitle,
+              title_changed: false, description_changed: false,
+              image_changed: false, metafields_changed: 0,
+              error: 'Shopify product not found (404) — stale link cleaned'
+            })
+          } else {
+            results.push({ item_id: intakeItem.id, sku: intakeItem.sku, status: 'updated', changes: ['cleaned_stale_shopify_link'], api_calls: 1 })
+          }
+          continue
+        }
+
         if (!productRes.ok) {
           const errText = await productRes.text()
           throw new Error(`Shopify fetch failed (${productRes.status}): ${errText}`)
