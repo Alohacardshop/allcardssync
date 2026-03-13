@@ -706,13 +706,9 @@ const Inventory = () => {
     }
   }, [filteredItems, selectedItems, refetch]);
 
-  const handleResyncSelected = useCallback(async () => {
+  const handleResyncShopify = useCallback(async () => {
     if (selectedItems.size === 0) {
       toast.info('No items selected');
-      return;
-    }
-
-    if (bulkSyncing) {
       return;
     }
 
@@ -734,12 +730,6 @@ const Inventory = () => {
         item.store_key && item.shopify_location_gid && item.sku && !item.deleted_at
       );
 
-      logger.info('Starting resync for selected items', {
-        selectedCount: selectedItems.size,
-        itemsToResyncCount: itemsToResync.length,
-        firstItem: itemsToResync[0]?.sku
-      });
-
       if (itemsToResync.length === 0) {
         setBulkSyncing(false);
         toast.dismiss(toastId);
@@ -759,19 +749,6 @@ const Inventory = () => {
       const progressToastId = toast.loading(`Resyncing ${itemsToResync.length} items to Shopify...`);
 
       let created = 0, updated = 0, failed = 0;
-
-      // Helper function to generate barcode for raw cards
-      const generateBarcode = (item: any) => {
-        const tcgplayerId = item.catalog_snapshot?.tcgplayer_id || item.sku;
-        const condition = item.variant || item.grade || 'NM';
-        const conditionAbbrev = condition.toLowerCase().includes('near mint') ? 'NM' 
-          : condition.toLowerCase().includes('lightly') ? 'LP'
-          : condition.toLowerCase().includes('moderately') ? 'MP'
-          : condition.toLowerCase().includes('heavily') ? 'HP'
-          : condition.toLowerCase().includes('damaged') ? 'DMG'
-          : 'NM';
-        return `${tcgplayerId}-${conditionAbbrev}`;
-      };
 
       // Process Raw cards
       for (const item of rawItems) {
@@ -834,24 +811,95 @@ const Inventory = () => {
       // Show results
       if (created > 0 || updated > 0) {
         toast.success(
-          `Resync complete: ${created} created, ${updated} updated${failed > 0 ? `, ${failed} failed` : ''}`
+          `Shopify resync complete: ${created} created, ${updated} updated${failed > 0 ? `, ${failed} failed` : ''}`
         );
       } else if (failed > 0) {
-        toast.error(`Resync failed for ${failed} items`);
+        toast.error(`Shopify resync failed for ${failed} items`);
       }
 
-      // Refresh in background (non-blocking)
       refetch();
     } catch (error) {
       toast.dismiss(toastId);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      toast.error('Failed to start bulk resync', {
-        description: errorMessage
-      });
+      toast.error('Failed to start Shopify resync', { description: errorMessage });
     } finally {
       setBulkSyncing(false);
     }
   }, [selectedItems, refetch]);
+
+  const handleResyncEbay = useCallback(async () => {
+    if (selectedItems.size === 0) {
+      toast.info('No items selected');
+      return;
+    }
+
+    setBulkSyncing(true);
+
+    try {
+      // Fetch fresh data to check list_on_ebay and ebay_listing_id
+      const { data: freshItems, error: fetchError } = await supabase
+        .from('intake_items')
+        .select('id, sku, list_on_ebay, ebay_listing_id, ebay_offer_id, ebay_inventory_item_sku')
+        .in('id', Array.from(selectedItems))
+        .is('deleted_at', null);
+
+      if (fetchError) throw fetchError;
+
+      const ebayItems = freshItems.filter(item => 
+        item.list_on_ebay && (item.ebay_listing_id || item.ebay_offer_id || item.ebay_inventory_item_sku)
+      );
+
+      if (ebayItems.length === 0) {
+        toast.info('No selected items are listed on eBay');
+        setBulkSyncing(false);
+        return;
+      }
+
+      // Upsert into ebay_sync_queue
+      const queueEntries = ebayItems.map(item => ({
+        inventory_item_id: item.id,
+        action: 'update' as const,
+        status: 'queued' as const,
+        queue_position: 1,
+      }));
+
+      const { error: queueError } = await supabase
+        .from('ebay_sync_queue')
+        .upsert(queueEntries, { onConflict: 'inventory_item_id' });
+
+      if (queueError) throw queueError;
+
+      // Update ebay_sync_status on intake_items
+      await supabase
+        .from('intake_items')
+        .update({ ebay_sync_status: 'queued' })
+        .in('id', ebayItems.map(i => i.id));
+
+      // Fire-and-forget eBay processor
+      supabase.functions.invoke('ebay-sync-processor', { body: { batch_size: ebayItems.length } }).catch(() => {});
+
+      toast.success(`${ebayItems.length} items queued for eBay resync`);
+      refetch();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      toast.error('Failed to queue eBay resync', { description: errorMessage });
+    } finally {
+      setBulkSyncing(false);
+    }
+  }, [selectedItems, refetch]);
+
+  const handleResyncSelected = useCallback(async (target: ResyncTarget = 'shopify') => {
+    if (bulkSyncing) return;
+
+    if (target === 'shopify') {
+      await handleResyncShopify();
+    } else if (target === 'ebay') {
+      await handleResyncEbay();
+    } else if (target === 'both') {
+      await handleResyncShopify();
+      await handleResyncEbay();
+    }
+  }, [bulkSyncing, handleResyncShopify, handleResyncEbay]);
 
   const handleBulkRetrySync = useCallback(async () => {
     const errorItems = filteredItems.filter(item => 
