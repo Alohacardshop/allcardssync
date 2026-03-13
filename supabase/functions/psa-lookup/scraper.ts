@@ -195,6 +195,8 @@ export async function scrapeComicCert(certNumber: string, requestId: string): Pr
       }
       result.imageUrls = imageUrls;
       result.imageUrl = imageUrls[0];
+      (result as any).frontImageUrl = imageUrls[0];
+      (result as any).backImageUrl = imageUrls[1] || undefined;
     }
 
     log.info('[psa-scraper] Successfully scraped comic cert', { 
