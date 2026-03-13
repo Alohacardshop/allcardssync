@@ -395,19 +395,24 @@ Deno.serve(async (req) => {
           if (descChanged) changes.push('description')
         }
 
-        // Repair image
-        if (imageChanged && frontUrl) {
+        // Repair image — always run for comics to ensure only front image remains
+        if (frontUrl) {
           const mediaResult = await ensureMediaOrder({
             domain, token,
             productId: intakeItem.shopify_product_id,
-            intendedFrontUrl: frontUrl
+            intendedFrontUrl: frontUrl,
+            deleteNonFront: true  // Remove back images, keep only front
           })
           itemApiCalls++
           totalApiCalls++
           await pace()
 
           if (mediaResult.success) {
-            changes.push('image')
+            if (mediaResult.message?.includes('Deleted')) {
+              changes.push('removed_back_image')
+            } else if (imageChanged) {
+              changes.push('image')
+            }
           } else {
             console.warn(JSON.stringify({
               event: 'comic_bulk_repair_image_failed',
