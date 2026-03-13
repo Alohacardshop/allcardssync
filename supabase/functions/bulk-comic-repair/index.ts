@@ -173,7 +173,7 @@ Deno.serve(async (req) => {
       .not('shopify_product_id', 'is', null)
       .not('shopify_variant_id', 'is', null)
       .is('deleted_at', null)
-      .or('main_category.eq.comics,catalog_snapshot->>type.eq.graded_comic')
+      .eq('main_category', 'comics')
       .order('id', { ascending: true })
       .limit(limit)
 
