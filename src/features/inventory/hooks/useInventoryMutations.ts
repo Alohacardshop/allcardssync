@@ -830,12 +830,19 @@ export function useInventoryMutations({
       }
       bulkSyncMutation.mutate(items);
     },
-    handleResyncSelected: (itemIds: string[]) => {
+    handleResyncSelected: async (itemIds: string[], target: 'shopify' | 'ebay' | 'both' = 'shopify') => {
       if (itemIds.length === 0) {
         toast.info('No items selected');
         return;
       }
-      bulkResyncMutation.mutate(itemIds);
+      if (target === 'shopify') {
+        bulkResyncMutation.mutate(itemIds);
+      } else if (target === 'ebay') {
+        bulkResyncEbayMutation.mutate(itemIds);
+      } else if (target === 'both') {
+        await bulkResyncMutation.mutateAsync(itemIds);
+        bulkResyncEbayMutation.mutate(itemIds);
+      }
     },
     handleBulkRetrySync: (errorItems: InventoryListItem[]) => {
       bulkRetrySyncMutation.mutate(errorItems);
