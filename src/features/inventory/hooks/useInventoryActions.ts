@@ -41,9 +41,17 @@ export function useInventoryActions({
     mutations.handleSyncSelected(selectedItemsArray);
   }, [filteredItems, selectedItems, mutations]);
 
-  const handleResyncSelected = useCallback(async () => {
-    const selectedItemIds = Array.from(selectedItems);
-    mutations.handleResyncSelected(selectedItemIds);
+  const resyncLockRef = useRef(false);
+
+  const handleResyncSelected = useCallback(async (target: ResyncTarget = 'shopify') => {
+    if (resyncLockRef.current) return;
+    resyncLockRef.current = true;
+    try {
+      const selectedItemIds = Array.from(selectedItems);
+      await mutations.handleResyncSelected(selectedItemIds, target);
+    } finally {
+      resyncLockRef.current = false;
+    }
   }, [selectedItems, mutations]);
 
   const handleBulkRetrySync = useCallback(async () => {
