@@ -95,6 +95,8 @@ export function transformPsaApiResponse(
     gameSport: psaCert?.GameSport || undefined,
     imageUrl: primaryImageUrl,
     imageUrls: imageUrls,
+    frontImageUrl: imageUrls[0] || undefined,
+    backImageUrl: imageUrls[1] || undefined,
     psaUrl: `https://www.psacard.com/cert/${certNumber}`
   };
 }
