@@ -218,162 +218,161 @@ serve(async (req) => {
         continue
       }
 
-      // Process each item
-      for (const queueItem of storeItems) {
-        results.processed++
-        const item = queueItem.intake_items as any
-        const isGraded = item.grading_company && item.grading_company !== 'RAW' && item.grading_company !== 'UNGRADED'
+      // Process items in parallel chunks (concurrency = PARALLEL_CONCURRENCY)
+      for (let chunkStart = 0; chunkStart < storeItems.length; chunkStart += PARALLEL_CONCURRENCY) {
+        const chunk = storeItems.slice(chunkStart, chunkStart + PARALLEL_CONCURRENCY)
+        
+        const chunkPromises = chunk.map(async (queueItem) => {
+          results.processed++
+          const item = queueItem.intake_items as any
+          const isGraded = item.grading_company && item.grading_company !== 'RAW' && item.grading_company !== 'UNGRADED'
 
-        // Skip locked SKUs
-        if (item.sku && lockedSkuSet.has(item.sku)) {
-          console.log(`[ebay-sync-processor] Skipping locked SKU: ${item.sku}`);
-          results.skipped_locked++;
-          continue;
-        }
+          // Skip locked SKUs
+          if (item.sku && lockedSkuSet.has(item.sku)) {
+            console.log(`[ebay-sync-processor] Skipping locked SKU: ${item.sku}`);
+            results.skipped_locked++;
+            return;
+          }
 
-        try {
-          // =======================================================
-          // CRITICAL INVARIANT: For graded/1-of-1 cards, enforce
-          // quantity based on cards.status, NOT intake_items.quantity
-          // =======================================================
-          let effectiveQuantity = item.quantity ?? 1
-          
-          if (isGraded && item.sku) {
-            const { data: cardRecord, error: cardError } = await supabase
-              .from('cards')
-              .select('status, sku')
-              .eq('sku', item.sku)
-              .maybeSingle()
-
-            if (cardError) {
-              console.warn(`[ebay-sync-processor] Failed to query cards table for SKU ${item.sku}: ${cardError.message}`)
-            }
-
-            if (cardRecord) {
-              if (cardRecord.status === 'sold') {
-                // BLOCKED: Never create/update eBay listing for a sold card
-                console.warn(`[ebay-sync-processor] BLOCKED: Card ${item.sku} is SOLD in cards table. Skipping action=${queueItem.action}`)
-                
-                // Mark queue item as completed (skip gracefully)
-                await supabase
-                  .from('ebay_sync_queue')
-                  .update({
-                    status: 'completed',
-                    completed_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                    error_message: 'Skipped: Card is sold',
-                  })
-                  .eq('id', queueItem.id)
-                
-                results.skipped_sold++
-                continue
-              } else if (cardRecord.status === 'available') {
-                effectiveQuantity = 1
-              } else {
-                // Unknown status, default to 0 for safety
-                effectiveQuantity = 0
-              }
-            } else {
-              // Card not in cards table - try to auto-create via ensure_card_exists
-              const { error: ensureError } = await supabase.rpc('ensure_card_exists', {
-                p_sku: item.sku,
-                p_inventory_item_id: item.shopify_inventory_item_id || null,
-                p_variant_id: item.shopify_variant_id || null,
-                p_ebay_offer_id: item.ebay_offer_id || null,
-                p_location_id: item.shopify_location_gid || null
-              })
-              
-              if (ensureError) {
-                console.warn(`[ebay-sync-processor] Failed to ensure_card_exists for ${item.sku}: ${ensureError.message}`)
-              }
-              
-              // Re-check status after creation
-              const { data: newCard } = await supabase
+          try {
+            // =======================================================
+            // CRITICAL INVARIANT: For graded/1-of-1 cards, enforce
+            // quantity based on cards.status, NOT intake_items.quantity
+            // =======================================================
+            let effectiveQuantity = item.quantity ?? 1
+            
+            if (isGraded && item.sku) {
+              const { data: cardRecord, error: cardError } = await supabase
                 .from('cards')
-                .select('status')
+                .select('status, sku')
                 .eq('sku', item.sku)
                 .maybeSingle()
-              
-              if (newCard?.status === 'sold') {
-                console.warn(`[ebay-sync-processor] BLOCKED: Newly queried card ${item.sku} is SOLD. Skipping.`)
-                await supabase
-                  .from('ebay_sync_queue')
-                  .update({
-                    status: 'completed',
-                    completed_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                    error_message: 'Skipped: Card is sold',
-                  })
-                  .eq('id', queueItem.id)
+
+              if (cardError) {
+                console.warn(`[ebay-sync-processor] Failed to query cards table for SKU ${item.sku}: ${cardError.message}`)
+              }
+
+              if (cardRecord) {
+                if (cardRecord.status === 'sold') {
+                  console.warn(`[ebay-sync-processor] BLOCKED: Card ${item.sku} is SOLD in cards table. Skipping action=${queueItem.action}`)
+                  
+                  await supabase
+                    .from('ebay_sync_queue')
+                    .update({
+                      status: 'completed',
+                      completed_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString(),
+                      error_message: 'Skipped: Card is sold',
+                    })
+                    .eq('id', queueItem.id)
+                  
+                  results.skipped_sold++
+                  return
+                } else if (cardRecord.status === 'available') {
+                  effectiveQuantity = 1
+                } else {
+                  effectiveQuantity = 0
+                }
+              } else {
+                const { error: ensureError } = await supabase.rpc('ensure_card_exists', {
+                  p_sku: item.sku,
+                  p_inventory_item_id: item.shopify_inventory_item_id || null,
+                  p_variant_id: item.shopify_variant_id || null,
+                  p_ebay_offer_id: item.ebay_offer_id || null,
+                  p_location_id: item.shopify_location_gid || null
+                })
                 
-                results.skipped_sold++
-                continue
+                if (ensureError) {
+                  console.warn(`[ebay-sync-processor] Failed to ensure_card_exists for ${item.sku}: ${ensureError.message}`)
+                }
+                
+                const { data: newCard } = await supabase
+                  .from('cards')
+                  .select('status')
+                  .eq('sku', item.sku)
+                  .maybeSingle()
+                
+                if (newCard?.status === 'sold') {
+                  console.warn(`[ebay-sync-processor] BLOCKED: Newly queried card ${item.sku} is SOLD. Skipping.`)
+                  await supabase
+                    .from('ebay_sync_queue')
+                    .update({
+                      status: 'completed',
+                      completed_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString(),
+                      error_message: 'Skipped: Card is sold',
+                    })
+                    .eq('id', queueItem.id)
+                  
+                  results.skipped_sold++
+                  return
+                }
+                
+                effectiveQuantity = 1
               }
               
-              effectiveQuantity = 1
+              if ((item.quantity ?? 1) > 1) {
+                console.error(`[ebay-sync-processor] INVARIANT VIOLATION: SKU ${item.sku} has intake_items.quantity=${item.quantity} but is graded. Clamping to 1.`)
+              }
             }
             
-            // Log if intake_items.quantity is suspicious
-            if ((item.quantity ?? 1) > 1) {
-              console.error(`[ebay-sync-processor] INVARIANT VIOLATION: SKU ${item.sku} has intake_items.quantity=${item.quantity} but is graded. Clamping to 1.`)
-            }
-          }
-          
-          // Inject effective quantity into item for downstream use
-          item._effectiveQuantity = effectiveQuantity
+            item._effectiveQuantity = effectiveQuantity
 
-          // Mark as processing
-          await supabase
-            .from('ebay_sync_queue')
-            .update({ 
-              status: 'processing', 
-              started_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', queueItem.id)
-
-          let syncResult: { success: boolean; data?: any; error?: string }
-
-          switch (queueItem.action) {
-            case 'create':
-              syncResult = await processCreate(supabase, accessToken, environment, item, storeConfig, isDryRun)
-              break
-            case 'update':
-              syncResult = await processUpdate(supabase, accessToken, environment, item, storeConfig, isDryRun)
-              break
-            case 'delete':
-              syncResult = await processDelete(supabase, accessToken, environment, item, isDryRun)
-              break
-            default:
-              syncResult = { success: false, error: `Unknown action: ${queueItem.action}` }
-          }
-
-          if (syncResult.success) {
-            // Mark queue item as completed
             await supabase
               .from('ebay_sync_queue')
-              .update({
-                status: 'completed',
-                completed_at: new Date().toISOString(),
+              .update({ 
+                status: 'processing', 
+                started_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
               })
               .eq('id', queueItem.id)
 
-            results.succeeded++
-            console.log(`[ebay-sync-processor] Success: ${queueItem.action} item=${item.id}`)
-          } else {
-            throw new Error(syncResult.error || 'Unknown error')
+            let syncResult: { success: boolean; data?: any; error?: string }
+
+            switch (queueItem.action) {
+              case 'create':
+                syncResult = await processCreate(supabase, accessToken, environment, item, storeConfig, isDryRun)
+                break
+              case 'update':
+                syncResult = await processUpdate(supabase, accessToken, environment, item, storeConfig, isDryRun)
+                break
+              case 'delete':
+                syncResult = await processDelete(supabase, accessToken, environment, item, isDryRun)
+                break
+              default:
+                syncResult = { success: false, error: `Unknown action: ${queueItem.action}` }
+            }
+
+            if (syncResult.success) {
+              await supabase
+                .from('ebay_sync_queue')
+                .update({
+                  status: 'completed',
+                  completed_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', queueItem.id)
+
+              results.succeeded++
+              console.log(`[ebay-sync-processor] Success: ${queueItem.action} item=${item.id}`)
+            } else {
+              throw new Error(syncResult.error || 'Unknown error')
+            }
+
+          } catch (error) {
+            console.error(`[ebay-sync-processor] Failed item=${item.id}:`, error)
+            await markQueueItemFailed(supabase, queueItem.id, item.id, error.message, queueItem.retry_count)
+            results.failed++
+            results.errors.push({ item_id: item.id, error: error.message })
           }
+        })
 
-        } catch (error) {
-          console.error(`[ebay-sync-processor] Failed item=${item.id}:`, error)
-          await markQueueItemFailed(supabase, queueItem.id, item.id, error.message, queueItem.retry_count)
-          results.failed++
-          results.errors.push({ item_id: item.id, error: error.message })
+        await Promise.allSettled(chunkPromises)
+
+        // Small delay between chunks to avoid rate limits
+        if (chunkStart + PARALLEL_CONCURRENCY < storeItems.length) {
+          await new Promise(resolve => setTimeout(resolve, 50))
         }
-
-        // Small delay between items to avoid rate limits
-        await new Promise(resolve => setTimeout(resolve, 100))
       }
     }
 
