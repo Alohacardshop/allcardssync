@@ -1,30 +1,46 @@
 
 
-## Problem
+## User Management & Login Review
 
-Only `services.ebay_sync` rows exist in the database for both regions. When you click "Shopify Sync" or "Discord Notifications," the upsert tries to INSERT a new row. The code and RLS policies look correct (admin has ALL access, unique constraint exists for upsert), so the issue is likely **not** a permissions problem.
+### Current Architecture Summary
 
-The real issue is that `services.shopify_sync` and `services.discord_notifications` rows simply don't exist yet. The upsert *should* create them, but the button click may be silently failing or the accordion is swallowing the click event before it reaches the button.
+- **User creation**: Admin creates users via `create-user-admin` edge function (assigns roles + store locations)
+- **Login**: Standard email/password via `supabase.auth.signInWithPassword` on `/auth`
+- **Authorization**: `AuthContext` fetches roles via `verify_user_access` RPC, `AuthGuard` blocks non-staff/non-admin
+- **Password reset**: Admin resets via `reset-user-password` edge function, new password shown in toast
 
-Looking at the code, I notice the `isSaving` variable depends on `savingKey === saveKey`. If a previous save attempt failed and `savingKey` got stuck (or if the error handler doesn't run), subsequent clicks would find the button `disabled={isSaving}` permanently.
+### Issues Found
 
-## Plan
+**1. Password reset shows in a toast that auto-dismisses (CRITICAL)**
+Line 540: `toast.success(\`Password reset... New password: ${data.newPassword}\`)` — the toast disappears after a few seconds. The admin can't copy the password. This is almost certainly why Cyrus couldn't log in — the admin likely misread or partially copied the password.
 
-### 1. Seed the missing service toggle rows
-Insert the missing `services.shopify_sync` and `services.discord_notifications` rows for both regions via a database migration. This ensures the upsert always hits an UPDATE (not INSERT), matching how `services.ebay_sync` already works.
+**Fix**: Replace the toast with a persistent dialog containing a copy-to-clipboard button.
 
-```sql
-INSERT INTO region_settings (region_id, setting_key, setting_value, description)
-VALUES 
-  ('hawaii', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
-  ('hawaii', 'services.discord_notifications', 'false', 'Enable Discord order notifications'),
-  ('las_vegas', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
-  ('las_vegas', 'services.discord_notifications', 'false', 'Enable Discord order notifications')
-ON CONFLICT (region_id, setting_key) DO NOTHING;
-```
+**2. Password reset error handling doesn't extract edge function error body**
+Lines 537-538 in `handleResetPassword` don't parse `FunctionsHttpError` context (unlike the create-user flow which was already fixed). If the edge function returns a non-2xx, you get the generic message.
 
-### 2. Add defensive error logging to the toggle click handler
-Update the boolean toggle's `onClick` in `RegionSettingsEditor.tsx` to log the error details to the console. This ensures any future upsert failures are visible rather than silently swallowed.
+**Fix**: Apply the same `error.context?.json?.()` pattern used in user creation.
 
-This is a small, targeted fix -- seeding the rows is the primary solution.
+**3. Sign-up mode is publicly visible on the auth page**
+The auth page has a "Don't have an account? Sign up" toggle. Anyone can create an account in `auth.users`, even though `AuthGuard` blocks them without a role. This creates orphan accounts and could be confusing.
+
+**Fix**: Remove the sign-up toggle and form. Users should only be created via the admin panel.
+
+**4. Delete user error handling also missing error body extraction**
+`handleDeleteUser` (line 474) doesn't extract the error body from `FunctionsHttpError`.
+
+**Fix**: Same pattern as above.
+
+### Implementation Plan
+
+1. **Add a password reveal dialog** — when password reset succeeds, show a modal with the new password, a copy button, and a "Done" button. Keep it on screen until the admin explicitly closes it.
+
+2. **Remove self-signup from Auth.tsx** — remove the mode toggle, sign-up form, and related state. Keep only the sign-in form.
+
+3. **Fix error handling** on `handleResetPassword` and `handleDeleteUser` to extract the actual error from edge function responses.
+
+### Files to Change
+
+- `src/components/UserAssignmentManager.tsx` — password dialog, error handling fixes
+- `src/pages/Auth.tsx` — remove sign-up mode
 
