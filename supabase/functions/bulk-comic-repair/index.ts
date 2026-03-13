@@ -186,7 +186,7 @@ Deno.serve(async (req) => {
     if (skipRepaired) {
       query = query.neq('updated_by', 'comic_bulk_repair')
     }
-    // When force_image is on, skip items already force-repaired
+    // When force_image is on, skip items already force-image-repaired
     if (forceImage) {
       query = query.neq('updated_by', 'comic_bulk_repair_force_image')
     }
