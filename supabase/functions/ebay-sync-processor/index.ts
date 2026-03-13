@@ -378,6 +378,28 @@ serve(async (req) => {
 
     console.log(`[ebay-sync-processor] Complete: ${results.succeeded}/${results.processed} succeeded`)
 
+    // Self-chain: if there are more queued items and we haven't hit max depth, re-invoke
+    if (depth < MAX_CHAIN_DEPTH) {
+      const { count: remainingCount } = await supabase
+        .from('ebay_sync_queue')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'queued')
+
+      if (remainingCount && remainingCount > 0) {
+        console.log(`[ebay-sync-processor] ${remainingCount} items remaining, self-chaining (depth=${depth + 1})`)
+        const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+        // Fire-and-forget: don't await
+        fetch(`${supabaseUrl}/functions/v1/ebay-sync-processor`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+          },
+          body: JSON.stringify({ batch_size, depth: depth + 1 }),
+        }).catch(err => console.warn(`[ebay-sync-processor] Self-chain failed:`, err))
+      }
+    }
+
     return new Response(
       JSON.stringify({ success: true, ...results }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
