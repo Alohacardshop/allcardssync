@@ -834,6 +834,7 @@ const Inventory = () => {
     }
 
     setBulkSyncing(true);
+    const toastId = toast.loading(`Queuing ${selectedItems.size} items for eBay sync...`);
 
     try {
       // Fetch fresh data to check list_on_ebay and ebay_listing_id
