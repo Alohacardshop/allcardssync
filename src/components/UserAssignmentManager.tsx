@@ -12,7 +12,8 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Separator } from "@/components/ui/separator";
-import { Users, Plus, Pencil, Trash2, ShieldCheck, Store, MapPin, KeyRound, RotateCcw } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, ShieldCheck, Store, MapPin, KeyRound, RotateCcw, Copy, Check } from "lucide-react";
+import { DialogFooter } from "@/components/ui/dialog";
 import { logger } from "@/lib/logger";
 
 interface UserAssignment {
@@ -471,7 +472,10 @@ export function UserAssignmentManager() {
         body: { action: "delete", userId }
       });
 
-      if (error) throw error;
+      if (error) {
+        const errorBody = await (error as any).context?.json?.().catch(() => null);
+        throw new Error(errorBody?.error || error.message);
+      }
       if (!data.ok) throw new Error(data.error);
 
       toast.success("User deleted successfully");
@@ -524,6 +528,10 @@ export function UserAssignmentManager() {
     setDialogOpen(true);
   };
 
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [resetPasswordResult, setResetPasswordResult] = useState<{ email: string; password: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
   const handleResetPassword = async (userId: string, email: string) => {
     if (!confirm(`Reset password for ${email}? A new temporary password will be generated.`)) {
       return;
@@ -534,14 +542,27 @@ export function UserAssignmentManager() {
         body: { userId }
       });
 
-      if (error) throw error;
+      if (error) {
+        const errorBody = await (error as any).context?.json?.().catch(() => null);
+        throw new Error(errorBody?.error || error.message);
+      }
       if (!data.ok) throw new Error(data.error);
 
-      toast.success(`Password reset for ${email}. New password: ${data.newPassword}`);
+      setResetPasswordResult({ email, password: data.newPassword });
+      setCopied(false);
+      setPasswordDialogOpen(true);
     } catch (error: any) {
       console.error("Failed to reset password:", error);
       toast.error(`Failed to reset password: ${error.message}`);
     }
+  };
+
+  const handleCopyPassword = async () => {
+    if (!resetPasswordResult) return;
+    await navigator.clipboard.writeText(resetPasswordResult.password);
+    setCopied(true);
+    toast.success("Password copied to clipboard");
+    setTimeout(() => setCopied(false), 2000);
   };
 
   useEffect(() => {
@@ -587,6 +608,31 @@ export function UserAssignmentManager() {
 
   return (
     <div className="space-y-6">
+      {/* Password Reset Result Dialog */}
+      <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Password Reset Successful</DialogTitle>
+            <DialogDescription>
+              New password for <strong>{resetPasswordResult?.email}</strong>. Copy it now — it won't be shown again.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2 mt-2">
+            <Input
+              readOnly
+              value={resetPasswordResult?.password || ""}
+              className="font-mono text-base tracking-wider"
+            />
+            <Button variant="outline" size="icon" onClick={handleCopyPassword}>
+              {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+            </Button>
+          </div>
+          <DialogFooter className="mt-4">
+            <Button onClick={() => setPasswordDialogOpen(false)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">User Management</h2>
