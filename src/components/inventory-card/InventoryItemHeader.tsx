@@ -36,7 +36,7 @@ function getStatusBadge(item: InventoryItem & { sold_at?: string | null }) {
   if (status === 'error') {
     return <Badge variant="destructive">Sync Error</Badge>;
   }
-  if (status === 'synced' && item.shopify_product_id) {
+  if ((status === 'synced' || status === 'completed') && item.shopify_product_id) {
     return <Badge variant="default">Synced</Badge>;
   }
   if (status === 'queued' || status === 'processing') {
@@ -50,7 +50,7 @@ function getStatusBadge(item: InventoryItem & { sold_at?: string | null }) {
   if (status === 'pending') {
     return <Badge variant="outline">Pending</Badge>;
   }
-  if (item.shopify_product_id && status !== 'synced') {
+  if (item.shopify_product_id && status !== 'synced' && status !== 'completed') {
     return <Badge variant="outline" className="bg-warning/20 text-warning-foreground border-warning">Needs Resync</Badge>;
   }
   return <Badge variant="outline">Not Synced</Badge>;
