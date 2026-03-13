@@ -385,30 +385,74 @@ Deno.serve(async (req) => {
           if (descChanged) changes.push('description')
         }
 
-        // Repair image — always run for comics to ensure only front image remains
+        // Repair image — replace with new front image if changed, or clean up non-front media
         if (frontUrl) {
-          const mediaResult = await ensureMediaOrder({
-            domain, token,
-            productId: intakeItem.shopify_product_id,
-            intendedFrontUrl: frontUrl,
-            deleteNonFront: true  // Remove back images, keep only front
-          })
-          itemApiCalls++
-          totalApiCalls++
-          await pace()
+          if (imageChanged) {
+            // Image URL has changed (e.g. after rescrape) — delete all existing images and upload new one
+            console.log(JSON.stringify({
+              event: 'comic_bulk_repair_image_replace',
+              item_id: intakeItem.id,
+              front_url: frontUrl
+            }))
 
-          if (mediaResult.success) {
-            if (mediaResult.message?.includes('Deleted')) {
-              changes.push('removed_back_image')
-            } else if (imageChanged) {
-              changes.push('image')
+            // Delete all existing product images via REST API
+            if (existingProduct.images && existingProduct.images.length > 0) {
+              for (const img of existingProduct.images) {
+                const delRes = await shopifyCallWithPacing(
+                  `https://${domain}/admin/api/${API_VERSION}/products/${intakeItem.shopify_product_id}/images/${img.id}.json`,
+                  { method: 'DELETE', headers: shopifyHeaders },
+                  domain, token
+                )
+                itemApiCalls++
+                totalApiCalls++
+                if (!delRes.ok && delRes.status !== 404) {
+                  console.warn(`[IMAGE REPLACE] Failed to delete image ${img.id}: ${delRes.status}`)
+                }
+              }
+            }
+
+            // Upload new front image
+            const imgUploadRes = await shopifyCallWithPacing(
+              `https://${domain}/admin/api/${API_VERSION}/products/${intakeItem.shopify_product_id}/images.json`,
+              {
+                method: 'POST',
+                headers: shopifyHeaders,
+                body: JSON.stringify({ image: { src: frontUrl, alt: intendedTitle, position: 1 } })
+              },
+              domain, token
+            )
+            itemApiCalls++
+            totalApiCalls++
+
+            if (imgUploadRes.ok) {
+              changes.push('image_replaced')
+              console.log(JSON.stringify({ event: 'comic_bulk_repair_image_replaced', item_id: intakeItem.id }))
+            } else {
+              const errText = await imgUploadRes.text()
+              console.warn(JSON.stringify({
+                event: 'comic_bulk_repair_image_upload_failed',
+                item_id: intakeItem.id,
+                status: imgUploadRes.status,
+                error: errText
+              }))
             }
           } else {
-            console.warn(JSON.stringify({
-              event: 'comic_bulk_repair_image_failed',
-              item_id: intakeItem.id,
-              message: mediaResult.message
-            }))
+            // Image URL matches — just clean up any non-front media
+            const mediaResult = await ensureMediaOrder({
+              domain, token,
+              productId: intakeItem.shopify_product_id,
+              intendedFrontUrl: frontUrl,
+              deleteNonFront: true
+            })
+            itemApiCalls++
+            totalApiCalls++
+            await pace()
+
+            if (mediaResult.success) {
+              if (mediaResult.message?.includes('Deleted')) {
+                changes.push('removed_back_image')
+              }
+            }
           }
         }
 
