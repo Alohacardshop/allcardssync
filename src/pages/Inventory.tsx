@@ -857,6 +857,7 @@ const Inventory = () => {
       const allEbayItems = [...existingEbayItems, ...newEbayItems];
 
       if (allEbayItems.length === 0) {
+        toast.dismiss(toastId);
         toast.info('No selected items have list_on_ebay enabled');
         setBulkSyncing(false);
         return;
