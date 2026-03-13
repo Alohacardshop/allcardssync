@@ -89,12 +89,12 @@ export const EbayStatusBadge = React.memo(({
     );
   }
 
-  // Marked for eBay but not yet synced - outline pending
+  // Marked for eBay but not yet queued - muted indicator
   if (listOnEbay && !listingId) {
     return (
-      <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-medium whitespace-nowrap">
-        <Clock className="h-2.5 w-2.5 mr-1" />
-        Pending
+      <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-medium whitespace-nowrap text-muted-foreground">
+        <ShoppingBag className="h-2.5 w-2.5 mr-1" />
+        eBay
       </Badge>
     );
   }
