@@ -271,6 +271,7 @@ const Inventory = () => {
   const [syncingRowId, setSyncingRowId] = useState<string | null>(null);
   const [bulkRetrying, setBulkRetrying] = useState(false);
   const [bulkSyncing, setBulkSyncing] = useState(false);
+  const resyncLockRef = useRef(false);
 
   // Auth and error states
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
@@ -910,15 +911,21 @@ const Inventory = () => {
   }, [selectedItems, refetch]);
 
   const handleResyncSelected = useCallback(async (target: ResyncTarget = 'shopify') => {
-    if (bulkSyncing) return;
+    // Synchronous ref guard to prevent rapid double-fire from dropdown mouse events
+    if (resyncLockRef.current || bulkSyncing) return;
+    resyncLockRef.current = true;
 
-    if (target === 'shopify') {
-      await handleResyncShopify();
-    } else if (target === 'ebay') {
-      await handleResyncEbay();
-    } else if (target === 'both') {
-      await handleResyncShopify();
-      await handleResyncEbay();
+    try {
+      if (target === 'shopify') {
+        await handleResyncShopify();
+      } else if (target === 'ebay') {
+        await handleResyncEbay();
+      } else if (target === 'both') {
+        await handleResyncShopify();
+        await handleResyncEbay();
+      }
+    } finally {
+      resyncLockRef.current = false;
     }
   }, [bulkSyncing, handleResyncShopify, handleResyncEbay]);
 
