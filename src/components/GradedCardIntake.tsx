@@ -316,6 +316,10 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         const subCategoryGuess = seriesOrSet.includes('pokemon') ? 'Pokemon' :
                                  seriesOrSet.includes('magic') ? 'Magic: The Gathering' :
                                  seriesOrSet.includes('yugioh') || seriesOrSet.includes('yu-gi-oh') ? 'Yu-Gi-Oh!' :
+                                 seriesOrSet.includes('baseball') ? 'Baseball' :
+                                 seriesOrSet.includes('basketball') ? 'Basketball' :
+                                 seriesOrSet.includes('football') ? 'Football' :
+                                 seriesOrSet.includes('hockey') ? 'Hockey' :
                                  "";
         
         // Auto-populate form with CGC data
