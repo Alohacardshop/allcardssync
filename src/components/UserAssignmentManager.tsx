@@ -503,7 +503,7 @@ export function UserAssignmentManager() {
             await supabase.functions.invoke('manage-staff-pin', {
               body: {
                 action: 'set-pin',
-                userId: data.userId,
+                userId: data.user.id,
                 displayName: formData.displayName,
                 pin: formData.pin,
               }
