@@ -239,10 +239,7 @@ export function buildComicDescription(intakeItem: any, item: any): string {
   addRow('Page Quality', pageQuality)
   addRow('Category', category)
 
-  if (psaUrl) {
-    lines.push('')
-    lines.push(`<a href="${psaUrl}">${gradingCompany} Certificate</a>`)
-  }
+  // PSA URL intentionally omitted — eBay prohibits external URLs in descriptions
 
   return lines.join('<br>')
 }
@@ -453,7 +450,7 @@ export async function syncGradedItemToShopify(
       description += `\n\nGraded ${brandTitle} ${subject}`
       if (year) description += ` from ${year}`
       if (grade) description += `, ${gradingCompany} Grade ${grade}`
-      if (psaUrl) description += `\n\n${gradingCompany} Certificate: ${psaUrl}`
+      // PSA URL intentionally omitted — eBay prohibits external URLs in descriptions
     }
 
     // ── Metafields ──
