@@ -85,23 +85,9 @@ const InventoryPage = () => {
   const loadingManager = useLoadingStateManager({ pageType: 'inventory' });
   const { snapshot, setPhase, setNextRefreshAt } = loadingManager;
 
-  // Filter state
-  const [filters, setFilters] = useState<InventoryFilterState>({
-    searchTerm: '',
-    statusFilter: 'active',
-    typeFilter: 'all',
-    categoryFilter: 'all',
-    collectionFilter: 'all',
-    shopifySyncFilter: 'all',
-    ebayStatusFilter: 'all',
-    printStatusFilter: 'all',
-    dateRangeFilter: 'all',
-    batchFilter: (localStorage.getItem('inventory-batch-filter') as InventoryFilterState['batchFilter']) || 'all',
-    locationFilter: null,
-    locationAvailability: 'any',
-    tagFilter: [],
-    activeQuickFilter: null,
-  });
+  // URL-synced filter state
+  const { initialFilters, syncToUrl } = useInventoryUrlFilters();
+  const [filters, setFilters] = useState<InventoryFilterState>(initialFilters);
 
    // Saved Views state (desktop only)
    const [activeViewId, setActiveViewId] = useState<string | null>(null);
