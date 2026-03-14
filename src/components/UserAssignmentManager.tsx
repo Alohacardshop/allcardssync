@@ -762,7 +762,7 @@ export function UserAssignmentManager() {
                 <h3 className="text-lg font-medium">Account Information</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="email">Email *</Label>
+                    <Label htmlFor="email">Email (for backend recovery)</Label>
                     <Input
                       id="email"
                       type="email"
@@ -771,23 +771,82 @@ export function UserAssignmentManager() {
                       placeholder="user@example.com"
                       disabled={!!editingUser}
                     />
+                    <p className="text-xs text-muted-foreground mt-1">Used for account recovery only</p>
                   </div>
-                  <div>
-                    <Label htmlFor="password">
-                      Password {editingUser ? "(leave blank to keep current)" : "*"}
-                    </Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      value={formData.password}
-                      onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                      placeholder={editingUser ? "Leave blank to keep current password" : "Required"}
-                    />
-                  </div>
+                  {!editingUser && (
+                    <div>
+                      <Label htmlFor="password">Initial Password</Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        value={formData.password}
+                        onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                        placeholder="Required for account creation"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">Staff will use PIN to log in, not this password</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
               <Separator />
+
+              {/* PIN Login */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="h-5 w-5" />
+                  <h3 className="text-lg font-medium">PIN Login</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Staff will use their display name and 4-digit PIN to sign in.
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="displayName">Display Name *</Label>
+                    <Input
+                      id="displayName"
+                      value={formData.displayName}
+                      onChange={(e) => setFormData(prev => ({ ...prev, displayName: e.target.value }))}
+                      placeholder="e.g. Dorian, Zach"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Must be unique — this is what staff type to log in</p>
+                  </div>
+                  <div>
+                    <Label htmlFor="pin">
+                      4-Digit PIN {editingUser?.pinInfo ? "(leave blank to keep current)" : "*"}
+                    </Label>
+                    <Input
+                      id="pin"
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={4}
+                      value={formData.pin}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                        setFormData(prev => ({ ...prev, pin: val }));
+                      }}
+                      placeholder={editingUser?.pinInfo ? "••••" : "e.g. 1234"}
+                      className="font-mono text-lg tracking-widest"
+                    />
+                  </div>
+                </div>
+                {editingUser?.pinInfo && (
+                  <div className="flex items-center gap-2 text-sm">
+                    {editingUser.pinInfo.locked_until && new Date(editingUser.pinInfo.locked_until) > new Date() ? (
+                      <Badge variant="destructive" className="flex items-center gap-1">
+                        <Lock className="h-3 w-3" />
+                        Locked ({editingUser.pinInfo.failed_attempts} failed attempts)
+                      </Badge>
+                    ) : editingUser.pinInfo.failed_attempts > 0 ? (
+                      <Badge variant="secondary">
+                        {editingUser.pinInfo.failed_attempts} failed attempt{editingUser.pinInfo.failed_attempts !== 1 ? 's' : ''}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-muted-foreground">PIN configured</Badge>
+                    )}
+                  </div>
+                )}
+              </div>
 
               {/* Roles */}
               <div className="space-y-4">
