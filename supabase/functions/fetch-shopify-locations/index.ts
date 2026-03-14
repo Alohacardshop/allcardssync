@@ -61,12 +61,20 @@ Deno.serve(async (req) => {
     console.log(`fetch-shopify-locations: Found ${locations.length} locations for ${storeKey}:`, 
       locations.map((l: any) => ({ id: l.id, name: l.name, active: l.active })));
 
-    // Update shopify_location_cache
+    // Update shopify_location_cache (preserve is_hidden flag)
     for (const loc of locations) {
       const gid = `gid://shopify/Location/${loc.id}`;
       const now = new Date();
       const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours from now
       
+      // Check if entry exists to preserve is_hidden
+      const { data: existing } = await supabase
+        .from("shopify_location_cache")
+        .select("is_hidden")
+        .eq("store_key", storeKey)
+        .eq("location_gid", gid)
+        .maybeSingle();
+
       const { error: upsertError } = await supabase
         .from("shopify_location_cache")
         .upsert({
@@ -75,13 +83,24 @@ Deno.serve(async (req) => {
           location_id: String(loc.id),
           location_name: loc.name,
           cached_at: now.toISOString(),
-          expires_at: expires.toISOString()
+          expires_at: expires.toISOString(),
+          is_hidden: existing?.is_hidden ?? false
         }, { onConflict: 'store_key,location_gid' });
       
       if (upsertError) {
         console.error(`fetch-shopify-locations: Failed to cache location ${loc.name}:`, upsertError);
       }
     }
+
+    // Filter out hidden locations from the response
+    const { data: hiddenLocs } = await supabase
+      .from("shopify_location_cache")
+      .select("location_gid")
+      .eq("store_key", storeKey)
+      .eq("is_hidden", true);
+    
+    const hiddenGids = new Set((hiddenLocs || []).map(h => h.location_gid));
+    const visibleLocations = locations.filter((l: any) => !hiddenGids.has(`gid://shopify/Location/${l.id}`));
 
     return new Response(
       JSON.stringify({ 
