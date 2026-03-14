@@ -376,6 +376,9 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Extract purchase location name
+    const purchaseLocation = Array.isArray(intakeItem.purchase_location) ? intakeItem.purchase_location[0]?.name : intakeItem.purchase_location?.name;
+
     // Purchase location
     if (purchaseLocation) {
       metafields.push({
@@ -397,7 +400,6 @@ Deno.serve(async (req) => {
     }
 
     // Build tags array with main_category, sub_category, and purchase location
-    const purchaseLocation = Array.isArray(intakeItem.purchase_location) ? intakeItem.purchase_location[0]?.name : intakeItem.purchase_location?.name;
     
     // Merge normalized_tags from DB trigger
     const normalizedTags = Array.isArray(intakeItem.normalized_tags) ? intakeItem.normalized_tags : [];
