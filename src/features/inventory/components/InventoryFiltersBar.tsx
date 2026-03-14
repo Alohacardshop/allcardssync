@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Search, MapPin, X, Package } from 'lucide-react';
+import { Search, MapPin, X, Package, Layers } from 'lucide-react';
 import { MoreFiltersPopover } from '@/components/inventory/MoreFiltersPopover';
 import type { InventoryFiltersBarProps } from '../types';
 import type { ShopifyCollection } from '@/hooks/useShopifyCollections';
