@@ -190,8 +190,8 @@ export function buildComicTitle(intakeItem: any, item: any): string {
   if (grade) parts.push(`${gradingCompany.toUpperCase()} ${grade}`)
 
   const deduped = deduplicateParts(parts.filter(Boolean))
-  const raw = deduped.join(' ').toUpperCase()
-  return raw.replace(/\s{2,}/g, ' ').trim() || 'GRADED COMIC'
+  const raw = deduped.join(' ')
+  return raw.replace(/\s{2,}/g, ' ').trim() || 'Graded Comic'
 }
 
 /**
