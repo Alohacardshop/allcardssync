@@ -4520,6 +4520,12 @@ export type Database = {
           total_products: number
         }[]
       }
+      get_items_with_stock: {
+        Args: { p_location_gid?: string; p_store_key: string }
+        Returns: {
+          shopify_inventory_item_id: string
+        }[]
+      }
       get_or_create_active_lot: {
         Args: { _location_gid: string; _store_key: string }
         Returns: {

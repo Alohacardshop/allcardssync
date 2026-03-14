@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Search, MapPin, X, Package } from 'lucide-react';
+import { Search, MapPin, X, Package, Layers } from 'lucide-react';
 import { MoreFiltersPopover } from '@/components/inventory/MoreFiltersPopover';
 import type { InventoryFiltersBarProps } from '../types';
 import type { ShopifyCollection } from '@/hooks/useShopifyCollections';
@@ -231,7 +231,23 @@ export const InventoryFiltersBar = React.memo(({
           </SelectContent>
         </Select>
 
-        {/* Stock/Availability Filter - only show when a location is selected OR always for "anywhere" */}
+        {/* Type Filter (Raw / Graded) */}
+        <Select 
+          value={filters.typeFilter} 
+          onValueChange={(value: any) => onFilterChange('typeFilter', value)}
+        >
+          <SelectTrigger className="w-[110px] h-9 shrink-0">
+            <Layers className="h-3.5 w-3.5 mr-1 text-muted-foreground shrink-0" />
+            <SelectValue placeholder="Type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Types</SelectItem>
+            <SelectItem value="raw">Raw</SelectItem>
+            <SelectItem value="graded">Graded</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Stock/Availability Filter */}
         <Select 
           value={filters.locationAvailability} 
           onValueChange={(value: any) => onFilterChange('locationAvailability', value)}

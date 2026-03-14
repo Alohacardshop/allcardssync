@@ -13,6 +13,8 @@ export interface InventoryFilters {
   typeFilter?: 'all' | 'raw' | 'graded';
   categoryFilter?: string; // Dynamic category filter - 'all' or exact category value
   collectionFilter?: string; // Shopify collection GID - 'all' or collection GID
+  /** Pre-fetched product IDs for the selected collection (from useCollectionProducts) */
+  collectionProductIds?: string[] | null;
   tagFilter?: string[]; // Shopify tags filter (uses normalized_tags for filtering)
   
   searchTerm?: string;
@@ -39,6 +41,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
       filters.activeTab,
       filters.categoryFilter,
       filters.collectionFilter,
+      filters.collectionProductIds,
       filters.statusFilter,
       filters.batchFilter,
       filters.printStatusFilter,
@@ -59,6 +62,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         activeTab,
         categoryFilter = 'all',
         collectionFilter = 'all',
+        collectionProductIds,
         statusFilter,
         batchFilter,
         printStatusFilter = 'all',
@@ -125,37 +129,25 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         .range(pageParam, pageParam + PAGE_SIZE - 1)
         .eq('store_key', storeKey);
 
-      // Location availability filter - uses shopify_inventory_levels join
+      // Location availability filter - uses DB function instead of fetching all levels
       if (locationAvailability === 'at-selected' && locationGid) {
-        // Show only items with stock > 0 at the selected location
-        // This requires a subquery/filter on shopify_inventory_levels
         const { data: itemsWithStock } = await supabase
-          .from('shopify_inventory_levels')
-          .select('inventory_item_id')
-          .eq('store_key', storeKey)
-          .eq('location_gid', locationGid)
-          .gt('available', 0);
+          .rpc('get_items_with_stock', { p_store_key: storeKey, p_location_gid: locationGid });
         
-        const inventoryItemIds = (itemsWithStock || []).map(l => l.inventory_item_id);
+        const inventoryItemIds = (itemsWithStock || []).map((r: any) => r.shopify_inventory_item_id);
         if (inventoryItemIds.length > 0) {
           query = query.in('shopify_inventory_item_id', inventoryItemIds);
         } else {
-          // No items have stock at this location
           query = query.eq('id', 'no-match-force-empty');
         }
       } else if (locationAvailability === 'anywhere') {
-        // Show only items with stock > 0 at ANY location
         const { data: itemsWithAnyStock } = await supabase
-          .from('shopify_inventory_levels')
-          .select('inventory_item_id')
-          .eq('store_key', storeKey)
-          .gt('available', 0);
+          .rpc('get_items_with_stock', { p_store_key: storeKey });
         
-        const uniqueInventoryItemIds = [...new Set((itemsWithAnyStock || []).map(l => l.inventory_item_id))];
-        if (uniqueInventoryItemIds.length > 0) {
-          query = query.in('shopify_inventory_item_id', uniqueInventoryItemIds);
+        const inventoryItemIds = (itemsWithAnyStock || []).map((r: any) => r.shopify_inventory_item_id);
+        if (inventoryItemIds.length > 0) {
+          query = query.in('shopify_inventory_item_id', inventoryItemIds);
         } else {
-          // No items have stock anywhere
           query = query.eq('id', 'no-match-force-empty');
         }
       }
@@ -170,22 +162,15 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         query = query.eq('type', typeFilter === 'raw' ? 'Raw' : 'Graded');
       }
 
-      // Apply collection filter - fetch product IDs from the selected Shopify collection
+      // Apply collection filter - use pre-fetched product IDs from useCollectionProducts
       if (collectionFilter && collectionFilter !== 'all') {
-        // Fetch products that belong to this collection from Shopify via edge function
-        const { data: collectionData, error: collectionError } = await supabase.functions.invoke(
-          'fetch-collection-products',
-          { body: { storeKey, collectionGid: collectionFilter } }
-        );
-        
-        if (!collectionError && collectionData?.productIds?.length > 0) {
-          // productIds are numeric IDs like "9398236774631"
-          query = query.in('shopify_product_id', collectionData.productIds);
-        } else if (!collectionError && collectionData?.productIds?.length === 0) {
-          // Collection has no products - force empty result
+        if (collectionProductIds && collectionProductIds.length > 0) {
+          query = query.in('shopify_product_id', collectionProductIds);
+        } else if (collectionProductIds !== undefined && collectionProductIds !== null) {
+          // Collection loaded but has no products - force empty result
           query = query.eq('id', 'no-match-force-empty');
         }
-        // If there's an error, we fall through and show all items (graceful degradation)
+        // If collectionProductIds is undefined/null, collection is still loading - skip filter
       }
 
       // Apply category filter - now uses exact category value from Shopify

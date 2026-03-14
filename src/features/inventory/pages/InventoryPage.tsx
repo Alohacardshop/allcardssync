@@ -31,6 +31,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useInventoryTruthMode } from '@/hooks/useInventoryTruthMode';
 
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
+import { useCollectionProducts } from '@/hooks/useCollectionProducts';
 import { useLocationNames } from '@/hooks/useLocationNames';
 import { useShopifyTags } from '@/hooks/useShopifyTags';
 import { useShopifyCollections, groupCollections } from '@/hooks/useShopifyCollections';
@@ -48,6 +49,7 @@ import { InventoryBulkBar } from '../components/InventoryBulkBar';
 import { InspectorPanel } from '../components/inspector/InspectorPanel';
 import { useInventorySelection } from '../hooks/useInventorySelection';
 import { useInventoryActions } from '../hooks/useInventoryActions';
+import { useInventoryUrlFilters } from '../hooks/useInventoryUrlFilters';
 import type { InventoryFilterState, InventoryListItem } from '../types';
 import { ColumnChooser } from '../components/ColumnChooser';
 import { SavedViewsDropdown } from '../components/SavedViewsDropdown';
@@ -83,23 +85,9 @@ const InventoryPage = () => {
   const loadingManager = useLoadingStateManager({ pageType: 'inventory' });
   const { snapshot, setPhase, setNextRefreshAt } = loadingManager;
 
-  // Filter state
-  const [filters, setFilters] = useState<InventoryFilterState>({
-    searchTerm: '',
-    statusFilter: 'active',
-    typeFilter: 'all',
-    categoryFilter: 'all',
-    collectionFilter: 'all',
-    shopifySyncFilter: 'all',
-    ebayStatusFilter: 'all',
-    printStatusFilter: 'all',
-    dateRangeFilter: 'all',
-    batchFilter: (localStorage.getItem('inventory-batch-filter') as InventoryFilterState['batchFilter']) || 'all',
-    locationFilter: null,
-    locationAvailability: 'any',
-    tagFilter: [],
-    activeQuickFilter: null,
-  });
+  // URL-synced filter state
+  const { initialFilters, syncToUrl } = useInventoryUrlFilters();
+  const [filters, setFilters] = useState<InventoryFilterState>(initialFilters);
 
    // Saved Views state (desktop only)
    const [activeViewId, setActiveViewId] = useState<string | null>(null);
@@ -172,6 +160,12 @@ const InventoryPage = () => {
   
   const effectiveLocation = filters.locationFilter || selectedLocation;
   
+  // Cached collection product IDs (avoids re-invoking edge function per query)
+  const { data: collectionProductIds } = useCollectionProducts(
+    assignedStore, 
+    filters.collectionFilter !== 'all' ? filters.collectionFilter : null
+  );
+
   const { data: currentBatch } = useCurrentBatch({ 
     storeKey: assignedStore, 
     locationGid: effectiveLocation,
@@ -192,6 +186,7 @@ const InventoryPage = () => {
     storeKey: assignedStore || '',
     locationGid: filters.locationFilter,
     collectionFilter: filters.collectionFilter,
+    collectionProductIds: collectionProductIds ?? undefined,
     categoryFilter: filters.categoryFilter,
     statusFilter: filters.statusFilter,
     batchFilter: filters.batchFilter,
@@ -330,12 +325,16 @@ const InventoryPage = () => {
     key: K,
     value: InventoryFilterState[K]
   ) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
-  }, []);
+    setFilters(prev => {
+      const next = { ...prev, [key]: value };
+      syncToUrl(next);
+      return next;
+    });
+  }, [syncToUrl]);
 
   // Clear all filters
   const handleClearAllFilters = useCallback(() => {
-    setFilters({
+    const cleared: InventoryFilterState = {
       searchTerm: '',
       statusFilter: 'active',
       typeFilter: 'all',
@@ -350,9 +349,11 @@ const InventoryPage = () => {
       locationAvailability: 'any',
       tagFilter: [],
       activeQuickFilter: null,
-    });
+    };
+    setFilters(cleared);
+    syncToUrl(cleared);
      setActiveViewId(null);
-  }, []);
+  }, [syncToUrl]);
 
    // Apply a saved view
    const handleApplyView = useCallback((view: SavedInventoryView) => {
