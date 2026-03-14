@@ -71,15 +71,19 @@ export const PrinterSettings: React.FC = () => {
   };
 
   const handleTestPrint = async () => {
+    if (isPrinting) return; // duplicate-click guard
     setIsPrinting(true);
-
-    const result = await sendTestPrint(selectedPrinter || undefined);
-    setIsPrinting(false);
-
-    if (result.success) {
-      toast.success('Test label sent!');
-    } else {
-      toast.error(`Test print failed: ${result.error || 'Unknown error'}`);
+    try {
+      const result = await sendTestPrint(selectedPrinter || undefined);
+      if (result.success) {
+        toast.success(result.message || 'Test label sent!');
+      } else {
+        toast.error(result.error || 'Test print failed. Check printer connection.');
+      }
+    } catch {
+      toast.error('Unexpected error sending test print. Is QZ Tray running?');
+    } finally {
+      setIsPrinting(false);
     }
   };
 

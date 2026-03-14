@@ -27,21 +27,24 @@ function downloadZplFile(zpl: string) {
 
 export const mockTransport: PrintTransport = async (payload) => {
   const labelCount = (payload.match(/\^XA/g) || []).length;
+  const ts = new Date().toISOString();
 
   // Simulate printer processing time
   await new Promise((r) => setTimeout(r, MOCK_LATENCY_MS));
 
-  // Structured console output
+  // Structured console output — unmistakably mock
   console.group(
-    `%c🖨️ MOCK PRINT — ${labelCount} label(s), ${payload.length} bytes`,
-    'color: #22c55e; font-weight: bold; font-size: 13px'
+    `%c🖨️ MOCK PRINT [${ts}] — ${labelCount} label(s), ${payload.length} bytes`,
+    'background: #14532d; color: #4ade80; font-weight: bold; font-size: 13px; padding: 2px 6px; border-radius: 3px'
   );
+  console.log('%c⚠ No physical printer — this is a simulated print.', 'color: #facc15; font-weight: bold');
   console.log(payload);
   console.groupEnd();
 
-  logger.info('[mock-transport] Print job accepted', {
+  logger.info('[mock-transport] ✅ MOCK print succeeded (no hardware)', {
     labelCount,
     payloadBytes: payload.length,
+    timestamp: ts,
   }, 'print-transport');
 
   // Optional: download .zpl file for offline inspection

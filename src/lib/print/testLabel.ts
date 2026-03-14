@@ -7,6 +7,7 @@
 import { sendZplToPrinter } from '@/lib/labels/print';
 import { getPrintEnvConfig } from './envConfig';
 import { escapeZpl } from '@/lib/labels/zpl';
+import { MOCK_PRODUCT } from './mockData';
 import type { PrintResult } from './transports/types';
 
 /** Escape dynamic text for safe ZPL embedding */
@@ -20,6 +21,7 @@ export function buildTestLabelZpl(printerName?: string): string {
   const timestamp = now.toLocaleString();
   const config = getPrintEnvConfig();
   const name = safeField(printerName || config.printerName || 'Default Printer');
+  const modeTag = config.mode === 'mock' ? 'MOCK' : 'LIVE';
 
   return `^XA
 ^MMT
@@ -29,12 +31,12 @@ export function buildTestLabelZpl(printerName?: string): string {
 ^CF0,32
 ^FO30,15^FDAloha Card Shop^FS
 ^CF0,24
-^FO30,55^FDTest Print - ${config.mode} mode^FS
+^FO30,55^FDTest Print [${modeTag}]^FS
 ^CF0,18
 ^FO30,90^FD${name}^FS
 ^FO30,115^FD${safeField(timestamp)}^FS
 ^BY2,3,40
-^FO30,145^BCN,40,Y,N,N^FDTEST-${now.getTime().toString(36).toUpperCase()}^FS
+^FO30,145^BCN,40,Y,N,N^FD${safeField(MOCK_PRODUCT.sku)}^FS
 ^PQ1
 ^XZ`;
 }
