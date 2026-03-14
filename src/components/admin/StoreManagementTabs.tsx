@@ -29,6 +29,7 @@ export function StoreManagementTabs() {
       <TabsContent value="config" className="space-y-6">
         <ShopifyEnvironmentSetup />
         <ShopifyConfig />
+        <LocationVisibilityManager />
         <ShopifyMetafieldSetup />
       </TabsContent>
 
