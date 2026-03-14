@@ -129,8 +129,8 @@ Deno.serve(async (req) => {
       JSON.stringify({ 
         ok: true, 
         storeKey,
-        count: locations.length,
-        locations: locations.map((l: any) => ({
+        count: visibleLocations.length,
+        locations: visibleLocations.map((l: any) => ({
           id: l.id,
           gid: `gid://shopify/Location/${l.id}`,
           name: l.name,
