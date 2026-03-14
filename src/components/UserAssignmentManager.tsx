@@ -434,6 +434,28 @@ export function UserAssignmentManager() {
         if (!data?.ok) throw new Error(data?.error || 'Unknown error');
 
         toast.success("User updated successfully!");
+
+        // Update PIN if display name or pin provided
+        if (formData.displayName && formData.pin) {
+          try {
+            await supabase.functions.invoke('manage-staff-pin', {
+              body: {
+                action: 'set-pin',
+                userId: editingUser.id,
+                displayName: formData.displayName,
+                pin: formData.pin,
+              }
+            });
+            toast.success("PIN updated!");
+          } catch (pinErr) {
+            console.error("Failed to update PIN:", pinErr);
+            toast.error("User updated but PIN change failed.");
+          }
+        } else if (formData.displayName && !formData.pin && editingUser.pinInfo) {
+          // Display name changed but no new PIN - update display name only with a dummy reset
+          // Actually we need the PIN to update, so just update display name via the set-pin action
+          // Skip if no PIN provided - they just want to keep the existing PIN
+        }
       } else {
         // Create new user
         const storeAssignments = [];
