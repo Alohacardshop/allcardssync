@@ -41,6 +41,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
       filters.activeTab,
       filters.categoryFilter,
       filters.collectionFilter,
+      filters.collectionProductIds,
       filters.statusFilter,
       filters.batchFilter,
       filters.printStatusFilter,
