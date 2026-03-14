@@ -218,7 +218,7 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
         item: {
           id: row.id,
           sku: row.sku,
-          title: row.subject || row.brand_title,
+          // title intentionally omitted — let backend title builder construct it
           price: row.price,
           quantity: row.quantity,
           barcode: row.psa_cert || row.sku,

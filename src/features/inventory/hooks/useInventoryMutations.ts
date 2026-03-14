@@ -547,7 +547,7 @@ export function useInventoryMutations({
                 sku: item.sku,
                 psa_cert: item.psa_cert,
                 barcode: item.sku,
-                title: item.subject,
+                // title intentionally omitted — let backend title builder construct it
                 price: item.price,
                 grade: item.grade,
                 quantity: item.quantity,
