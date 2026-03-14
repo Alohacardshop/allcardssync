@@ -58,28 +58,32 @@ export default function Auth() {
     setError(null);
 
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pin-login`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          },
-          body: JSON.stringify({ displayName: name.trim(), pin: fullPin }),
-        }
-      );
+      const { data, error: invokeError } = await supabase.functions.invoke("pin-login", {
+        body: { displayName: name.trim(), pin: fullPin },
+      });
 
-      const data = await response.json();
-
-      if (!data.ok) {
+      if (invokeError) {
+        console.error("pin-login invoke error:", invokeError);
         setPin("");
-        if (data.locked) {
+        setError(invokeError.message || "Connection error. Please try again.");
+        return;
+      }
+
+      if (!data?.ok) {
+        setPin("");
+        if (data?.locked) {
           setLocked(true);
           setError(data.error);
         } else {
-          setError(data.error || "Invalid name or PIN");
+          setError(data?.error || "Invalid name or PIN");
         }
+        return;
+      }
+
+      if (!data?.tokenHash) {
+        console.error("pin-login succeeded but token hash missing", data);
+        setPin("");
+        setError("Login failed. Please contact your admin.");
         return;
       }
 
