@@ -173,6 +173,8 @@ export function buildComicTitle(intakeItem: any, item: any): string {
   const comicName = safeStr(snapshot.subject, intakeItem?.subject, item?.subject)
   const issueNum = formatIssueNumber(snapshot.issueNumber || snapshot.cardNumber || intakeItem?.card_number || item?.card_number)
   const variant = cleanVariant(snapshot.varietyPedigree || intakeItem?.variant || item?.variant)
+  const grade = safeStr(item?.grade, intakeItem?.grade)
+  const gradingCompany = safeStr(intakeItem?.grading_company, item?.grading_company) || 'PSA'
 
   const pubDate = parsePublicationDate(snapshot.publicationDate || snapshot.year)
 
@@ -185,6 +187,7 @@ export function buildComicTitle(intakeItem: any, item: any): string {
     parts.push(pubDate.year)
   }
   if (variant) parts.push(variant)
+  if (grade) parts.push(`${gradingCompany.toUpperCase()} ${grade}`)
 
   const deduped = deduplicateParts(parts.filter(Boolean))
   const raw = deduped.join(' ').toUpperCase()
