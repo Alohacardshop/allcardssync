@@ -85,6 +85,8 @@ export function UserAssignmentManager() {
   const [formData, setFormData] = useState({
     email: "",
     password: "",
+    displayName: "",
+    pin: "",
     roles: [] as string[],
     selectedRegion: "" as string,
     selectedStores: [] as string[],
@@ -96,6 +98,8 @@ export function UserAssignmentManager() {
     setFormData({
       email: "",
       password: "",
+      displayName: "",
+      pin: "",
       roles: [],
       selectedRegion: "",
       selectedStores: [],
