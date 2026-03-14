@@ -173,6 +173,12 @@ const InventoryPage = () => {
   
   const effectiveLocation = filters.locationFilter || selectedLocation;
   
+  // Cached collection product IDs (avoids re-invoking edge function per query)
+  const { data: collectionProductIds } = useCollectionProducts(
+    assignedStore, 
+    filters.collectionFilter !== 'all' ? filters.collectionFilter : null
+  );
+
   const { data: currentBatch } = useCurrentBatch({ 
     storeKey: assignedStore, 
     locationGid: effectiveLocation,
