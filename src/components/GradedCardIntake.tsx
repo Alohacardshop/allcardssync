@@ -279,6 +279,11 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         const subCategoryGuess = combinedText.includes('pokemon') ? 'Pokemon' :
                                  combinedText.includes('magic') ? 'Magic: The Gathering' :
                                  combinedText.includes('yugioh') || combinedText.includes('yu-gi-oh') ? 'Yu-Gi-Oh!' :
+                                 combinedText.includes('baseball') ? 'Baseball' :
+                                 combinedText.includes('basketball') ? 'Basketball' :
+                                 combinedText.includes('football') ? 'Football' :
+                                 combinedText.includes('hockey') ? 'Hockey' :
+                                 combinedText.includes('soccer') ? 'Soccer' :
                                  "";
         
         // Auto-populate form with fetched data
