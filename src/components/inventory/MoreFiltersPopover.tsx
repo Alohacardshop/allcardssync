@@ -151,21 +151,6 @@ export function MoreFiltersPopover({
           </div>
 
           <div className="grid gap-3">
-            {/* Type Filter */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Type</label>
-              <Select value={typeFilter} onValueChange={onTypeFilterChange}>
-                <SelectTrigger className="h-8">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="raw">Raw</SelectItem>
-                  <SelectItem value="graded">Graded</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
             {/* Collection Filter - Shopify Collections */}
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">Collection</label>
