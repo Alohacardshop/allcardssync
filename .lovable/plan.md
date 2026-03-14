@@ -1,30 +1,87 @@
 
 
-## Problem
+## Assessment: Current Auth System
 
-Only `services.ebay_sync` rows exist in the database for both regions. When you click "Shopify Sync" or "Discord Notifications," the upsert tries to INSERT a new row. The code and RLS policies look correct (admin has ALL access, unique constraint exists for upsert), so the issue is likely **not** a permissions problem.
+The current login system works but is significantly over-engineered for a staff-only internal tool. Here's what's wrong:
 
-The real issue is that `services.shopify_sync` and `services.discord_notifications` rows simply don't exist yet. The upsert *should* create them, but the button click may be silently failing or the accordion is swallowing the click event before it reaches the button.
+### Problems
 
-Looking at the code, I notice the `isSaving` variable depends on `savingKey === saveKey`. If a previous save attempt failed and `savingKey` got stuck (or if the error handler doesn't run), subsequent clicks would find the button `disabled={isSaving}` permanently.
+1. **Auth.tsx is ~300 lines for a simple email/password form.** It uses 6 refs, 3 timers, a cancellation system, and attempt IDs — all to handle a race condition between `onAuthStateChange` and a role check. This complexity exists because the page duplicates work that `AuthContext` + `AuthGuard` already handle.
+
+2. **No forgot-password flow.** Staff who forget passwords are locked out with no self-service option. The admin must manually reset via the panel, and that edge function (`reset-user-password`) was previously undeployed.
+
+3. **The `reset-user-password` edge function is missing from `config.toml`.** It exists in code but was never registered, so it can't be deployed.
+
+4. **Error messages are developer-oriented**, not staff-friendly ("Invalid login credentials" means nothing to a shop employee).
+
+5. **Auth.tsx re-implements session detection** that `AuthContext` already provides via `useAuth()`.
+
+### What's actually needed for a staff-only internal tool
+
+- Email + password sign-in (already have)
+- "Forgot password" email reset (missing)
+- Admin-created accounts only, no public signup (already enforced)
+- Role check before dashboard access (already have via `AuthGuard`)
+- Clear error messages for staff
+
+---
 
 ## Plan
 
-### 1. Seed the missing service toggle rows
-Insert the missing `services.shopify_sync` and `services.discord_notifications` rows for both regions via a database migration. This ensures the upsert always hits an UPDATE (not INSERT), matching how `services.ebay_sync` already works.
+### 1. Simplify Auth.tsx (~300 lines → ~80 lines)
 
-```sql
-INSERT INTO region_settings (region_id, setting_key, setting_value, description)
-VALUES 
-  ('hawaii', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
-  ('hawaii', 'services.discord_notifications', 'false', 'Enable Discord order notifications'),
-  ('las_vegas', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
-  ('las_vegas', 'services.discord_notifications', 'false', 'Enable Discord order notifications')
-ON CONFLICT (region_id, setting_key) DO NOTHING;
-```
+Strip out all the ref/timer/cancellation machinery. The page should only do:
+- Render an email + password form
+- Call `supabase.auth.signInWithPassword()`
+- On success, navigate to `/` — `AuthGuard` handles the role check
+- On error, show a staff-friendly message
+- Add a "Forgot password?" link
 
-### 2. Add defensive error logging to the toggle click handler
-Update the boolean toggle's `onClick` in `RegionSettingsEditor.tsx` to log the error details to the console. This ensures any future upsert failures are visible rather than silently swallowed.
+The current `AuthContext` + `AuthGuard` already handles session detection and role verification on every protected route. Auth.tsx does not need to duplicate that.
 
-This is a small, targeted fix -- seeding the rows is the primary solution.
+### 2. Add forgot-password flow (two pieces)
+
+**a) "Forgot Password" trigger on Auth.tsx:**
+- Toggle between sign-in and forgot-password views
+- Call `supabase.auth.resetPasswordForEmail(email, { redirectTo: origin + '/reset-password' })`
+- Show confirmation message
+
+**b) New `/reset-password` page:**
+- Detects `type=recovery` from the URL hash (Supabase redirect)
+- Shows a "set new password" form
+- Calls `supabase.auth.updateUser({ password })`
+- Redirects to `/auth` on success
+
+**c) Add route to `public.tsx`** and path to `paths.ts`.
+
+### 3. Register `reset-user-password` in config.toml
+
+Add the missing entry so the admin panel's password reset actually works too.
+
+### 4. Staff-friendly error messages
+
+Map Supabase error strings to plain language:
+- "Invalid login credentials" → "Incorrect email or password. Try again or use Forgot Password below."
+- "Email not confirmed" → "Your account hasn't been activated yet. Contact your admin."
+- Generic fallback → "Something went wrong. Try again or contact your admin."
+
+### 5. Clean up unused auth helpers
+
+- Remove `useSession.ts` (unused — `AuthContext` provides the session)
+- Simplify `cleanupAuthState` in `auth.ts` (keep, but it's only used on sign-out)
+
+---
+
+### Files changed
+
+| File | Action |
+|------|--------|
+| `src/pages/Auth.tsx` | Rewrite: ~80 lines, simple form + forgot-password toggle |
+| `src/pages/ResetPassword.tsx` | **New**: password reset landing page |
+| `src/routes/paths.ts` | Add `resetPassword: '/reset-password'` |
+| `src/routes/public.tsx` | Add route for `/reset-password` |
+| `supabase/config.toml` | Add `[functions.reset-user-password]` entry |
+| `src/hooks/useSession.ts` | Delete (unused) |
+
+No database changes. No edge function code changes. No changes to `AuthContext` or `AuthGuard` — they work correctly as-is.
 
