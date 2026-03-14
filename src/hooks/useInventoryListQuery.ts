@@ -128,37 +128,25 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         .range(pageParam, pageParam + PAGE_SIZE - 1)
         .eq('store_key', storeKey);
 
-      // Location availability filter - uses shopify_inventory_levels join
+      // Location availability filter - uses DB function instead of fetching all levels
       if (locationAvailability === 'at-selected' && locationGid) {
-        // Show only items with stock > 0 at the selected location
-        // This requires a subquery/filter on shopify_inventory_levels
         const { data: itemsWithStock } = await supabase
-          .from('shopify_inventory_levels')
-          .select('inventory_item_id')
-          .eq('store_key', storeKey)
-          .eq('location_gid', locationGid)
-          .gt('available', 0);
+          .rpc('get_items_with_stock', { p_store_key: storeKey, p_location_gid: locationGid });
         
-        const inventoryItemIds = (itemsWithStock || []).map(l => l.inventory_item_id);
+        const inventoryItemIds = (itemsWithStock || []).map((r: any) => r.shopify_inventory_item_id);
         if (inventoryItemIds.length > 0) {
           query = query.in('shopify_inventory_item_id', inventoryItemIds);
         } else {
-          // No items have stock at this location
           query = query.eq('id', 'no-match-force-empty');
         }
       } else if (locationAvailability === 'anywhere') {
-        // Show only items with stock > 0 at ANY location
         const { data: itemsWithAnyStock } = await supabase
-          .from('shopify_inventory_levels')
-          .select('inventory_item_id')
-          .eq('store_key', storeKey)
-          .gt('available', 0);
+          .rpc('get_items_with_stock', { p_store_key: storeKey });
         
-        const uniqueInventoryItemIds = [...new Set((itemsWithAnyStock || []).map(l => l.inventory_item_id))];
-        if (uniqueInventoryItemIds.length > 0) {
-          query = query.in('shopify_inventory_item_id', uniqueInventoryItemIds);
+        const inventoryItemIds = (itemsWithAnyStock || []).map((r: any) => r.shopify_inventory_item_id);
+        if (inventoryItemIds.length > 0) {
+          query = query.in('shopify_inventory_item_id', inventoryItemIds);
         } else {
-          // No items have stock anywhere
           query = query.eq('id', 'no-match-force-empty');
         }
       }
