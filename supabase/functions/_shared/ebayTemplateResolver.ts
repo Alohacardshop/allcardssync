@@ -376,6 +376,43 @@ export function buildDescription(item: any, template?: string | null): string {
       .trim()
   }
 
+  const isComic = item.main_category === 'comics'
+  const snapshot = item.catalog_snapshot || item.psa_snapshot || {}
+
+  if (isComic) {
+    // Comic-specific fallback description
+    const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
+    const publisher = (snapshot as any).brandTitle || item.brand_title
+    const comicName = (snapshot as any).subject || item.subject
+    const rawIssue = (snapshot as any).issueNumber || (snapshot as any).cardNumber || item.card_number
+    const pubDateStr = (snapshot as any).publicationDate || (snapshot as any).year || item.year
+    let pubDateDisplay = ''
+    if (pubDateStr) {
+      const m = String(pubDateStr).trim().match(/^(\d{4})-(\d{1,2})/)
+      if (m) {
+        const mi = parseInt(m[2], 10) - 1
+        if (mi >= 0 && mi <= 11) pubDateDisplay = `${MONTH_NAMES[mi]} ${m[1]}`
+        else pubDateDisplay = m[1]
+      } else {
+        pubDateDisplay = String(pubDateStr).trim()
+      }
+    }
+
+    const lines: string[] = [`<h2>${comicName || 'Comic'}</h2>`]
+    if (publisher) lines.push(`<p><strong>Publisher:</strong> ${publisher}</p>`)
+    if (rawIssue) lines.push(`<p><strong>Issue:</strong> #${String(rawIssue).replace(/^#/, '')}</p>`)
+    if (pubDateDisplay) lines.push(`<p><strong>Publication Date:</strong> ${pubDateDisplay}</p>`)
+    if (item.variant) lines.push(`<p><strong>Variant:</strong> ${item.variant}</p>`)
+    if (item.grade) {
+      const grader = item.grading_company || 'PSA'
+      lines.push(`<p><strong>Grade:</strong> ${grader} ${item.grade}</p>`)
+    }
+    if (item.psa_cert) lines.push(`<p><strong>PSA Cert:</strong> ${item.psa_cert}</p>`)
+    if (item.cgc_cert) lines.push(`<p><strong>CGC Cert:</strong> ${item.cgc_cert}</p>`)
+    return lines.join('\n')
+  }
+
+  // Card fallback description
   const lines: string[] = [`<h2>${item.subject || 'Trading Card'}</h2>`]
   if (item.brand_title) lines.push(`<p><strong>Brand:</strong> ${item.brand_title}</p>`)
   if (item.year) lines.push(`<p><strong>Year:</strong> ${item.year}</p>`)
