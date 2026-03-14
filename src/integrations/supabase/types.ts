@@ -2769,6 +2769,7 @@ export type Database = {
         Row: {
           cached_at: string
           expires_at: string
+          is_hidden: boolean
           location_gid: string
           location_id: string
           location_name: string | null
@@ -2777,6 +2778,7 @@ export type Database = {
         Insert: {
           cached_at?: string
           expires_at?: string
+          is_hidden?: boolean
           location_gid: string
           location_id: string
           location_name?: string | null
@@ -2785,6 +2787,7 @@ export type Database = {
         Update: {
           cached_at?: string
           expires_at?: string
+          is_hidden?: boolean
           location_gid?: string
           location_id?: string
           location_name?: string | null

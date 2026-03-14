@@ -4,6 +4,7 @@ import { VendorManagement } from "./VendorManagement";
 import { DuplicateCleanup } from "./DuplicateCleanup";
 import ShopifyEnvironmentSetup from "./ShopifyEnvironmentSetup";
 import { ShopifyConfig } from "./ShopifyConfig";
+import { LocationVisibilityManager } from "./LocationVisibilityManager";
 import { ShopifyMetafieldSetup } from "./ShopifyMetafieldSetup";
 import { ShopifyWebhookStatus } from "./ShopifyWebhookStatus";
 import { WebhookMonitor } from "./WebhookMonitor";
@@ -28,6 +29,7 @@ export function StoreManagementTabs() {
       <TabsContent value="config" className="space-y-6">
         <ShopifyEnvironmentSetup />
         <ShopifyConfig />
+        <LocationVisibilityManager />
         <ShopifyMetafieldSetup />
       </TabsContent>
 

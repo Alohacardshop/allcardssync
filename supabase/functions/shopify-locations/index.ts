@@ -88,12 +88,20 @@ Deno.serve(async (req) => {
     const locations = (data.locations || []).filter((l: any) => l.active);
     console.log(`shopify-locations: Found ${locations.length} locations for store ${storeKey}`);
 
-    // Cache locations in shopify_location_cache table
+    // Cache locations in shopify_location_cache table (preserve is_hidden flag)
     for (const loc of locations) {
       const gid = `gid://shopify/Location/${loc.id}`;
       const now = new Date();
       const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours from now
       
+      // Check if entry exists to preserve is_hidden
+      const { data: existing } = await supabase
+        .from("shopify_location_cache")
+        .select("is_hidden")
+        .eq("store_key", storeKey)
+        .eq("location_gid", gid)
+        .maybeSingle();
+
       await supabase
         .from("shopify_location_cache")
         .upsert({
@@ -102,16 +110,27 @@ Deno.serve(async (req) => {
           location_id: String(loc.id),
           location_name: loc.name,
           cached_at: now.toISOString(),
-          expires_at: expires.toISOString()
+          expires_at: expires.toISOString(),
+          is_hidden: existing?.is_hidden ?? false
         }, { onConflict: 'store_key,location_gid' });
     }
+
+    // Filter out hidden locations from the response
+    const { data: hiddenLocs } = await supabase
+      .from("shopify_location_cache")
+      .select("location_gid")
+      .eq("store_key", storeKey)
+      .eq("is_hidden", true);
+    
+    const hiddenGids = new Set((hiddenLocs || []).map(h => h.location_gid));
+    const visibleLocations = locations.filter((l: any) => !hiddenGids.has(`gid://shopify/Location/${l.id}`));
     
     return new Response(
       JSON.stringify({ 
         ok: true, 
         storeKey,
-        count: locations.length,
-        locations: locations.map((l: any) => ({
+        count: visibleLocations.length,
+        locations: visibleLocations.map((l: any) => ({
           id: l.id,
           gid: `gid://shopify/Location/${l.id}`,
           name: l.name,
