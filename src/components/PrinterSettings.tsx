@@ -71,37 +71,15 @@ export const PrinterSettings: React.FC = () => {
   };
 
   const handleTestPrint = async () => {
-    if (!qzConnected) {
-      toast.error('QZ Tray not connected. Click Connect first.');
-      return;
-    }
-    
-    if (!selectedPrinter) {
-      toast.error('Select a printer first');
-      return;
-    }
-
     setIsPrinting(true);
-    
-    // Simple test label ZPL - 2" x 1" label
-    const testZpl = `^XA
-^LT-10
-^CF0,30
-^FO50,20^FDTEST PRINT^FS
-^CF0,20
-^FO50,60^FD${selectedPrinter}^FS
-^FO50,110^FD${new Date().toLocaleString()}^FS
-^BY2,2,50
-^FO50,140^BC^FDTEST123^FS
-^XZ`;
 
-    const result = await zebraService.print(testZpl, selectedPrinter);
+    const result = await sendTestPrint(selectedPrinter || undefined);
     setIsPrinting(false);
 
     if (result.success) {
-      toast.success('Test label sent to printer!');
+      toast.success('Test label sent!');
     } else {
-      toast.error(`Print failed: ${result.error || 'Unknown error'}`);
+      toast.error(`Test print failed: ${result.error || 'Unknown error'}`);
     }
   };
 
