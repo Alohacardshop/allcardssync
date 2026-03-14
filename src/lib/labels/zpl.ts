@@ -134,43 +134,63 @@ export function zplFromElements(
 
 // ============= Template Variable Substitution =============
 
+/**
+ * User-friendly placeholder aliases.
+ * Template authors can write {{title}} or {{CARDNAME}} — both work.
+ * Add new aliases here; no other code changes needed.
+ */
+const PLACEHOLDER_ALIASES: Record<string, keyof JobVars> = {
+  title:     'CARDNAME',
+  name:      'CARDNAME',
+  set:       'SETNAME',
+  number:    'CARDNUMBER',
+  condition: 'CONDITION',
+  grade:     'CONDITION',
+  price:     'PRICE',
+  sku:       'SKU',
+  barcode:   'BARCODE',
+  vendor:    'VENDOR',
+  year:      'YEAR',
+  category:  'CATEGORY',
+};
+
+/** Resolve all {{placeholder}} tokens in a ZPL string. Case-insensitive. */
+export function resolveZplPlaceholders(zpl: string, vars: JobVars): string {
+  return zpl.replace(/\{\{(\w+)\}\}/gi, (_match, rawKey: string) => {
+    const key = rawKey.trim();
+    // Direct match (e.g. {{CARDNAME}})
+    const directKey = key.toUpperCase() as keyof JobVars;
+    if (directKey in vars && vars[directKey] != null) {
+      return applyFormatter(directKey, vars[directKey]!);
+    }
+    // Alias match (e.g. {{title}} → CARDNAME)
+    const aliasKey = PLACEHOLDER_ALIASES[key.toLowerCase()];
+    if (aliasKey && vars[aliasKey] != null) {
+      return applyFormatter(aliasKey, vars[aliasKey]!);
+    }
+    // Unresolved — leave as-is so it's visible during debugging
+    return _match;
+  });
+}
+
+/** Apply field-specific formatting */
+function applyFormatter(key: keyof JobVars, value: string): string {
+  switch (key) {
+    case 'CARDNAME': return formatTitle(value);
+    case 'CONDITION': return formatCondition(value);
+    case 'PRICE': return formatPriceWithSpacing(value);
+    default: return safe(value);
+  }
+}
+
+// Legacy functions — delegate to resolveZplPlaceholders for backward compat
+
 export function zplFromTemplateString(zpl: string, v: JobVars): string {
-  return zpl
-    .replace(/\{\{CARDNAME\}\}/g, formatTitle(safe(v.CARDNAME)))
-    .replace(/\{\{SETNAME\}\}/g, safe(v.SETNAME))
-    .replace(/\{\{CARDNUMBER\}\}/g, safe(v.CARDNUMBER))
-    .replace(/\{\{CONDITION\}\}/g, formatCondition(safe(v.CONDITION)))
-    .replace(/\{\{PRICE\}\}/g, formatPriceWithSpacing(safe(v.PRICE)))
-    .replace(/\{\{SKU\}\}/g, safe(v.SKU))
-    .replace(/\{\{BARCODE\}\}/g, safe(v.BARCODE))
-    .replace(/\{\{VENDOR\}\}/g, safe(v.VENDOR))
-    .replace(/\{\{YEAR\}\}/g, safe(v.YEAR))
-    .replace(/\{\{CATEGORY\}\}/g, safe(v.CATEGORY));
+  return resolveZplPlaceholders(zpl, v);
 }
 
 export function applyVariablesToZpl(zpl: string, vars: JobVars): string {
-  let result = zpl;
-  
-  const replacements: [string, string | undefined][] = [
-    ['CARDNAME', vars.CARDNAME],
-    ['SETNAME', vars.SETNAME],
-    ['CARDNUMBER', vars.CARDNUMBER],
-    ['CONDITION', vars.CONDITION],
-    ['PRICE', vars.PRICE],
-    ['SKU', vars.SKU],
-    ['BARCODE', vars.BARCODE],
-    ['VENDOR', vars.VENDOR],
-    ['YEAR', vars.YEAR],
-    ['CATEGORY', vars.CATEGORY],
-  ];
-  
-  for (const [key, value] of replacements) {
-    if (value) {
-      result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), escapeZpl(value));
-    }
-  }
-  
-  return result;
+  return resolveZplPlaceholders(zpl, vars);
 }
 
 // ============= Quantity Injection =============
