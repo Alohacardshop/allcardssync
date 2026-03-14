@@ -144,6 +144,7 @@ export async function sendBulkZplToPrinter(items: BulkPrintItem[]): Promise<Bulk
       const config = getPrintEnvConfig();
       for (const v of validItems) {
         const jobId = `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        logPrintJob({ mode: config.mode, title: v.title, quantity: v.qty, success: true, zplBytes: v.zpl.length });
         results.push({
           success: true,
           jobId,
@@ -154,7 +155,9 @@ export async function sendBulkZplToPrinter(items: BulkPrintItem[]): Promise<Bulk
       }
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
+      const config = getPrintEnvConfig();
       for (const v of validItems) {
+        logPrintJob({ mode: config.mode, title: v.title, quantity: v.qty, success: false, error, zplBytes: v.zpl.length });
         results.push({ success: false, error, status: 'error' });
         failed++;
       }
