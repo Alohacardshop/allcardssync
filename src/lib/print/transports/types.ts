@@ -62,8 +62,8 @@ export interface PrintResult {
   error?: string;
   /** Job identifier for tracking / reprint */
   jobId?: string;
-  /** Resolved status */
-  status: PrintJobStatus;
+  /** Resolved status — defaults to success/error based on `success` flag */
+  status?: PrintJobStatus;
 }
 
 // ---------------------------------------------------------------------------
