@@ -19,8 +19,8 @@
   */
  export function useInventoryViews() {
    const queryClient = useQueryClient();
-   const { data: session } = useSession();
-   const userId = session?.user?.id;
+  const { user } = useAuth();
+  const userId = user?.id;
  
    // Fetch all views for the current user
    const { data: views = [], isLoading } = useQuery({

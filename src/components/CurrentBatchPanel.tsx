@@ -36,7 +36,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
   const logger = useLogger('CurrentBatchPanel');
   const queryClient = useQueryClient();
   const { assignedStore, selectedLocation, availableLocations } = useStore();
-  const { data: session } = useSession();
+  const { session } = useAuth();
   
   // Use React Query for batch data
   const { data: batchData, isLoading: loading, refetch } = useCurrentBatch({
