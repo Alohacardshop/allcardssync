@@ -999,16 +999,26 @@ export function UserAssignmentManager() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Email</TableHead>
+                <TableHead>User</TableHead>
                 <TableHead>Roles</TableHead>
+                <TableHead>PIN Status</TableHead>
                 <TableHead>Store Access</TableHead>
-                <TableHead className="w-[100px]">Actions</TableHead>
+                <TableHead className="w-[120px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {users.map(user => (
                 <TableRow key={user.id}>
-                  <TableCell className="font-medium">{user.email}</TableCell>
+                  <TableCell>
+                    <div>
+                      {user.pinInfo ? (
+                        <div className="font-medium">{user.pinInfo.display_name}</div>
+                      ) : (
+                        <div className="font-medium text-muted-foreground">No display name</div>
+                      )}
+                      <div className="text-xs text-muted-foreground">{user.email}</div>
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       {user.roles.map(role => (
@@ -1020,6 +1030,23 @@ export function UserAssignmentManager() {
                         <Badge variant="outline">No roles</Badge>
                       )}
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    {user.pinInfo ? (
+                      user.pinInfo.locked_until && new Date(user.pinInfo.locked_until) > new Date() ? (
+                        <Badge variant="destructive" className="flex items-center gap-1 w-fit">
+                          <Lock className="h-3 w-3" />
+                          Locked
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground w-fit">
+                          <Check className="h-3 w-3 mr-1" />
+                          Active
+                        </Badge>
+                      )
+                    ) : (
+                      <Badge variant="secondary" className="w-fit">No PIN</Badge>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="space-y-1">
@@ -1046,14 +1073,28 @@ export function UserAssignmentManager() {
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleResetPassword(user.id, user.email)}
-                        title="Reset password"
-                      >
-                        <KeyRound className="h-4 w-4" />
-                      </Button>
+                      {user.pinInfo?.locked_until && new Date(user.pinInfo.locked_until) > new Date() && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              const { data, error } = await supabase.functions.invoke('manage-staff-pin', {
+                                body: { action: 'unlock', userId: user.id }
+                              });
+                              if (error) throw error;
+                              if (!data?.ok) throw new Error(data?.error);
+                              toast.success(`Unlocked ${user.pinInfo?.display_name}`);
+                              await loadData();
+                            } catch (err: any) {
+                              toast.error(`Failed to unlock: ${err.message}`);
+                            }
+                          }}
+                          title="Unlock account"
+                        >
+                          <Unlock className="h-4 w-4" />
+                        </Button>
+                      )}
                       {isAdmin && (
                         <Button
                           variant="ghost"
