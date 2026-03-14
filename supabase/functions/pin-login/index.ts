@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
             locked: true,
             minutesLeft,
           }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       // Lockout expired, reset
