@@ -189,6 +189,11 @@ export function UserAssignmentManager() {
         throw assignError;
       }
 
+      // Load staff PINs (for admin view)
+      const { data: staffPins } = await supabase
+        .from("staff_pins")
+        .select("user_id, display_name, failed_attempts, locked_until");
+
       // Combine data
       const usersWithDetails: UserWithDetails[] = [];
       
@@ -212,10 +217,17 @@ export function UserAssignmentManager() {
             });
           });
 
+          const pinRecord = staffPins?.find(p => p.user_id === authUser.id);
+
           usersWithDetails.push({
             id: authUser.id,
             email: authUser.email || 'No email',
             roles: authUser.roles || [],
+            pinInfo: pinRecord ? {
+              display_name: pinRecord.display_name,
+              failed_attempts: pinRecord.failed_attempts,
+              locked_until: pinRecord.locked_until,
+            } : null,
             storeAssignments
           });
         }
