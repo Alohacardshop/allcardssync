@@ -325,12 +325,16 @@ const InventoryPage = () => {
     key: K,
     value: InventoryFilterState[K]
   ) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
-  }, []);
+    setFilters(prev => {
+      const next = { ...prev, [key]: value };
+      syncToUrl(next);
+      return next;
+    });
+  }, [syncToUrl]);
 
   // Clear all filters
   const handleClearAllFilters = useCallback(() => {
-    setFilters({
+    const cleared: InventoryFilterState = {
       searchTerm: '',
       statusFilter: 'active',
       typeFilter: 'all',
@@ -345,9 +349,11 @@ const InventoryPage = () => {
       locationAvailability: 'any',
       tagFilter: [],
       activeQuickFilter: null,
-    });
+    };
+    setFilters(cleared);
+    syncToUrl(cleared);
      setActiveViewId(null);
-  }, []);
+  }, [syncToUrl]);
 
    // Apply a saved view
    const handleApplyView = useCallback((view: SavedInventoryView) => {
