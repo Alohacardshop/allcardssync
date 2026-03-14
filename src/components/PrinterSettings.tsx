@@ -8,6 +8,7 @@ import { Printer, Wifi, WifiOff, RefreshCw, Check, AlertCircle, MapPin, Info, Se
 import { toast } from 'sonner';
 import { usePrinter } from '@/hooks/usePrinter';
 import { zebraService } from '@/lib/printer/zebraService';
+import { sendTestPrint } from '@/lib/print/testLabel';
 import { useStore } from '@/contexts/StoreContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQzTray } from '@/hooks/useQzTray';
