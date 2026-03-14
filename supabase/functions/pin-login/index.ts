@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
             : `Account locked for ${LOCKOUT_MINUTES} minutes.`,
           locked: newAttempts >= MAX_ATTEMPTS,
         }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
