@@ -25,6 +25,8 @@ export interface PrintLogEntry {
   error?: string;
   /** ZPL byte count (not the full ZPL — keep logs small) */
   zplBytes: number;
+  /** Final rendered ZPL stored for debugging (truncated at 4 KB) */
+  zplSnapshot?: string;
 }
 
 // ---------------------------------------------------------------------------

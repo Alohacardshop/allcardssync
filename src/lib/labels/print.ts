@@ -3,28 +3,21 @@
  *
  * Supports single and bulk printing. Uses the transport layer (mock/tcp)
  * resolved from env config. Returns structured results per job.
- *
- * Future: accept `printerId` in PrintRequest to route to specific printers.
  */
 import type { PrinterPrefs } from './types';
-import type { PrintRequest, PrintResult } from '@/lib/print/transports/types';
+import type { PrintResult } from '@/lib/print/transports/types';
 import { printQueue } from '@/lib/print/queueInstance';
 import { sanitizeLabel } from '@/lib/print/sanitizeZpl';
-import { getPrintEnvConfig, isPrintConfigValid, getPrintConfigWarnings } from '@/lib/print/envConfig';
+import { getPrintEnvConfig } from '@/lib/print/envConfig';
+import { runPreflight } from '@/lib/print/preflight';
 import { logPrintJob } from '@/lib/print/printLog';
 import { logger } from '@/lib/logger';
 
 // ---------------------------------------------------------------------------
-// Validation
+// Constants
 // ---------------------------------------------------------------------------
 
-function validateZpl(zpl: string): string | null {
-  if (!zpl || typeof zpl !== 'string') return 'ZPL payload is required';
-  const trimmed = zpl.trim();
-  if (trimmed.length === 0) return 'ZPL payload is empty';
-  if (!trimmed.includes('^XA')) return 'Invalid ZPL: missing ^XA start command';
-  return null;
-}
+const MAX_ZPL_SNAPSHOT = 4096; // Truncate stored ZPL at 4 KB
 
 // ---------------------------------------------------------------------------
 // Single print
@@ -37,23 +30,15 @@ export async function sendZplToPrinter(
   prefs?: PrinterPrefs,
 ): Promise<PrintResult> {
   const config = getPrintEnvConfig();
-
-  // Validate config
-  if (config.mode !== 'mock' && !isPrintConfigValid()) {
-    const warnings = getPrintConfigWarnings();
-    const msg = warnings.map((w) => `${w.field}: ${w.message}`).join('; ');
-    logger.error('[print] Invalid printer config', new Error(msg), undefined, 'print-api');
-    return { success: false, error: `Printer misconfigured: ${msg}`, status: 'error' };
-  }
-
-  // Validate ZPL
-  const zplError = validateZpl(zpl);
-  if (zplError) {
-    logger.warn('[print] Validation failed', { title, error: zplError }, 'print-api');
-    return { success: false, error: zplError, status: 'error' };
-  }
-
   const qty = prefs?.copies || 1;
+
+  // Centralized preflight
+  const preflight = runPreflight({ zpl, copies: qty });
+  if (!preflight.ok) {
+    const msg = preflight.errors.join(' ');
+    logger.warn('[print] Preflight failed', { title, errors: preflight.errors }, 'print-api');
+    return { success: false, error: msg, status: 'error' };
+  }
 
   logger.debug('[print] Preparing job', {
     title,
@@ -68,19 +53,36 @@ export async function sendZplToPrinter(
 
     await printQueue.enqueueSafe({ zpl: safeZpl, qty, usePQ: true });
 
+    const modeTag = config.mode === 'mock' ? '[MOCK] ' : '';
+
     logger.info('[print] Job queued', { jobId, title, qty, mode: config.mode }, 'print-api');
-    logPrintJob({ mode: config.mode, title, quantity: qty, success: true, zplBytes: safeZpl.length });
+    logPrintJob({
+      mode: config.mode,
+      title,
+      quantity: qty,
+      success: true,
+      zplBytes: safeZpl.length,
+      zplSnapshot: safeZpl.slice(0, MAX_ZPL_SNAPSHOT),
+    });
 
     return {
       success: true,
       jobId,
-      message: `Queued ${qty} label(s): "${title}" [${config.mode}]`,
+      message: `${modeTag}Queued ${qty} label(s): "${title}" [${config.mode}]`,
       status: 'queued',
     };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     logger.error('[print] Failed to queue job', err instanceof Error ? err : new Error(error), { title }, 'print-api');
-    logPrintJob({ mode: config.mode, title, quantity: qty, success: false, error, zplBytes: zpl.length });
+    logPrintJob({
+      mode: config.mode,
+      title,
+      quantity: qty,
+      success: false,
+      error,
+      zplBytes: zpl.length,
+      zplSnapshot: zpl.slice(0, MAX_ZPL_SNAPSHOT),
+    });
     return { success: false, error, status: 'error' };
   }
 }
@@ -103,35 +105,39 @@ export interface BulkPrintResult {
   results: PrintResult[];
 }
 
+const MAX_BULK = 200;
+
 /** Send multiple labels in one call. Each item is validated independently. Max 200 items. */
 export async function sendBulkZplToPrinter(items: BulkPrintItem[]): Promise<BulkPrintResult> {
   if (!items || items.length === 0) {
     return { success: false, total: 0, queued: 0, failed: 0, results: [] };
   }
 
-  const MAX_BULK = 200;
   if (items.length > MAX_BULK) {
     return {
       success: false,
       total: items.length,
       queued: 0,
       failed: items.length,
-      results: [{ success: false, error: `Bulk print limited to ${MAX_BULK} items. Got ${items.length}.`, status: 'error' }],
+      results: [{
+        success: false,
+        error: `Bulk print limited to ${MAX_BULK} items. You sent ${items.length} — split into smaller batches.`,
+        status: 'error',
+      }],
     };
   }
 
   const config = getPrintEnvConfig();
 
-  // Validate config (same as single print)
-  if (config.mode !== 'mock' && !isPrintConfigValid()) {
-    const warnings = getPrintConfigWarnings();
-    const msg = warnings.map((w) => `${w.field}: ${w.message}`).join('; ');
+  // Shared preflight (config-level only, ZPL checked per-item below)
+  const configCheck = runPreflight({});
+  if (!configCheck.ok) {
     return {
       success: false,
       total: items.length,
       queued: 0,
       failed: items.length,
-      results: [{ success: false, error: `Printer misconfigured: ${msg}`, status: 'error' }],
+      results: [{ success: false, error: configCheck.errors.join(' '), status: 'error' }],
     };
   }
 
@@ -143,9 +149,9 @@ export async function sendBulkZplToPrinter(items: BulkPrintItem[]): Promise<Bulk
   const validItems: { zpl: string; qty: number; title: string }[] = [];
 
   for (const item of items) {
-    const zplError = validateZpl(item.zpl);
-    if (zplError) {
-      results.push({ success: false, error: `${item.title}: ${zplError}`, status: 'error' });
+    const itemCheck = runPreflight({ zpl: item.zpl, copies: item.prefs?.copies });
+    if (!itemCheck.ok) {
+      results.push({ success: false, error: `${item.title}: ${itemCheck.errors.join('; ')}`, status: 'error' });
       failed++;
       continue;
     }
@@ -156,7 +162,7 @@ export async function sendBulkZplToPrinter(items: BulkPrintItem[]): Promise<Bulk
     });
   }
 
-  // Batch enqueue all valid items at once for efficiency
+  // Batch enqueue all valid items
   if (validItems.length > 0) {
     try {
       const queueItems = validItems.map((v) => ({
@@ -167,40 +173,44 @@ export async function sendBulkZplToPrinter(items: BulkPrintItem[]): Promise<Bulk
 
       printQueue.enqueueMany(queueItems);
 
-      const config = getPrintEnvConfig();
+      const modeTag = config.mode === 'mock' ? '[MOCK] ' : '';
       for (const v of validItems) {
         const jobId = `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        logPrintJob({ mode: config.mode, title: v.title, quantity: v.qty, success: true, zplBytes: v.zpl.length });
+        logPrintJob({
+          mode: config.mode,
+          title: v.title,
+          quantity: v.qty,
+          success: true,
+          zplBytes: v.zpl.length,
+          zplSnapshot: v.zpl.slice(0, MAX_ZPL_SNAPSHOT),
+        });
         results.push({
           success: true,
           jobId,
-          message: `Queued ${v.qty} label(s): "${v.title}" [${config.mode}]`,
+          message: `${modeTag}Queued ${v.qty} label(s): "${v.title}" [${config.mode}]`,
           status: 'queued',
         });
         queued++;
       }
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
-      const config = getPrintEnvConfig();
       for (const v of validItems) {
-        logPrintJob({ mode: config.mode, title: v.title, quantity: v.qty, success: false, error, zplBytes: v.zpl.length });
+        logPrintJob({
+          mode: config.mode,
+          title: v.title,
+          quantity: v.qty,
+          success: false,
+          error,
+          zplBytes: v.zpl.length,
+          zplSnapshot: v.zpl.slice(0, MAX_ZPL_SNAPSHOT),
+        });
         results.push({ success: false, error, status: 'error' });
         failed++;
       }
     }
   }
 
-  logger.info('[print] Bulk job complete', {
-    total: items.length,
-    queued,
-    failed,
-  }, 'print-api');
+  logger.info('[print] Bulk job complete', { total: items.length, queued, failed }, 'print-api');
 
-  return {
-    success: failed === 0,
-    total: items.length,
-    queued,
-    failed,
-    results,
-  };
+  return { success: failed === 0, total: items.length, queued, failed, results };
 }
