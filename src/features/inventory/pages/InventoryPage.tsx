@@ -31,6 +31,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useInventoryTruthMode } from '@/hooks/useInventoryTruthMode';
 
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
+import { useCollectionProducts } from '@/hooks/useCollectionProducts';
 import { useLocationNames } from '@/hooks/useLocationNames';
 import { useShopifyTags } from '@/hooks/useShopifyTags';
 import { useShopifyCollections, groupCollections } from '@/hooks/useShopifyCollections';
