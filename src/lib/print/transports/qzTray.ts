@@ -4,11 +4,17 @@
  */
 import { zebraService } from '@/lib/printer/zebraService';
 import { logger } from '@/lib/logger';
-import { getConfiguredPrinter } from '../queueInstance';
 import type { PrintTransport } from './types';
 
+// Printer name is injected by the queue instance to avoid circular imports
+let resolvedPrinterName: string | null = null;
+
+export function setQzPrinterName(name: string | null) {
+  resolvedPrinterName = name;
+}
+
 export const qzTrayTransport: PrintTransport = async (payload) => {
-  const printerName = getConfiguredPrinter() || zebraService.getConfig()?.name || null;
+  const printerName = resolvedPrinterName || zebraService.getConfig()?.name || null;
 
   if (!printerName) {
     const error = 'No printer configured. Please select a printer in Settings.';
