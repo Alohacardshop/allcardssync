@@ -691,7 +691,7 @@ function getOrderRegionFromPayload(payload: any, shopDomain: string | null): str
   // 2. Check fulfillment location name in order
   const fulfillmentLocation = payload.fulfillment_location_name || payload.location_name || '';
   const locationLower = fulfillmentLocation.toLowerCase();
-  if (locationLower.includes('vegas') || locationLower.includes('las vegas') || locationLower.includes('702')) {
+  if (locationLower.includes('vegas') || locationLower.includes('las vegas')) {
     return 'las_vegas';
   }
   if (locationLower.includes('hawaii') || locationLower.includes('honolulu')) {
