@@ -520,6 +520,8 @@ export function UserAssignmentManager() {
     setFormData({
       email: user.email,
       password: "",
+      displayName: user.pinInfo?.display_name || "",
+      pin: "",
       roles: user.roles,
       selectedRegion: userRegion,
       selectedStores: Object.keys(user.storeAssignments),
