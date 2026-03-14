@@ -199,6 +199,7 @@ const InventoryPage = () => {
     storeKey: assignedStore || '',
     locationGid: filters.locationFilter,
     collectionFilter: filters.collectionFilter,
+    collectionProductIds: collectionProductIds ?? undefined,
     categoryFilter: filters.categoryFilter,
     statusFilter: filters.statusFilter,
     batchFilter: filters.batchFilter,
