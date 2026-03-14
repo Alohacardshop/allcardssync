@@ -61,6 +61,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         activeTab,
         categoryFilter = 'all',
         collectionFilter = 'all',
+        collectionProductIds,
         statusFilter,
         batchFilter,
         printStatusFilter = 'all',
