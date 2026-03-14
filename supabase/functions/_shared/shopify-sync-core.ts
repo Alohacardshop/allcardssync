@@ -438,19 +438,23 @@ export async function syncGradedItemToShopify(
         if (subject) parts.push(subject)
         if (cardNumber) parts.push(`#${cardNumber}`)
         if (cardVariant) parts.push(cardVariant)
-        if (category && category !== 'Normal') parts.push(category.toLowerCase())
         if (grade) parts.push(`${gradingCompany} ${grade}`)
         
         const cleanedParts = deduplicateParts(parts.filter(Boolean))
         title = cleanedParts.join(' ')
       }
 
-      description = title
-      if (psaCert) description += ` ${psaCert}`
-      description += `\n\nGraded ${brandTitle} ${subject}`
-      if (year) description += ` from ${year}`
-      if (grade) description += `, ${gradingCompany} Grade ${grade}`
-      // PSA URL intentionally omitted — eBay prohibits external URLs in descriptions
+      // HTML description matching comic description format
+      const descLines: string[] = []
+      descLines.push(`<strong>Graded Card — ${gradingCompany}</strong><br>`)
+      if (psaCert) descLines.push(`<strong>Cert Number:</strong> ${psaCert}<br>`)
+      if (grade) descLines.push(`<strong>Grade:</strong> ${gradingCompany} ${grade}<br>`)
+      if (subject) descLines.push(`<strong>Subject:</strong> ${subject}<br>`)
+      if (brandTitle) descLines.push(`<strong>Brand:</strong> ${brandTitle}<br>`)
+      if (year) descLines.push(`<strong>Year:</strong> ${year}<br>`)
+      if (cardNumber) descLines.push(`<strong>Card #:</strong> #${cardNumber}<br>`)
+      if (cardVariant) descLines.push(`<strong>Variant:</strong> ${cardVariant}<br>`)
+      description = descLines.join('')
     }
 
     // ── Metafields ──

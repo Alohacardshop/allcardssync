@@ -141,27 +141,102 @@ Deno.serve(async (req) => {
       throw new Error(`Missing Shopify credentials for ${storeKey}`)
     }
 
-    // Create raw card title
+    // ── Build raw title (unified 4-path logic matching generateTitle.ts) ──
     const brandTitle = intakeItem.brand_title || ''
     const subject = intakeItem.subject || ''
     const cardNumber = intakeItem.card_number || ''
     const condition = intakeItem.variant || 'NM'
+    const year = intakeItem.year || ''
+    const snapshot = intakeItem.catalog_snapshot || intakeItem.psa_snapshot || {}
 
-    const parts = [brandTitle, subject, cardNumber, condition].filter(Boolean)
-    const title = parts.join(' ')
+    // Check if comic (before new product creation section too)
+    const isComicForTitle = intakeItem.main_category === 'comics' || snapshot?.type === 'raw_comic'
 
-    // Create product description with title and SKU
-    let description = title
-    if (intakeItem.sku) description += `\nSKU: ${intakeItem.sku}`
-    
-    // Add detailed description
-    description += `\n\nRaw ${brandTitle} ${subject}`
-    if (cardNumber) description += ` #${cardNumber}`
-    if (condition) description += ` - ${condition} Condition`
-    
+    let title: string
+    let description: string
+
+    // Dedup helper (inline since can't import from src/)
+    const dedup = (parts: string[]): string[] => {
+      const seen = new Set<string>()
+      const result: string[] = []
+      for (const part of parts) {
+        const words = part.split(/\s+/)
+        const kept: string[] = []
+        for (const w of words) {
+          const lower = w.toLowerCase()
+          if (!seen.has(lower)) { seen.add(lower); kept.push(w) }
+        }
+        if (kept.length) result.push(kept.join(' '))
+      }
+      return result
+    }
+
+    if (isComicForTitle) {
+      // Raw Comic: PUBLISHER TITLE #ISSUE MONTH YEAR CONDITION
+      const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
+      const publisher = snapshot.brandTitle || brandTitle
+      const comicName = snapshot.subject || subject
+      const rawIssue = snapshot.issueNumber || snapshot.cardNumber || cardNumber
+      const issueNum = rawIssue ? `#${String(rawIssue).replace(/^#/, '').trim()}` : ''
+      const pubDateStr = snapshot.publicationDate || snapshot.year || year
+      let monthStr = ''
+      let yearStr = ''
+      if (pubDateStr) {
+        const m = String(pubDateStr).trim().match(/^(\d{4})-(\d{1,2})/)
+        if (m) {
+          const mi = parseInt(m[2], 10) - 1
+          if (mi >= 0 && mi <= 11) monthStr = MONTH_NAMES[mi]
+          yearStr = m[1]
+        } else {
+          const yo = String(pubDateStr).trim().match(/^(\d{4})$/)
+          if (yo) yearStr = yo[1]
+        }
+      }
+
+      const parts: string[] = []
+      if (publisher) parts.push(publisher)
+      if (comicName) parts.push(comicName)
+      if (issueNum && !/^#0+$/.test(issueNum)) parts.push(issueNum)
+      if (monthStr) parts.push(monthStr)
+      if (yearStr) parts.push(yearStr)
+      if (condition) parts.push(condition)
+
+      title = dedup(parts.filter(Boolean)).join(' ') || 'Raw Comic'
+
+      // Raw Comic HTML description
+      const descLines: string[] = []
+      descLines.push(`<strong>Raw Comic</strong><br>`)
+      if (comicName) descLines.push(`<strong>Title:</strong> ${comicName}<br>`)
+      if (publisher) descLines.push(`<strong>Publisher:</strong> ${publisher}<br>`)
+      if (issueNum) descLines.push(`<strong>Issue:</strong> ${issueNum}<br>`)
+      if (monthStr || yearStr) descLines.push(`<strong>Publication Date:</strong> ${[monthStr, yearStr].filter(Boolean).join(' ')}<br>`)
+      if (condition) descLines.push(`<strong>Condition:</strong> ${condition}<br>`)
+      description = descLines.join('')
+    } else {
+      // Raw Card: YEAR BRAND SUBJECT #NUMBER CONDITION
+      const parts: string[] = []
+      if (year) parts.push(year)
+      if (brandTitle) parts.push(brandTitle)
+      if (subject) parts.push(subject)
+      if (cardNumber) parts.push(`#${cardNumber}`)
+      if (condition) parts.push(condition)
+
+      title = dedup(parts.filter(Boolean)).join(' ') || 'Raw Card'
+
+      // Raw Card HTML description
+      const descLines: string[] = []
+      descLines.push(`<strong>Raw Card</strong><br>`)
+      if (brandTitle) descLines.push(`<strong>Brand:</strong> ${brandTitle}<br>`)
+      if (year) descLines.push(`<strong>Year:</strong> ${year}<br>`)
+      if (subject) descLines.push(`<strong>Subject:</strong> ${subject}<br>`)
+      if (cardNumber) descLines.push(`<strong>Card #:</strong> #${cardNumber}<br>`)
+      if (condition) descLines.push(`<strong>Condition:</strong> ${condition}<br>`)
+      description = descLines.join('')
+    }
+
     // Add sample image disclaimer if image is present
     if (imageUrl) {
-      description += `\n\n<p><em>⚠️ NOTE: Product image is for reference only and may not represent the exact item. The card you receive will be in the stated condition but actual appearance may vary.</em></p>`
+      description += `<br><p><em>⚠️ NOTE: Product image is for reference only and may not represent the exact item. The card you receive will be in the stated condition but actual appearance may vary.</em></p>`
     }
     const existingResponse = await fetch(`https://${domain}/admin/api/2024-07/products.json?fields=id,variants&limit=250`, {
       method: 'GET',
