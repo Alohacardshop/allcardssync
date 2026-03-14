@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -6,185 +6,75 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-import { logger } from "@/lib/logger";
 import { useAuth } from "@/contexts/AuthContext";
-import { Palmtree, Loader2 } from "lucide-react";
+import { Palmtree, Loader2, ArrowLeft } from "lucide-react";
 
-const ROLE_TIMEOUT_MS = 5000;
-const AUTH_CHANGE_GUARD_MS = 4000;
+const ERROR_MAP: Record<string, string> = {
+  "Invalid login credentials": "Incorrect email or password. Try again or use Forgot Password below.",
+  "Email not confirmed": "Your account hasn't been activated yet. Contact your admin.",
+  "User not found": "No account found with that email. Contact your admin.",
+  "Too many requests": "Too many attempts. Please wait a moment and try again.",
+};
 
-function useSEO(opts: { title: string; description?: string; canonical?: string }) {
-  useEffect(() => {
-    document.title = opts.title;
-    const metaDesc = document.querySelector('meta[name="description"]');
-    if (metaDesc) metaDesc.setAttribute("content", opts.description || "");
-    else if (opts.description) {
-      const m = document.createElement("meta");
-      m.name = "description";
-      m.content = opts.description;
-      document.head.appendChild(m);
-    }
-    const linkCanonical = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
-    const href = opts.canonical || window.location.href;
-    if (linkCanonical) linkCanonical.href = href;
-    else {
-      const l = document.createElement("link");
-      l.rel = "canonical";
-      l.href = href;
-      document.head.appendChild(l);
-    }
-  }, [opts.title, opts.description, opts.canonical]);
+function friendlyError(msg: string): string {
+  for (const [key, friendly] of Object.entries(ERROR_MAP)) {
+    if (msg.includes(key)) return friendly;
+  }
+  return "Something went wrong. Try again or contact your admin.";
 }
 
 export default function Auth() {
-  useSEO({ title: "Sign In | Aloha", description: "Secure sign in for Aloha Inventory staff." });
   const navigate = useNavigate();
-  const { refetchRoles } = useAuth();
+  const { user } = useAuth();
 
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [roleError, setRoleError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<"signin" | "forgot">("signin");
+  const [resetSent, setResetSent] = useState(false);
 
-  const mountedRef = useRef(true);
-  const subRef = useRef<ReturnType<typeof supabase.auth.onAuthStateChange>["data"]["subscription"] | null>(null);
-  const guardTimerRef = useRef<number | null>(null);
-  const roleTimeoutRef = useRef<number | null>(null);
-  const currentAttemptId = useRef<string | null>(null);
-  const cancelRoleCheckRef = useRef<() => void>(() => {});
-  const verificationInFlightRef = useRef(false);
-
-  const clearGuardTimer = () => {
-    if (guardTimerRef.current) {
-      window.clearTimeout(guardTimerRef.current);
-      guardTimerRef.current = null;
-    }
-  };
-  const clearRoleTimer = () => {
-    if (roleTimeoutRef.current) {
-      window.clearTimeout(roleTimeoutRef.current);
-      roleTimeoutRef.current = null;
-    }
-  };
-
+  // If already logged in, redirect to dashboard (AuthGuard handles role check)
   useEffect(() => {
-    mountedRef.current = true;
-    logger.info('Auth page mounted');
-
-    if (!subRef.current) {
-      subRef.current = supabase.auth.onAuthStateChange(async (event, session) => {
-        logger.info('Auth state change', { event, email: session?.user?.email });
-        if (!mountedRef.current) return;
-        if (event === "SIGNED_IN" && session?.user) {
-          clearGuardTimer();
-          const attempt = crypto.randomUUID();
-          currentAttemptId.current = attempt;
-          await verifyAccessThenNavigate(session.user.id, attempt);
-        }
-        if (event === "SIGNED_OUT") {
-          clearGuardTimer();
-          setLoading(false);
-          setRoleError(null);
-        }
-      }).data.subscription;
-    }
-
-    (async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          logger.info('Existing session found', { email: session.user.email });
-          const attempt = crypto.randomUUID();
-          currentAttemptId.current = attempt;
-          await verifyAccessThenNavigate(session.user.id, attempt);
-        } else {
-          setLoading(false);
-        }
-      } catch {
-        setLoading(false);
-      }
-    })();
-
-    return () => {
-      mountedRef.current = false;
-      clearGuardTimer();
-      clearRoleTimer();
-      cancelRoleCheckRef.current?.();
-      if (subRef.current) {
-        subRef.current.unsubscribe();
-        subRef.current = null;
-      }
-    };
-  }, [navigate]);
+    if (user) navigate("/", { replace: true });
+  }, [user, navigate]);
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
-    if (loading) return;
-    clearGuardTimer();
-    clearRoleTimer();
-    cancelRoleCheckRef.current?.();
-
     setLoading(true);
-    setRoleError(null);
+    setError(null);
     try {
-      logger.info('Starting sign in process', { email });
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      logger.info('Sign in successful', { email });
-      toast.success("Signed in successfully!");
-
-      guardTimerRef.current = window.setTimeout(() => {
-        if (!mountedRef.current) return;
-        setLoading(false);
-        toast.error("Login is taking too long. Please try again.");
-      }, AUTH_CHANGE_GUARD_MS);
+      toast.success("Signed in!");
+      // AuthContext will update `user`, triggering the redirect above
     } catch (err: any) {
-      logger.error('Sign in error', err, { email });
+      setError(friendlyError(err?.message || ""));
+    } finally {
       setLoading(false);
-      toast.error(err?.message || "Sign-in failed");
     }
   }
 
-  async function verifyAccessThenNavigate(userId: string, attemptId: string) {
-    if (currentAttemptId.current !== attemptId) return;
-
+  async function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault();
     setLoading(true);
-    setRoleError(null);
-    verificationInFlightRef.current = true;
-
-    let canceled = false;
-    cancelRoleCheckRef.current = () => { canceled = true; };
-
+    setError(null);
     try {
-      logger.info('Preloading roles into cache', { userId });
-      await refetchRoles();
-      
-      if (canceled || currentAttemptId.current !== attemptId) return;
-      
-      logger.info('Access granted, navigating to dashboard', { userId });
-      navigate("/", { replace: true });
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+      setResetSent(true);
     } catch (err: any) {
-      if (canceled || currentAttemptId.current !== attemptId) return;
-      logger.error('Role check failed', err, { userId });
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        toast.success("Signed in successfully! Proceeding to dashboard...");
-        navigate("/", { replace: true });
-      } else {
-        setRoleError("Failed to verify account permissions. Please try again.");
-      }
+      setError(friendlyError(err?.message || ""));
     } finally {
-      clearRoleTimer();
-      verificationInFlightRef.current = false;
-      if (mountedRef.current && currentAttemptId.current === attemptId) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex flex-col">
-      {/* Decorative Background Elements */}
+      {/* Decorative Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-[hsl(var(--ecosystem-hawaii)/0.1)] rounded-full blur-3xl" />
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-[hsl(var(--ecosystem-vegas)/0.1)] rounded-full blur-3xl" />
@@ -193,91 +83,126 @@ export default function Auth() {
       {/* Header */}
       <header className="relative z-10 border-b bg-background/80 backdrop-blur-sm">
         <div className="container mx-auto px-6 py-4 flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Palmtree className="h-5 w-5 text-primary" />
-            </div>
-            <span className="text-xl font-semibold tracking-tight">Aloha Inventory</span>
+          <div className="p-2 rounded-lg bg-primary/10">
+            <Palmtree className="h-5 w-5 text-primary" />
           </div>
+          <span className="text-xl font-semibold tracking-tight">Aloha Inventory</span>
         </div>
       </header>
 
-      {/* Main Content */}
+      {/* Main */}
       <main className="relative z-10 flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-md space-y-6">
-          {/* Welcome Text */}
           <div className="text-center space-y-2">
-            <h1 className="text-3xl font-bold tracking-tight">Welcome back</h1>
+            <h1 className="text-3xl font-bold tracking-tight">
+              {mode === "signin" ? "Welcome back" : "Reset Password"}
+            </h1>
             <p className="text-muted-foreground">
-              Sign in to access your inventory dashboard
+              {mode === "signin"
+                ? "Sign in to access your inventory dashboard"
+                : "Enter your email to receive a reset link"}
             </p>
           </div>
 
-          {/* Auth Card */}
           <Card className="shadow-lg border-border/50 bg-card/80 backdrop-blur-sm">
             <CardHeader className="space-y-1 pb-4">
-              <CardTitle className="text-xl">Sign In</CardTitle>
+              <CardTitle className="text-xl">
+                {mode === "signin" ? "Sign In" : "Forgot Password"}
+              </CardTitle>
               <CardDescription>
-                Enter your credentials to continue
+                {mode === "signin"
+                  ? "Enter your credentials to continue"
+                  : "We'll send a password reset link to your email"}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSignIn} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input 
-                    id="email" 
-                    type="email" 
-                    placeholder="you@example.com"
-                    value={email} 
-                    onChange={(e) => setEmail(e.target.value)} 
-                    required 
-                    className="h-11"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input 
-                    id="password" 
-                    type="password" 
-                    placeholder="••••••••"
-                    value={password} 
-                    onChange={(e) => setPassword(e.target.value)} 
-                    required 
-                    className="h-11"
-                  />
-                </div>
-                
-                {roleError && (
-                  <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">
-                    {roleError}
+              {mode === "forgot" && resetSent ? (
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground bg-muted px-3 py-3 rounded-md">
+                    If an account exists for <strong>{email}</strong>, you'll receive a reset link shortly. Check your inbox and spam folder.
                   </p>
-                )}
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => { setMode("signin"); setResetSent(false); setError(null); }}
+                  >
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Back to Sign In
+                  </Button>
+                </div>
+              ) : (
+                <form onSubmit={mode === "signin" ? handleSignIn : handleForgotPassword} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      className="h-11"
+                    />
+                  </div>
 
-                <Button 
-                  type="submit" 
-                  disabled={loading} 
-                  className="w-full h-11 font-medium"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Please wait...
-                    </>
-                  ) : (
-                    'Sign In'
+                  {mode === "signin" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Password</Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        className="h-11"
+                      />
+                    </div>
                   )}
-                </Button>
-              </form>
+
+                  {error && (
+                    <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">
+                      {error}
+                    </p>
+                  )}
+
+                  <Button type="submit" disabled={loading} className="w-full h-11 font-medium">
+                    {loading ? (
+                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Please wait...</>
+                    ) : mode === "signin" ? (
+                      "Sign In"
+                    ) : (
+                      "Send Reset Link"
+                    )}
+                  </Button>
+
+                  {mode === "signin" ? (
+                    <button
+                      type="button"
+                      onClick={() => { setMode("forgot"); setError(null); }}
+                      className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Forgot password?
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => { setMode("signin"); setError(null); }}
+                      className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center gap-1"
+                    >
+                      <ArrowLeft className="h-3 w-3" />
+                      Back to Sign In
+                    </button>
+                  )}
+                </form>
+              )}
             </CardContent>
           </Card>
 
-          {/* Footer Notice */}
           <p className="text-xs text-center text-muted-foreground px-4">
             Access is restricted to authorized staff. Contact an admin to get an account.
           </p>
 
-          {/* Ecosystem Indicators */}
           <div className="flex items-center justify-center gap-4 pt-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <div className="w-3 h-3 rounded-full bg-[hsl(var(--ecosystem-hawaii))]" />

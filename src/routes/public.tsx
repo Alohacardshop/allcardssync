@@ -24,6 +24,14 @@ export const publicRoutes = (
         </Suspense>
       } 
     />
+    <Route
+      path={PATHS.resetPassword}
+      element={
+        <Suspense fallback={<FullScreenLoader title="Loading" subtitle="Preparing password reset…" />}>
+          <ResetPassword />
+        </Suspense>
+      }
+    />
     <Route path={PATHS.privacy} element={<Privacy />} />
     {/* Public catch-all - shows NotFound without requiring authentication */}
     <Route path="*" element={<NotFound />} />
