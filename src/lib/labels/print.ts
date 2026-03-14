@@ -103,10 +103,36 @@ export interface BulkPrintResult {
   results: PrintResult[];
 }
 
-/** Send multiple labels in one call. Each item is validated independently. */
+/** Send multiple labels in one call. Each item is validated independently. Max 200 items. */
 export async function sendBulkZplToPrinter(items: BulkPrintItem[]): Promise<BulkPrintResult> {
   if (!items || items.length === 0) {
     return { success: false, total: 0, queued: 0, failed: 0, results: [] };
+  }
+
+  const MAX_BULK = 200;
+  if (items.length > MAX_BULK) {
+    return {
+      success: false,
+      total: items.length,
+      queued: 0,
+      failed: items.length,
+      results: [{ success: false, error: `Bulk print limited to ${MAX_BULK} items. Got ${items.length}.`, status: 'error' }],
+    };
+  }
+
+  const config = getPrintEnvConfig();
+
+  // Validate config (same as single print)
+  if (config.mode !== 'mock' && !isPrintConfigValid()) {
+    const warnings = getPrintConfigWarnings();
+    const msg = warnings.map((w) => `${w.field}: ${w.message}`).join('; ');
+    return {
+      success: false,
+      total: items.length,
+      queued: 0,
+      failed: items.length,
+      results: [{ success: false, error: `Printer misconfigured: ${msg}`, status: 'error' }],
+    };
   }
 
   const results: PrintResult[] = [];

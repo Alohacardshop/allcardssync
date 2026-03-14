@@ -2,7 +2,7 @@ import { PrintQueue, PrintQueueOptions } from "./printQueue";
 import { logger } from "@/lib/logger";
 import { getTransport, getTransportMode } from "./transports";
 
-// ZD410: tiny throwaway label in cutter mode to fire ONE cut at end of batch, then revert to tear-off.
+// ZD611/ZD410: tiny throwaway label in cutter mode to fire ONE cut at end of batch, then revert to tear-off.
 const ZD410_END_CUT_TAIL = `^XA
 ^MMC
 ^PW420
