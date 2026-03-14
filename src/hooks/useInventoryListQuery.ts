@@ -13,6 +13,8 @@ export interface InventoryFilters {
   typeFilter?: 'all' | 'raw' | 'graded';
   categoryFilter?: string; // Dynamic category filter - 'all' or exact category value
   collectionFilter?: string; // Shopify collection GID - 'all' or collection GID
+  /** Pre-fetched product IDs for the selected collection (from useCollectionProducts) */
+  collectionProductIds?: string[] | null;
   tagFilter?: string[]; // Shopify tags filter (uses normalized_tags for filtering)
   
   searchTerm?: string;
