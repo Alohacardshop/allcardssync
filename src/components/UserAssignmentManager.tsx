@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Separator } from "@/components/ui/separator";
-import { Users, Plus, Pencil, Trash2, ShieldCheck, Store, MapPin, KeyRound, RotateCcw, Check, Lock, Unlock } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, ShieldCheck, Store, MapPin, KeyRound, RotateCcw, Check, Lock, Unlock, Star } from "lucide-react";
 import { DialogFooter } from "@/components/ui/dialog";
 import { logger } from "@/lib/logger";
 
@@ -957,13 +957,22 @@ export function UserAssignmentManager() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <div className="space-y-1">
+                    <div className="space-y-2">
                       {Object.entries(user.storeAssignments).map(([storeKey, storeData]) => (
-                        <div key={storeKey} className="text-sm">
-                          <span className="font-medium">{storeData.storeName}</span>
-                          <span className="text-muted-foreground ml-1">
-                            ({storeData.locations.length} location{storeData.locations.length !== 1 ? 's' : ''})
-                          </span>
+                        <div key={storeKey}>
+                          <div className="text-sm font-medium">{storeData.storeName}</div>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {storeData.locations.map((loc) => (
+                              <Badge
+                                key={loc.gid}
+                                variant={loc.isDefault ? "default" : "outline"}
+                                className="text-xs"
+                              >
+                                {loc.isDefault && <Star className="h-3 w-3 mr-1" />}
+                                {loc.name}
+                              </Badge>
+                            ))}
+                          </div>
                         </div>
                       ))}
                       {Object.keys(user.storeAssignments).length === 0 && (
