@@ -1,7 +1,7 @@
  import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
  import { supabase } from '@/integrations/supabase/client';
  import { toast } from 'sonner';
- import { useSession } from '@/hooks/useSession';
+ import { useAuth } from '@/contexts/AuthContext';
  import type { 
    SavedInventoryView, 
    CreateViewInput, 
@@ -19,8 +19,8 @@
   */
  export function useInventoryViews() {
    const queryClient = useQueryClient();
-   const { data: session } = useSession();
-   const userId = session?.user?.id;
+  const { user } = useAuth();
+  const userId = user?.id;
  
    // Fetch all views for the current user
    const { data: views = [], isLoading } = useQuery({

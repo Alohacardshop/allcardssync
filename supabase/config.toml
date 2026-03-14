@@ -236,3 +236,7 @@ verify_jwt = false
 # Bulk comic repair (admin-only, preview + execute modes)
 [functions.bulk-comic-repair]
 verify_jwt = true
+
+# Admin password reset (admin-only)
+[functions.reset-user-password]
+verify_jwt = true

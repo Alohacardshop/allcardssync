@@ -18,7 +18,7 @@ import { BatchConfigDialog } from '@/components/BatchConfigDialog';
 import { BatchProgressDialog } from '@/components/BatchProgressDialog';
 import { useLogger } from '@/hooks/useLogger';
 import { useCurrentBatch } from '@/hooks/useCurrentBatch';
-import { useSession } from '@/hooks/useSession';
+import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queryKeys';
 import { useSendToInventory } from '@/hooks/useSendToInventory';
@@ -36,7 +36,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
   const logger = useLogger('CurrentBatchPanel');
   const queryClient = useQueryClient();
   const { assignedStore, selectedLocation, availableLocations } = useStore();
-  const { data: session } = useSession();
+  const { session } = useAuth();
   
   // Use React Query for batch data
   const { data: batchData, isLoading: loading, refetch } = useCurrentBatch({

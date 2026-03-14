@@ -6,6 +6,7 @@
 export const PATHS = {
   // Public routes
   auth: '/auth',
+  resetPassword: '/reset-password',
   privacy: '/privacy',
 
   // Dashboard
