@@ -10,7 +10,7 @@
 import { logger } from '@/lib/logger';
 import type { PrintTransport, TransportMode } from './types';
 
-export type { PrintTransport, TransportMode } from './types';
+export type { PrintTransport, TransportMode, PrinterConfig, PrintRequest, PrintResult, PrintJobStatus, PrinterStatus } from './types';
 
 function resolveMode(): TransportMode {
   const env = import.meta.env.VITE_PRINT_TRANSPORT as string | undefined;

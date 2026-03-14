@@ -13,24 +13,9 @@ import {
 
 const STORAGE_KEY = 'zebra-printer-config';
 
-// Types
-export interface PrinterConfig {
-  name: string;  // Printer name from QZ Tray
-}
-
-export interface PrintResult {
-  success: boolean;
-  error?: string;
-  message?: string;
-}
-
-export interface PrinterStatus {
-  ready: boolean;
-  paused: boolean;
-  headOpen: boolean;
-  mediaOut: boolean;
-  raw: string;
-}
+// Re-export shared types so existing consumers don't break
+export type { PrinterConfig, PrintResult, PrinterStatus } from '@/lib/print/transports/types';
+import type { PrinterConfig, PrintResult, PrinterStatus } from '@/lib/print/transports/types';
 
 export interface BridgeStatus {
   connected: boolean;
