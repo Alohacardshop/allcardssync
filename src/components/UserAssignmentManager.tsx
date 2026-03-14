@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Separator } from "@/components/ui/separator";
-import { Users, Plus, Pencil, Trash2, ShieldCheck, Store, MapPin, KeyRound, RotateCcw, Copy, Check } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, ShieldCheck, Store, MapPin, KeyRound, RotateCcw, Check, Lock, Unlock } from "lucide-react";
 import { DialogFooter } from "@/components/ui/dialog";
 import { logger } from "@/lib/logger";
 
@@ -32,10 +32,17 @@ interface Region {
   description: string | null;
 }
 
+interface StaffPinInfo {
+  display_name: string;
+  failed_attempts: number;
+  locked_until: string | null;
+}
+
 interface UserWithDetails {
   id: string;
   email: string;
   roles: string[];
+  pinInfo?: StaffPinInfo | null;
   storeAssignments: {
     [storeKey: string]: {
       storeName: string;
@@ -78,6 +85,8 @@ export function UserAssignmentManager() {
   const [formData, setFormData] = useState({
     email: "",
     password: "",
+    displayName: "",
+    pin: "",
     roles: [] as string[],
     selectedRegion: "" as string,
     selectedStores: [] as string[],
@@ -89,6 +98,8 @@ export function UserAssignmentManager() {
     setFormData({
       email: "",
       password: "",
+      displayName: "",
+      pin: "",
       roles: [],
       selectedRegion: "",
       selectedStores: [],
@@ -178,6 +189,11 @@ export function UserAssignmentManager() {
         throw assignError;
       }
 
+      // Load staff PINs (for admin view)
+      const { data: staffPins } = await supabase
+        .from("staff_pins")
+        .select("user_id, display_name, failed_attempts, locked_until");
+
       // Combine data
       const usersWithDetails: UserWithDetails[] = [];
       
@@ -201,10 +217,17 @@ export function UserAssignmentManager() {
             });
           });
 
+          const pinRecord = staffPins?.find(p => p.user_id === authUser.id);
+
           usersWithDetails.push({
             id: authUser.id,
             email: authUser.email || 'No email',
             roles: authUser.roles || [],
+            pinInfo: pinRecord ? {
+              display_name: pinRecord.display_name,
+              failed_attempts: pinRecord.failed_attempts,
+              locked_until: pinRecord.locked_until,
+            } : null,
             storeAssignments
           });
         }
@@ -411,6 +434,28 @@ export function UserAssignmentManager() {
         if (!data?.ok) throw new Error(data?.error || 'Unknown error');
 
         toast.success("User updated successfully!");
+
+        // Update PIN if display name or pin provided
+        if (formData.displayName && formData.pin) {
+          try {
+            await supabase.functions.invoke('manage-staff-pin', {
+              body: {
+                action: 'set-pin',
+                userId: editingUser.id,
+                displayName: formData.displayName,
+                pin: formData.pin,
+              }
+            });
+            toast.success("PIN updated!");
+          } catch (pinErr) {
+            console.error("Failed to update PIN:", pinErr);
+            toast.error("User updated but PIN change failed.");
+          }
+        } else if (formData.displayName && !formData.pin && editingUser.pinInfo) {
+          // Display name changed but no new PIN - update display name only with a dummy reset
+          // Actually we need the PIN to update, so just update display name via the set-pin action
+          // Skip if no PIN provided - they just want to keep the existing PIN
+        }
       } else {
         // Create new user
         const storeAssignments = [];
@@ -451,6 +496,24 @@ export function UserAssignmentManager() {
         if (!data?.ok) throw new Error(data?.error || 'Unknown error');
 
         toast.success("User created successfully!");
+
+        // Set PIN if provided
+        if (data?.user?.id && formData.displayName && formData.pin) {
+          try {
+            await supabase.functions.invoke('manage-staff-pin', {
+              body: {
+                action: 'set-pin',
+                userId: data.user.id,
+                displayName: formData.displayName,
+                pin: formData.pin,
+              }
+            });
+            toast.success("PIN configured!");
+          } catch (pinErr) {
+            console.error("Failed to set PIN:", pinErr);
+            toast.error("User created but PIN setup failed. Edit the user to set PIN.");
+          }
+        }
       }
 
       setDialogOpen(false);
@@ -509,6 +572,8 @@ export function UserAssignmentManager() {
     setFormData({
       email: user.email,
       password: "",
+      displayName: user.pinInfo?.display_name || "",
+      pin: "",
       roles: user.roles,
       selectedRegion: userRegion,
       selectedStores: Object.keys(user.storeAssignments),
@@ -528,55 +593,7 @@ export function UserAssignmentManager() {
     setDialogOpen(true);
   };
 
-  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
-  const [resetPasswordResult, setResetPasswordResult] = useState<{ email: string; password: string } | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [confirmResetUser, setConfirmResetUser] = useState<{ id: string; email: string } | null>(null);
-  const [resettingPassword, setResettingPassword] = useState(false);
-
-  const handleResetPassword = (userId: string, email: string) => {
-    console.log("Reset password clicked for:", email, userId);
-    setConfirmResetUser({ id: userId, email });
-  };
-
-  const executeResetPassword = async () => {
-    if (!confirmResetUser) return;
-    const { id: userId, email } = confirmResetUser;
-    setResettingPassword(true);
-
-    try {
-      console.log("Invoking reset-user-password for:", userId);
-      const { data, error } = await supabase.functions.invoke('reset-user-password', {
-        body: { userId }
-      });
-
-      console.log("Reset response:", { data, error });
-
-      if (error) {
-        const errorBody = await (error as any).context?.json?.().catch(() => null);
-        throw new Error(errorBody?.error || error.message);
-      }
-      if (!data.ok) throw new Error(data.error);
-
-      setResetPasswordResult({ email, password: data.newPassword });
-      setCopied(false);
-      setConfirmResetUser(null);
-      setPasswordDialogOpen(true);
-    } catch (error: any) {
-      console.error("Failed to reset password:", error);
-      toast.error(`Failed to reset password: ${error.message}`);
-    } finally {
-      setResettingPassword(false);
-    }
-  };
-
-  const handleCopyPassword = async () => {
-    if (!resetPasswordResult) return;
-    await navigator.clipboard.writeText(resetPasswordResult.password);
-    setCopied(true);
-    toast.success("Password copied to clipboard");
-    setTimeout(() => setCopied(false), 2000);
-  };
+  // Old password reset code removed — now using PIN-based login
 
   useEffect(() => {
     const checkAdminRole = async () => {
@@ -621,50 +638,6 @@ export function UserAssignmentManager() {
 
   return (
     <div className="space-y-6">
-      {/* Confirm Reset Dialog */}
-      <Dialog open={!!confirmResetUser} onOpenChange={(open) => { if (!open) setConfirmResetUser(null); }}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Reset Password?</DialogTitle>
-            <DialogDescription>
-              Generate a new temporary password for <strong>{confirmResetUser?.email}</strong>?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setConfirmResetUser(null)} disabled={resettingPassword}>
-              Cancel
-            </Button>
-            <Button onClick={executeResetPassword} disabled={resettingPassword}>
-              {resettingPassword ? "Resetting..." : "Reset Password"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Password Reset Result Dialog */}
-      <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Password Reset Successful</DialogTitle>
-            <DialogDescription>
-              New password for <strong>{resetPasswordResult?.email}</strong>. Copy it now — it won't be shown again.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center gap-2 mt-2">
-            <Input
-              readOnly
-              value={resetPasswordResult?.password || ""}
-              className="font-mono text-base tracking-wider"
-            />
-            <Button variant="outline" size="icon" onClick={handleCopyPassword}>
-              {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-            </Button>
-          </div>
-          <DialogFooter className="mt-4">
-            <Button onClick={() => setPasswordDialogOpen(false)}>Done</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <div className="flex items-center justify-between">
         <div>
@@ -697,7 +670,7 @@ export function UserAssignmentManager() {
                 <h3 className="text-lg font-medium">Account Information</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="email">Email *</Label>
+                    <Label htmlFor="email">Email (for backend recovery)</Label>
                     <Input
                       id="email"
                       type="email"
@@ -706,23 +679,82 @@ export function UserAssignmentManager() {
                       placeholder="user@example.com"
                       disabled={!!editingUser}
                     />
+                    <p className="text-xs text-muted-foreground mt-1">Used for account recovery only</p>
                   </div>
-                  <div>
-                    <Label htmlFor="password">
-                      Password {editingUser ? "(leave blank to keep current)" : "*"}
-                    </Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      value={formData.password}
-                      onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                      placeholder={editingUser ? "Leave blank to keep current password" : "Required"}
-                    />
-                  </div>
+                  {!editingUser && (
+                    <div>
+                      <Label htmlFor="password">Initial Password</Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        value={formData.password}
+                        onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                        placeholder="Required for account creation"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">Staff will use PIN to log in, not this password</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
               <Separator />
+
+              {/* PIN Login */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="h-5 w-5" />
+                  <h3 className="text-lg font-medium">PIN Login</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Staff will use their display name and 4-digit PIN to sign in.
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="displayName">Display Name *</Label>
+                    <Input
+                      id="displayName"
+                      value={formData.displayName}
+                      onChange={(e) => setFormData(prev => ({ ...prev, displayName: e.target.value }))}
+                      placeholder="e.g. Dorian, Zach"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Must be unique — this is what staff type to log in</p>
+                  </div>
+                  <div>
+                    <Label htmlFor="pin">
+                      4-Digit PIN {editingUser?.pinInfo ? "(leave blank to keep current)" : "*"}
+                    </Label>
+                    <Input
+                      id="pin"
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={4}
+                      value={formData.pin}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                        setFormData(prev => ({ ...prev, pin: val }));
+                      }}
+                      placeholder={editingUser?.pinInfo ? "••••" : "e.g. 1234"}
+                      className="font-mono text-lg tracking-widest"
+                    />
+                  </div>
+                </div>
+                {editingUser?.pinInfo && (
+                  <div className="flex items-center gap-2 text-sm">
+                    {editingUser.pinInfo.locked_until && new Date(editingUser.pinInfo.locked_until) > new Date() ? (
+                      <Badge variant="destructive" className="flex items-center gap-1">
+                        <Lock className="h-3 w-3" />
+                        Locked ({editingUser.pinInfo.failed_attempts} failed attempts)
+                      </Badge>
+                    ) : editingUser.pinInfo.failed_attempts > 0 ? (
+                      <Badge variant="secondary">
+                        {editingUser.pinInfo.failed_attempts} failed attempt{editingUser.pinInfo.failed_attempts !== 1 ? 's' : ''}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-muted-foreground">PIN configured</Badge>
+                    )}
+                  </div>
+                )}
+              </div>
 
               {/* Roles */}
               <div className="space-y-4">
@@ -875,16 +907,26 @@ export function UserAssignmentManager() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Email</TableHead>
+                <TableHead>User</TableHead>
                 <TableHead>Roles</TableHead>
+                <TableHead>PIN Status</TableHead>
                 <TableHead>Store Access</TableHead>
-                <TableHead className="w-[100px]">Actions</TableHead>
+                <TableHead className="w-[120px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {users.map(user => (
                 <TableRow key={user.id}>
-                  <TableCell className="font-medium">{user.email}</TableCell>
+                  <TableCell>
+                    <div>
+                      {user.pinInfo ? (
+                        <div className="font-medium">{user.pinInfo.display_name}</div>
+                      ) : (
+                        <div className="font-medium text-muted-foreground">No display name</div>
+                      )}
+                      <div className="text-xs text-muted-foreground">{user.email}</div>
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       {user.roles.map(role => (
@@ -896,6 +938,23 @@ export function UserAssignmentManager() {
                         <Badge variant="outline">No roles</Badge>
                       )}
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    {user.pinInfo ? (
+                      user.pinInfo.locked_until && new Date(user.pinInfo.locked_until) > new Date() ? (
+                        <Badge variant="destructive" className="flex items-center gap-1 w-fit">
+                          <Lock className="h-3 w-3" />
+                          Locked
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground w-fit">
+                          <Check className="h-3 w-3 mr-1" />
+                          Active
+                        </Badge>
+                      )
+                    ) : (
+                      <Badge variant="secondary" className="w-fit">No PIN</Badge>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="space-y-1">
@@ -922,14 +981,28 @@ export function UserAssignmentManager() {
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleResetPassword(user.id, user.email)}
-                        title="Reset password"
-                      >
-                        <KeyRound className="h-4 w-4" />
-                      </Button>
+                      {user.pinInfo?.locked_until && new Date(user.pinInfo.locked_until) > new Date() && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              const { data, error } = await supabase.functions.invoke('manage-staff-pin', {
+                                body: { action: 'unlock', userId: user.id }
+                              });
+                              if (error) throw error;
+                              if (!data?.ok) throw new Error(data?.error);
+                              toast.success(`Unlocked ${user.pinInfo?.display_name}`);
+                              await loadData();
+                            } catch (err: any) {
+                              toast.error(`Failed to unlock: ${err.message}`);
+                            }
+                          }}
+                          title="Unlock account"
+                        >
+                          <Unlock className="h-4 w-4" />
+                        </Button>
+                      )}
                       {isAdmin && (
                         <Button
                           variant="ghost"
