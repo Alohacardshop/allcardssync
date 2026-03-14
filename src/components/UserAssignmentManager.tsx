@@ -638,50 +638,6 @@ export function UserAssignmentManager() {
 
   return (
     <div className="space-y-6">
-      {/* Confirm Reset Dialog */}
-      <Dialog open={!!confirmResetUser} onOpenChange={(open) => { if (!open) setConfirmResetUser(null); }}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Reset Password?</DialogTitle>
-            <DialogDescription>
-              Generate a new temporary password for <strong>{confirmResetUser?.email}</strong>?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setConfirmResetUser(null)} disabled={resettingPassword}>
-              Cancel
-            </Button>
-            <Button onClick={executeResetPassword} disabled={resettingPassword}>
-              {resettingPassword ? "Resetting..." : "Reset Password"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Password Reset Result Dialog */}
-      <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Password Reset Successful</DialogTitle>
-            <DialogDescription>
-              New password for <strong>{resetPasswordResult?.email}</strong>. Copy it now — it won't be shown again.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center gap-2 mt-2">
-            <Input
-              readOnly
-              value={resetPasswordResult?.password || ""}
-              className="font-mono text-base tracking-wider"
-            />
-            <Button variant="outline" size="icon" onClick={handleCopyPassword}>
-              {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-            </Button>
-          </div>
-          <DialogFooter className="mt-4">
-            <Button onClick={() => setPasswordDialogOpen(false)}>Done</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <div className="flex items-center justify-between">
         <div>
