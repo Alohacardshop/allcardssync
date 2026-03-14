@@ -1,76 +1,117 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { Palmtree, Loader2, ArrowLeft } from "lucide-react";
-
-const ERROR_MAP: Record<string, string> = {
-  "Invalid login credentials": "Incorrect email or password. Try again or use Forgot Password below.",
-  "Email not confirmed": "Your account hasn't been activated yet. Contact your admin.",
-  "User not found": "No account found with that email. Contact your admin.",
-  "Too many requests": "Too many attempts. Please wait a moment and try again.",
-};
-
-function friendlyError(msg: string): string {
-  for (const [key, friendly] of Object.entries(ERROR_MAP)) {
-    if (msg.includes(key)) return friendly;
-  }
-  return "Something went wrong. Try again or contact your admin.";
-}
+import { Palmtree, Loader2, Delete, Lock } from "lucide-react";
 
 export default function Auth() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  const [name, setName] = useState("");
+  const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<"signin" | "forgot">("signin");
-  const [resetSent, setResetSent] = useState(false);
+  const [locked, setLocked] = useState(false);
+  const [step, setStep] = useState<"name" | "pin">("name");
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
-  // If already logged in, redirect to dashboard (AuthGuard handles role check)
   useEffect(() => {
     if (user) navigate("/", { replace: true });
   }, [user, navigate]);
 
-  async function handleSignIn(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      toast.success("Signed in!");
-      // AuthContext will update `user`, triggering the redirect above
-    } catch (err: any) {
-      setError(friendlyError(err?.message || ""));
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (step === "name") {
+      nameInputRef.current?.focus();
     }
-  }
+  }, [step]);
 
-  async function handleForgotPassword(e: React.FormEvent) {
+  const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!name.trim()) return;
+    setError(null);
+    setPin("");
+    setStep("pin");
+  };
+
+  const handlePinDigit = (digit: string) => {
+    if (pin.length >= 4 || loading || locked) return;
+    const newPin = pin + digit;
+    setPin(newPin);
+    if (newPin.length === 4) {
+      handleLogin(newPin);
+    }
+  };
+
+  const handlePinDelete = () => {
+    if (loading || locked) return;
+    setPin((prev) => prev.slice(0, -1));
+    setError(null);
+  };
+
+  const handleLogin = async (fullPin: string) => {
     setLoading(true);
     setError(null);
+
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pin-login`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({ displayName: name.trim(), pin: fullPin }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!data.ok) {
+        setPin("");
+        if (data.locked) {
+          setLocked(true);
+          setError(data.error);
+        } else {
+          setError(data.error || "Invalid name or PIN");
+        }
+        return;
+      }
+
+      // Use the magic link token to create a session
+      const { error: verifyError } = await supabase.auth.verifyOtp({
+        token_hash: data.tokenHash,
+        type: "magiclink",
       });
-      if (error) throw error;
-      setResetSent(true);
-    } catch (err: any) {
-      setError(friendlyError(err?.message || ""));
+
+      if (verifyError) {
+        console.error("OTP verification failed:", verifyError);
+        setPin("");
+        setError("Login failed. Please try again.");
+        return;
+      }
+
+      toast.success(`Welcome back, ${name}!`);
+    } catch (err: unknown) {
+      console.error("Login error:", err);
+      setPin("");
+      setError("Connection error. Please try again.");
     } finally {
       setLoading(false);
     }
-  }
+  };
+
+  const handleBack = () => {
+    setStep("name");
+    setPin("");
+    setError(null);
+    setLocked(false);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex flex-col">
@@ -92,115 +133,124 @@ export default function Auth() {
 
       {/* Main */}
       <main className="relative z-10 flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-md space-y-6">
+        <div className="w-full max-w-sm space-y-6">
           <div className="text-center space-y-2">
             <h1 className="text-3xl font-bold tracking-tight">
-              {mode === "signin" ? "Welcome back" : "Reset Password"}
+              {step === "name" ? "Welcome" : `Hi, ${name}`}
             </h1>
             <p className="text-muted-foreground">
-              {mode === "signin"
-                ? "Sign in to access your inventory dashboard"
-                : "Enter your email to receive a reset link"}
+              {step === "name"
+                ? "Enter your name to sign in"
+                : "Enter your 4-digit PIN"}
             </p>
           </div>
 
           <Card className="shadow-lg border-border/50 bg-card/80 backdrop-blur-sm">
             <CardHeader className="space-y-1 pb-4">
               <CardTitle className="text-xl">
-                {mode === "signin" ? "Sign In" : "Forgot Password"}
+                {step === "name" ? "Sign In" : "Enter PIN"}
               </CardTitle>
               <CardDescription>
-                {mode === "signin"
-                  ? "Enter your credentials to continue"
-                  : "We'll send a password reset link to your email"}
+                {step === "name"
+                  ? "Type your name as set by your admin"
+                  : "Use the number pad below"}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {mode === "forgot" && resetSent ? (
-                <div className="space-y-4">
-                  <p className="text-sm text-muted-foreground bg-muted px-3 py-3 rounded-md">
-                    If an account exists for <strong>{email}</strong>, you'll receive a reset link shortly. Check your inbox and spam folder.
-                  </p>
+              {step === "name" ? (
+                <form onSubmit={handleNameSubmit} className="space-y-4">
+                  <Input
+                    ref={nameInputRef}
+                    placeholder="Your name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="h-12 text-lg text-center"
+                    autoComplete="off"
+                    autoFocus
+                  />
                   <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => { setMode("signin"); setResetSent(false); setError(null); }}
+                    type="submit"
+                    disabled={!name.trim()}
+                    className="w-full h-11 font-medium"
                   >
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    Back to Sign In
+                    Continue
                   </Button>
-                </div>
+                </form>
               ) : (
-                <form onSubmit={mode === "signin" ? handleSignIn : handleForgotPassword} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                      className="h-11"
-                    />
+                <div className="space-y-5">
+                  {/* PIN dots */}
+                  <div className="flex justify-center gap-4">
+                    {[0, 1, 2, 3].map((i) => (
+                      <div
+                        key={i}
+                        className={`w-4 h-4 rounded-full border-2 transition-all duration-150 ${
+                          i < pin.length
+                            ? "bg-primary border-primary scale-110"
+                            : "border-muted-foreground/40"
+                        }`}
+                      />
+                    ))}
                   </div>
 
-                  {mode === "signin" && (
-                    <div className="space-y-2">
-                      <Label htmlFor="password">Password</Label>
-                      <Input
-                        id="password"
-                        type="password"
-                        placeholder="••••••••"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                        className="h-11"
-                      />
+                  {loading && (
+                    <div className="flex justify-center">
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                     </div>
                   )}
 
+                  {/* Error */}
                   {error && (
-                    <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">
+                    <div className="flex items-center gap-2 justify-center text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">
+                      {locked && <Lock className="h-4 w-4 shrink-0" />}
                       {error}
-                    </p>
+                    </div>
                   )}
 
-                  <Button type="submit" disabled={loading} className="w-full h-11 font-medium">
-                    {loading ? (
-                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Please wait...</>
-                    ) : mode === "signin" ? (
-                      "Sign In"
-                    ) : (
-                      "Send Reset Link"
-                    )}
-                  </Button>
-
-                  {mode === "signin" ? (
-                    <button
-                      type="button"
-                      onClick={() => { setMode("forgot"); setError(null); }}
-                      className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  {/* Number pad */}
+                  <div className="grid grid-cols-3 gap-3">
+                    {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
+                      <Button
+                        key={digit}
+                        variant="outline"
+                        className="h-14 text-xl font-semibold"
+                        onClick={() => handlePinDigit(digit)}
+                        disabled={loading || locked || pin.length >= 4}
+                      >
+                        {digit}
+                      </Button>
+                    ))}
+                    <Button
+                      variant="ghost"
+                      className="h-14 text-sm text-muted-foreground"
+                      onClick={handleBack}
+                      disabled={loading}
                     >
-                      Forgot password?
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => { setMode("signin"); setError(null); }}
-                      className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center gap-1"
+                      Back
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-14 text-xl font-semibold"
+                      onClick={() => handlePinDigit("0")}
+                      disabled={loading || locked || pin.length >= 4}
                     >
-                      <ArrowLeft className="h-3 w-3" />
-                      Back to Sign In
-                    </button>
-                  )}
-                </form>
+                      0
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="h-14"
+                      onClick={handlePinDelete}
+                      disabled={loading || locked || pin.length === 0}
+                    >
+                      <Delete className="h-5 w-5" />
+                    </Button>
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>
 
           <p className="text-xs text-center text-muted-foreground px-4">
-            Access is restricted to authorized staff. Contact an admin to get an account.
+            Contact your admin if you need an account or forgot your PIN.
           </p>
 
           <div className="flex items-center justify-center gap-4 pt-4">
