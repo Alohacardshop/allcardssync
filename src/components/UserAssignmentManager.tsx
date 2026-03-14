@@ -531,16 +531,26 @@ export function UserAssignmentManager() {
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [resetPasswordResult, setResetPasswordResult] = useState<{ email: string; password: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [confirmResetUser, setConfirmResetUser] = useState<{ id: string; email: string } | null>(null);
+  const [resettingPassword, setResettingPassword] = useState(false);
 
-  const handleResetPassword = async (userId: string, email: string) => {
-    if (!confirm(`Reset password for ${email}? A new temporary password will be generated.`)) {
-      return;
-    }
+  const handleResetPassword = (userId: string, email: string) => {
+    console.log("Reset password clicked for:", email, userId);
+    setConfirmResetUser({ id: userId, email });
+  };
+
+  const executeResetPassword = async () => {
+    if (!confirmResetUser) return;
+    const { id: userId, email } = confirmResetUser;
+    setResettingPassword(true);
 
     try {
+      console.log("Invoking reset-user-password for:", userId);
       const { data, error } = await supabase.functions.invoke('reset-user-password', {
         body: { userId }
       });
+
+      console.log("Reset response:", { data, error });
 
       if (error) {
         const errorBody = await (error as any).context?.json?.().catch(() => null);
@@ -550,10 +560,13 @@ export function UserAssignmentManager() {
 
       setResetPasswordResult({ email, password: data.newPassword });
       setCopied(false);
+      setConfirmResetUser(null);
       setPasswordDialogOpen(true);
     } catch (error: any) {
       console.error("Failed to reset password:", error);
       toast.error(`Failed to reset password: ${error.message}`);
+    } finally {
+      setResettingPassword(false);
     }
   };
 
@@ -608,6 +621,26 @@ export function UserAssignmentManager() {
 
   return (
     <div className="space-y-6">
+      {/* Confirm Reset Dialog */}
+      <Dialog open={!!confirmResetUser} onOpenChange={(open) => { if (!open) setConfirmResetUser(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Reset Password?</DialogTitle>
+            <DialogDescription>
+              Generate a new temporary password for <strong>{confirmResetUser?.email}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setConfirmResetUser(null)} disabled={resettingPassword}>
+              Cancel
+            </Button>
+            <Button onClick={executeResetPassword} disabled={resettingPassword}>
+              {resettingPassword ? "Resetting..." : "Reset Password"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Password Reset Result Dialog */}
       <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
         <DialogContent className="sm:max-w-md">
