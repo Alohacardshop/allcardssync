@@ -621,6 +621,26 @@ export function UserAssignmentManager() {
 
   return (
     <div className="space-y-6">
+      {/* Confirm Reset Dialog */}
+      <Dialog open={!!confirmResetUser} onOpenChange={(open) => { if (!open) setConfirmResetUser(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Reset Password?</DialogTitle>
+            <DialogDescription>
+              Generate a new temporary password for <strong>{confirmResetUser?.email}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setConfirmResetUser(null)} disabled={resettingPassword}>
+              Cancel
+            </Button>
+            <Button onClick={executeResetPassword} disabled={resettingPassword}>
+              {resettingPassword ? "Resetting..." : "Reset Password"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Password Reset Result Dialog */}
       <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
         <DialogContent className="sm:max-w-md">
