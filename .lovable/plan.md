@@ -1,30 +1,43 @@
 
 
-## Problem
+## Deep Dive: PIN Login Authentication System
 
-Only `services.ebay_sync` rows exist in the database for both regions. When you click "Shopify Sync" or "Discord Notifications," the upsert tries to INSERT a new row. The code and RLS policies look correct (admin has ALL access, unique constraint exists for upsert), so the issue is likely **not** a permissions problem.
+### How It Works
 
-The real issue is that `services.shopify_sync` and `services.discord_notifications` rows simply don't exist yet. The upsert *should* create them, but the button click may be silently failing or the accordion is swallowing the click event before it reaches the button.
+The app uses a **PIN-based login** system via a Supabase Edge Function (`pin-login`):
 
-Looking at the code, I notice the `isSaving` variable depends on `savingKey === saveKey`. If a previous save attempt failed and `savingKey` got stuck (or if the error handler doesn't run), subsequent clicks would find the button `disabled={isSaving}` permanently.
+1. User enters their **display name** → frontend sends it to the edge function
+2. Edge function looks up the name in the `staff_pins` table (case-insensitive)
+3. User enters a **4-digit PIN** → edge function hashes it with the stored salt and compares
+4. On success, it calls `supabase.auth.admin.generateLink({ type: "magiclink" })` to get a `hashed_token`
+5. Frontend receives the `tokenHash` and calls `supabase.auth.verifyOtp({ token_hash, type: "magiclink" })` to create a browser session
 
-## Plan
+### Current Status
 
-### 1. Seed the missing service toggle rows
-Insert the missing `services.shopify_sync` and `services.discord_notifications` rows for both regions via a database migration. This ensures the upsert always hits an UPDATE (not INSERT), matching how `services.ebay_sync` already works.
+| Check | Status |
+|-------|--------|
+| Edge function deployed | Yes, `verify_jwt = false` (correct for public login) |
+| CORS headers | Present and correct |
+| Status codes (our recent fix) | All handled errors now return `200` |
+| Zach's `staff_pins` record | Exists, `display_name: "zach"`, `failed_attempts: 0`, not locked |
+| Zach's auth user | Exists (`a95dfa6d...`), email: `lasvegas@alohacardshop.com` |
+| Zach's `last_sign_in_at` | **`null`** — he has never successfully signed in |
 
-```sql
-INSERT INTO region_settings (region_id, setting_key, setting_value, description)
-VALUES 
-  ('hawaii', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
-  ('hawaii', 'services.discord_notifications', 'false', 'Enable Discord order notifications'),
-  ('las_vegas', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
-  ('las_vegas', 'services.discord_notifications', 'false', 'Enable Discord order notifications')
-ON CONFLICT (region_id, setting_key) DO NOTHING;
-```
+### The Problem
 
-### 2. Add defensive error logging to the toggle click handler
-Update the boolean toggle's `onClick` in `RegionSettingsEditor.tsx` to log the error details to the console. This ensures any future upsert failures are visible rather than silently swallowed.
+**Zach's login attempts are not reaching the edge function at all.** The edge function logs show zero requests for "zach" or "Zach" — only my test attempts for "test" appear. This means the request is failing *before* it hits the server.
 
-This is a small, targeted fix -- seeding the rows is the primary solution.
+The most likely cause: **Zach is using the published app (`alohacardshop.lovable.app`), which has not been re-published since we changed `Auth.tsx`** from a raw `fetch()` call to `supabase.functions.invoke()`. If the published app still has the old code, it may be hitting a wrong endpoint or encountering a different error path.
+
+### What Needs to Happen
+
+1. **Publish the latest code** — The fixes to `Auth.tsx` (using `supabase.functions.invoke`) and `pin-login/index.ts` (returning `200` for all handled errors) need to be deployed to the published app. The edge function auto-deploys, but the frontend code requires a manual publish.
+
+2. **Have Zach retry on the published app** after publishing.
+
+3. **If it still fails**, the issue could be that `verifyOtp` with `token_hash` + `type: "magiclink"` doesn't work as expected with Supabase's current auth API. Zach's `last_sign_in_at` being `null` confirms the OTP verification step has never completed for any user via this flow. We may need to test this path end-to-end with a known PIN.
+
+### No Code Changes Needed
+
+This is a **publish/deploy issue**, not a code issue. The edge function fixes are already in place. The frontend fixes are already in the codebase. They just need to be published to production.
 
