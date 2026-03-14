@@ -450,7 +450,7 @@ export async function syncGradedItemToShopify(
       description += `\n\nGraded ${brandTitle} ${subject}`
       if (year) description += ` from ${year}`
       if (grade) description += `, ${gradingCompany} Grade ${grade}`
-      if (psaUrl) description += `\n\n${gradingCompany} Certificate: ${psaUrl}`
+      // PSA URL intentionally omitted — eBay prohibits external URLs in descriptions
     }
 
     // ── Metafields ──
