@@ -11,7 +11,10 @@
  * @example
  * detectMainCategory('Pokémon Base Set') // returns 'tcg'
  * detectMainCategory('Marvel Spider-Man') // returns 'comics'
+ * detectMainCategory('Baseball Cards') // returns 'sports'
  */
+
+export type MainCategory = 'tcg' | 'comics' | 'sports';
 
 const TCG_GAMES = [
   // Pokemon variations (handles é, accents, misspellings)
@@ -51,18 +54,60 @@ const TCG_GAMES = [
   'starwars',
 ];
 
-const COMICS_GAMES = [
-  'marvel',
-  'dc',
+const SPORTS_KEYWORDS = [
+  'baseball',
+  'basketball',
+  'football',
+  'hockey',
+  'soccer',
+  'boxing',
+  'wrestling',
+  'golf',
+  'tennis',
+  'racing',
+  'nascar',
+  'ufc',
+  'mma',
+  'cricket',
+  'rugby',
+  'olympic',
+  'olympics',
+  'nba',
+  'nfl',
+  'mlb',
+  'nhl',
+  'mls',
+  'topps',
+  'bowman',
+  'donruss',
+  'panini',
+  'upper deck',
+  'fleer',
+  'score',
+  'stadium club',
+  'prizm',
+  'select',
+  'mosaic',
+  'optic',
+  'chronicles',
+  'national treasures',
+  'immaculate',
+  'spectra',
+];
+
+const COMICS_KEYWORDS = [
+  'marvel comics',
   'dc comics',
-  'image',
+  'image comics',
+  'dark horse comics',
   'dark-horse',
   'dark horse',
-  'idw',
-  'boom',
-  'dynamite',
-  'valiant',
-  'comic',
+  'idw publishing',
+  'boom studios',
+  'dynamite entertainment',
+  'valiant comics',
+  'comic book',
+  'comic books',
   'comics',
   'batman',
   'superman',
@@ -70,6 +115,9 @@ const COMICS_GAMES = [
   'spiderman',
   'x-men',
   'xmen',
+  'avengers',
+  'justice league',
+  'graphic novel',
 ];
 
 /**
@@ -121,8 +169,10 @@ function smartMatch(input: string, keywords: string[]): boolean {
 /**
  * Detects the main category based on game, brand, or subject
  * Handles data from PSA API, CGC API, and other sources with special characters
+ * 
+ * Priority order: TCG → Sports → Comics → default (TCG)
  */
-export function detectMainCategory(input: string): 'tcg' | 'comics' {
+export function detectMainCategory(input: string): MainCategory {
   // Validate input
   if (!input || typeof input !== 'string') {
     console.warn('[detectMainCategory] Invalid input:', input);
@@ -134,13 +184,18 @@ export function detectMainCategory(input: string): 'tcg' | 'comics' {
   
   if (!safeInput) return 'tcg';
   
-  // Check TCG games with smart matching
+  // Check TCG games first (highest priority)
   if (smartMatch(safeInput, TCG_GAMES)) {
     return 'tcg';
   }
   
-  // Check Comics with smart matching
-  if (smartMatch(safeInput, COMICS_GAMES)) {
+  // Check Sports keywords second
+  if (smartMatch(safeInput, SPORTS_KEYWORDS)) {
+    return 'sports';
+  }
+  
+  // Check Comics last (tightened keywords to avoid false positives)
+  if (smartMatch(safeInput, COMICS_KEYWORDS)) {
     return 'comics';
   }
   
@@ -151,10 +206,11 @@ export function detectMainCategory(input: string): 'tcg' | 'comics' {
 /**
  * Gets a display-friendly category name
  */
-export function getCategoryDisplay(category: 'tcg' | 'comics'): string {
+export function getCategoryDisplay(category: MainCategory): string {
   const map = {
     tcg: '🎴 TCG',
     comics: '📚 Comics',
+    sports: '⚾ Sports',
   };
   return map[category] || map.tcg;
 }

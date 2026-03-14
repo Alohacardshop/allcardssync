@@ -279,6 +279,11 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         const subCategoryGuess = combinedText.includes('pokemon') ? 'Pokemon' :
                                  combinedText.includes('magic') ? 'Magic: The Gathering' :
                                  combinedText.includes('yugioh') || combinedText.includes('yu-gi-oh') ? 'Yu-Gi-Oh!' :
+                                 combinedText.includes('baseball') ? 'Baseball' :
+                                 combinedText.includes('basketball') ? 'Basketball' :
+                                 combinedText.includes('football') ? 'Football' :
+                                 combinedText.includes('hockey') ? 'Hockey' :
+                                 combinedText.includes('soccer') ? 'Soccer' :
                                  "";
         
         // Auto-populate form with fetched data
@@ -311,6 +316,10 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         const subCategoryGuess = seriesOrSet.includes('pokemon') ? 'Pokemon' :
                                  seriesOrSet.includes('magic') ? 'Magic: The Gathering' :
                                  seriesOrSet.includes('yugioh') || seriesOrSet.includes('yu-gi-oh') ? 'Yu-Gi-Oh!' :
+                                 seriesOrSet.includes('baseball') ? 'Baseball' :
+                                 seriesOrSet.includes('basketball') ? 'Basketball' :
+                                 seriesOrSet.includes('football') ? 'Football' :
+                                 seriesOrSet.includes('hockey') ? 'Hockey' :
                                  "";
         
         // Auto-populate form with CGC data
@@ -665,6 +674,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="tcg">🎴 TCG</SelectItem>
+                  <SelectItem value="sports">⚾ Sports</SelectItem>
                   <SelectItem value="comics">📚 Comics</SelectItem>
                 </SelectContent>
               </Select>
