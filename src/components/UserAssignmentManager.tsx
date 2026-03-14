@@ -498,7 +498,7 @@ export function UserAssignmentManager() {
         toast.success("User created successfully!");
 
         // Set PIN if provided
-        if (data?.userId && formData.displayName && formData.pin) {
+        if (data?.user?.id && formData.displayName && formData.pin) {
           try {
             await supabase.functions.invoke('manage-staff-pin', {
               body: {
