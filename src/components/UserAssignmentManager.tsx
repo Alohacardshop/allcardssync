@@ -474,6 +474,24 @@ export function UserAssignmentManager() {
         if (!data?.ok) throw new Error(data?.error || 'Unknown error');
 
         toast.success("User created successfully!");
+
+        // Set PIN if provided
+        if (data?.userId && formData.displayName && formData.pin) {
+          try {
+            await supabase.functions.invoke('manage-staff-pin', {
+              body: {
+                action: 'set-pin',
+                userId: data.userId,
+                displayName: formData.displayName,
+                pin: formData.pin,
+              }
+            });
+            toast.success("PIN configured!");
+          } catch (pinErr) {
+            console.error("Failed to set PIN:", pinErr);
+            toast.error("User created but PIN setup failed. Edit the user to set PIN.");
+          }
+        }
       }
 
       setDialogOpen(false);
