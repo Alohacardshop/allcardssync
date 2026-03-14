@@ -11,6 +11,7 @@ import type { PrintRequest, PrintResult } from '@/lib/print/transports/types';
 import { printQueue } from '@/lib/print/queueInstance';
 import { sanitizeLabel } from '@/lib/print/sanitizeZpl';
 import { getPrintEnvConfig, isPrintConfigValid, getPrintConfigWarnings } from '@/lib/print/envConfig';
+import { logPrintJob } from '@/lib/print/printLog';
 import { logger } from '@/lib/logger';
 
 // ---------------------------------------------------------------------------
@@ -68,6 +69,7 @@ export async function sendZplToPrinter(
     await printQueue.enqueueSafe({ zpl: safeZpl, qty, usePQ: true });
 
     logger.info('[print] Job queued', { jobId, title, qty, mode: config.mode }, 'print-api');
+    logPrintJob({ mode: config.mode, title, quantity: qty, success: true, zplBytes: safeZpl.length });
 
     return {
       success: true,
@@ -78,6 +80,7 @@ export async function sendZplToPrinter(
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     logger.error('[print] Failed to queue job', err instanceof Error ? err : new Error(error), { title }, 'print-api');
+    logPrintJob({ mode: config.mode, title, quantity: qty, success: false, error, zplBytes: zpl.length });
     return { success: false, error, status: 'error' };
   }
 }
@@ -141,6 +144,7 @@ export async function sendBulkZplToPrinter(items: BulkPrintItem[]): Promise<Bulk
       const config = getPrintEnvConfig();
       for (const v of validItems) {
         const jobId = `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        logPrintJob({ mode: config.mode, title: v.title, quantity: v.qty, success: true, zplBytes: v.zpl.length });
         results.push({
           success: true,
           jobId,
@@ -151,7 +155,9 @@ export async function sendBulkZplToPrinter(items: BulkPrintItem[]): Promise<Bulk
       }
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
+      const config = getPrintEnvConfig();
       for (const v of validItems) {
+        logPrintJob({ mode: config.mode, title: v.title, quantity: v.qty, success: false, error, zplBytes: v.zpl.length });
         results.push({ success: false, error, status: 'error' });
         failed++;
       }
