@@ -239,10 +239,7 @@ export function buildComicDescription(intakeItem: any, item: any): string {
   addRow('Page Quality', pageQuality)
   addRow('Category', category)
 
-  if (psaUrl) {
-    lines.push('')
-    lines.push(`<a href="${psaUrl}">${gradingCompany} Certificate</a>`)
-  }
+  // PSA URL intentionally omitted — eBay prohibits external URLs in descriptions
 
   return lines.join('<br>')
 }
