@@ -3,10 +3,9 @@ import { Route } from 'react-router-dom';
 import { PATHS } from './paths';
 import { FullScreenLoader } from '@/components/ui/FullScreenLoader';
 
-// Auth page is heavy (form validation, OAuth), lazy load it
 const Auth = lazy(() => import('@/pages/Auth'));
+const ResetPassword = lazy(() => import('@/pages/ResetPassword'));
 
-// Privacy and NotFound are simple static pages - no lazy loading needed
 import Privacy from '@/pages/Privacy';
 import NotFound from '@/pages/NotFound';
 
