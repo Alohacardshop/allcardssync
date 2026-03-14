@@ -22,7 +22,8 @@ export function useLocationNames(storeKey: string | null) {
       const { data: cached, error: cacheError } = await supabase
         .from('shopify_location_cache')
         .select('location_gid, location_name, location_id')
-        .eq('store_key', storeKey);
+        .eq('store_key', storeKey)
+        .eq('is_hidden', false);
 
       if (!cacheError && cached && cached.length > 0) {
         const map = new Map<string, CachedLocation>();
