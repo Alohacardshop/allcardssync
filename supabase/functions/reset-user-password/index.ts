@@ -1,15 +1,13 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-// Create admin client with service role key
 const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
     autoRefreshToken: false,
@@ -19,13 +17,11 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 
 // Generate a secure random password
 function generatePassword(length: number = 16): string {
-  // Use only unambiguous, copy-paste-safe characters (no special chars, no 0/O/l/1)
   const lower = "abcdefghjkmnpqrstuvwxyz";
   const upper = "ABCDEFGHJKMNPQRSTUVWXYZ";
   const digits = "23456789";
   const charset = lower + upper + digits;
   
-  // Ensure at least one of each type
   let password = "";
   password += lower.charAt(Math.floor(Math.random() * lower.length));
   password += upper.charAt(Math.floor(Math.random() * upper.length));
@@ -35,12 +31,10 @@ function generatePassword(length: number = 16): string {
     password += charset.charAt(Math.floor(Math.random() * charset.length));
   }
   
-  // Shuffle the password
   return password.split('').sort(() => Math.random() - 0.5).join('');
 }
 
-const handler = async (req: Request): Promise<Response> => {
-  // Handle CORS preflight requests
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -48,7 +42,6 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     console.log('Reset password request received');
     
-    // Get the authorization header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       console.error('No authorization header');
@@ -58,7 +51,6 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Verify the user is authenticated and is an admin
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     
@@ -70,7 +62,6 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Check if user has admin role
     const { data: hasAdminRole, error: roleError } = await supabase.rpc('has_role', {
       _user_id: user.id,
       _role: 'admin'
@@ -95,11 +86,9 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log('Resetting password for user:', userId);
 
-    // Generate new password
     const newPassword = generatePassword(12);
     
-    // Update user password using admin API
-    const { data: updateData, error: updateError } = await supabase.auth.admin.updateUserById(
+    const { error: updateError } = await supabase.auth.admin.updateUserById(
       userId,
       { password: newPassword }
     );
@@ -115,27 +104,15 @@ const handler = async (req: Request): Promise<Response> => {
     console.log('Password reset successful for user:', userId);
 
     return new Response(
-      JSON.stringify({ 
-        ok: true, 
-        newPassword: newPassword,
-        message: 'Password reset successfully'
-      }),
-      { 
-        status: 200, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
+      JSON.stringify({ ok: true, newPassword, message: 'Password reset successfully' }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error: any) {
     console.error('Error in reset-user-password function:', error);
     return new Response(
       JSON.stringify({ ok: false, error: error.message }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-};
-
-serve(handler);
+});
