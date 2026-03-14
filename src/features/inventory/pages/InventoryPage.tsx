@@ -49,6 +49,7 @@ import { InventoryBulkBar } from '../components/InventoryBulkBar';
 import { InspectorPanel } from '../components/inspector/InspectorPanel';
 import { useInventorySelection } from '../hooks/useInventorySelection';
 import { useInventoryActions } from '../hooks/useInventoryActions';
+import { useInventoryUrlFilters } from '../hooks/useInventoryUrlFilters';
 import type { InventoryFilterState, InventoryListItem } from '../types';
 import { ColumnChooser } from '../components/ColumnChooser';
 import { SavedViewsDropdown } from '../components/SavedViewsDropdown';
