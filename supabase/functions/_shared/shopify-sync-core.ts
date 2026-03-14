@@ -488,14 +488,25 @@ export async function syncGradedItemToShopify(
       purchaseLocation ? `Purchased: ${purchaseLocation}` : null
     ].filter(Boolean);
 
-    const tagsArray = [...new Set([
+    // Merge normalized_tags from DB trigger
+    const normalizedTags = Array.isArray(intakeItem.normalized_tags) ? intakeItem.normalized_tags : [];
+
+    const rawTagsArray = [...new Set([
       ...tagsForShopify,
       ...additionalTags,
-      isComic ? 'comics' : null,
-      isComic ? 'graded' : null,
+      ...normalizedTags,
+      isComic ? 'comics' : 'card',
+      'graded',
       intakeItem.primary_category,
       intakeItem.condition_type
     ].filter(Boolean))];
+
+    // Sanitize contradictory tags
+    const COMIC_EXCLUDE = new Set(['card', 'Raw Card', 'single']);
+    const CARD_EXCLUDE = new Set(['comics']);
+    const tagsArray = rawTagsArray.filter(tag =>
+      isComic ? !COMIC_EXCLUDE.has(tag) : !CARD_EXCLUDE.has(tag)
+    );
 
     metafields.push({
       namespace: 'acs.sync', key: 'tags', type: 'list.single_line_text_field',

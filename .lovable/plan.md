@@ -1,46 +1,30 @@
 
 
-## Fix Tag Consistency: Comics vs Cards
+## Problem
 
-### Problem
+Only `services.ebay_sync` rows exist in the database for both regions. When you click "Shopify Sync" or "Discord Notifications," the upsert tries to INSERT a new row. The code and RLS policies look correct (admin has ALL access, unique constraint exists for upsert), so the issue is likely **not** a permissions problem.
 
-There are two separate tag-building paths — **graded** (`shopify-sync-core.ts`) and **raw** (`v2-shopify-send-raw`) — and they handle category tags inconsistently:
+The real issue is that `services.shopify_sync` and `services.discord_notifications` rows simply don't exist yet. The upsert *should* create them, but the button click may be silently failing or the accordion is swallowing the click event before it reaches the button.
 
-| Issue | Where |
-|-------|-------|
-| Raw sync builds tags from scratch, ignoring `normalized_tags` | `v2-shopify-send-raw` line 401-425 |
-| Raw non-comic cards get `"Raw Card"` but no explicit `"card"` tag | `v2-shopify-send-raw` line 414 |
-| Graded sync relies on `normalized_tags` for `"card"` — if missing, no `"card"` tag | `shopify-sync-core.ts` line 491 |
-| Neither sync explicitly prevents `"card"` on comics or `"comics"` on cards | Both files |
-| Raw card path defaults sub_category to `'pokemon'` even for sports | `v2-shopify-send-raw` line 419 |
+Looking at the code, I notice the `isSaving` variable depends on `savingKey === saveKey`. If a previous save attempt failed and `savingKey` got stuck (or if the error handler doesn't run), subsequent clicks would find the button `disabled={isSaving}` permanently.
 
-### Plan
+## Plan
 
-**1. Add explicit category tags in graded sync (`shopify-sync-core.ts` ~line 491)**
+### 1. Seed the missing service toggle rows
+Insert the missing `services.shopify_sync` and `services.discord_notifications` rows for both regions via a database migration. This ensures the upsert always hits an UPDATE (not INSERT), matching how `services.ebay_sync` already works.
 
-Add `!isComic ? 'card' : null` to the `tagsArray` builder alongside the existing `isComic ? 'comics'` entry. This ensures graded cards always get the `"card"` tag without relying solely on `normalized_tags`.
+```sql
+INSERT INTO region_settings (region_id, setting_key, setting_value, description)
+VALUES 
+  ('hawaii', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
+  ('hawaii', 'services.discord_notifications', 'false', 'Enable Discord order notifications'),
+  ('las_vegas', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
+  ('las_vegas', 'services.discord_notifications', 'false', 'Enable Discord order notifications')
+ON CONFLICT (region_id, setting_key) DO NOTHING;
+```
 
-**2. Fix raw sync tag array (`v2-shopify-send-raw` ~line 401-425)**
+### 2. Add defensive error logging to the toggle click handler
+Update the boolean toggle's `onClick` in `RegionSettingsEditor.tsx` to log the error details to the console. This ensures any future upsert failures are visible rather than silently swallowed.
 
-- **Comic path**: Already has `'comics'` and `'raw'` — correct. Add a filter to ensure `'card'` never appears.
-- **Non-comic path**: Replace `'Raw Card'` with `'card'` and `'raw'` as separate tags (consistent with DB trigger). Remove the fallback `intakeItem.main_category === 'comics' ? 'american' : 'pokemon'` — use just the `sub_category` or omit.
-- **Both paths**: Merge `intakeItem.normalized_tags` into the tag array so DB-generated tags aren't lost.
-
-**3. Add tag sanitization step in both sync functions**
-
-After building the final `tagsArray`, strip contradictory tags:
-- If `isComic`: remove `'card'`, `'Raw Card'`, `'single'`
-- If not comic: remove `'comics'`
-
-**4. Redeploy affected edge functions**
-
-- `v2-shopify-send-raw`
-- `process-shopify-sync-queue` (uses shopify-sync-core)
-- `bulk-shopify-sync` (uses shopify-sync-core)
-
-### Files to Change
-
-- **Edit**: `supabase/functions/_shared/shopify-sync-core.ts` — add `'card'` tag for non-comics, add sanitization
-- **Edit**: `supabase/functions/v2-shopify-send-raw/index.ts` — fix tag array, merge normalized_tags, add sanitization
-- **Deploy**: 3 edge functions
+This is a small, targeted fix -- seeding the rows is the primary solution.
 
