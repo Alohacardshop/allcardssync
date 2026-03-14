@@ -80,6 +80,7 @@ export async function sendZplToPrinter(
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     logger.error('[print] Failed to queue job', err instanceof Error ? err : new Error(error), { title }, 'print-api');
+    logPrintJob({ mode: config.mode, title, quantity: qty, success: false, error, zplBytes: zpl.length });
     return { success: false, error, status: 'error' };
   }
 }
