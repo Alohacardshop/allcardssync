@@ -11,6 +11,7 @@ import type { PrintRequest, PrintResult } from '@/lib/print/transports/types';
 import { printQueue } from '@/lib/print/queueInstance';
 import { sanitizeLabel } from '@/lib/print/sanitizeZpl';
 import { getPrintEnvConfig, isPrintConfigValid, getPrintConfigWarnings } from '@/lib/print/envConfig';
+import { logPrintJob } from '@/lib/print/printLog';
 import { logger } from '@/lib/logger';
 
 // ---------------------------------------------------------------------------
