@@ -398,31 +398,38 @@ Deno.serve(async (req) => {
 
     // Build tags array with main_category, sub_category, and purchase location
     const purchaseLocation = Array.isArray(intakeItem.purchase_location) ? intakeItem.purchase_location[0]?.name : intakeItem.purchase_location?.name;
-    const tagsArray = [...new Set(isComic ? [
-      'comics',
+    
+    // Merge normalized_tags from DB trigger
+    const normalizedTags = Array.isArray(intakeItem.normalized_tags) ? intakeItem.normalized_tags : [];
+
+    const rawTagsArray = [...new Set([
+      ...normalizedTags,
+      // Explicit category tags
+      isComic ? 'comics' : 'card',
       'raw',
-      brandTitle, // Publisher (DC, Marvel, etc.)
+      brandTitle,
       condition,
       intakeItem.main_category,
-      intakeItem.sub_category || 'american', // Comic sub-category
+      intakeItem.sub_category || null,
       intakeItem.lot_number || 'Unknown Lot',
-      subject ? `Title: ${subject}` : null,
-      cardNumber ? `Issue: ${cardNumber}` : null,
+      ...(isComic ? [
+        subject ? `Title: ${subject}` : null,
+        cardNumber ? `Issue: ${cardNumber}` : null,
+      ] : [
+        'single',
+        subject ? `Card: ${subject}` : null,
+        cardNumber ? `Number: ${cardNumber}` : null,
+      ]),
       vendor,
       purchaseLocation ? `Purchased: ${purchaseLocation}` : null
-    ].filter(Boolean) : [
-      'Raw Card',
-      'single', 
-      brandTitle, 
-      condition, // Condition as separate tag
-      intakeItem.main_category,
-      intakeItem.sub_category || (intakeItem.main_category === 'comics' ? 'american' : 'pokemon'), // Use sub_category or default by main_category
-      intakeItem.lot_number || 'Unknown Lot', // Lot number
-      subject ? `Card: ${subject}` : null, // Card name
-      cardNumber ? `Number: ${cardNumber}` : null, // Card number
-      vendor, // Add vendor to tags
-      purchaseLocation ? `Purchased: ${purchaseLocation}` : null
     ].filter(Boolean))];
+
+    // Sanitize contradictory tags
+    const COMIC_EXCLUDE = new Set(['card', 'Raw Card', 'single']);
+    const CARD_EXCLUDE = new Set(['comics']);
+    const tagsArray = rawTagsArray.filter(tag =>
+      isComic ? !COMIC_EXCLUDE.has(tag) : !CARD_EXCLUDE.has(tag)
+    );
 
     // Fetch image and convert to base64 for Shopify upload (avoids hotlink blocking)
     let imageData: { attachment: string; filename: string } | null = null
