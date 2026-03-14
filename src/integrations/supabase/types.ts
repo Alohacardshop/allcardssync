@@ -3229,6 +3229,42 @@ export type Database = {
         }
         Relationships: []
       }
+      staff_pins: {
+        Row: {
+          created_at: string
+          display_name: string
+          failed_attempts: number
+          id: string
+          locked_until: string | null
+          pin_hash: string
+          pin_salt: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name: string
+          failed_attempts?: number
+          id?: string
+          locked_until?: string | null
+          pin_hash: string
+          pin_salt: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          failed_attempts?: number
+          id?: string
+          locked_until?: string | null
+          pin_hash?: string
+          pin_salt?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       sub_categories: {
         Row: {
           created_at: string | null
