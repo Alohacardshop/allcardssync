@@ -86,8 +86,6 @@ function cleanVariant(variant?: string): string {
     .trim();
 }
 
-// Title generation uses shared utility (supports camelCase fields from IntakeItemDetails)
-import { generateTitle } from '@/utils/generateTitle';
 
 // --- Layout-specific field sections ---
 
