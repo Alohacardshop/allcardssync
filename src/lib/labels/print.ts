@@ -69,6 +69,7 @@ export async function sendZplToPrinter(
     await printQueue.enqueueSafe({ zpl: safeZpl, qty, usePQ: true });
 
     logger.info('[print] Job queued', { jobId, title, qty, mode: config.mode }, 'print-api');
+    logPrintJob({ mode: config.mode, title, quantity: qty, success: true, zplBytes: safeZpl.length });
 
     return {
       success: true,
