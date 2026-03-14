@@ -1,0 +1,1 @@
+DELETE FROM shopify_location_cache WHERE store_key = 'las_vegas' AND location_name IN ('702', '702 Show');

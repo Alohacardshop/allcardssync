@@ -73,7 +73,7 @@ function getStoreLocation(payload: any): string {
   if (locationName.toLowerCase().includes('hawaii')) {
     return '🌺 Hawaii';
   }
-  if (locationName.toLowerCase().includes('vegas') || locationName.toLowerCase().includes('702')) {
+  if (locationName.toLowerCase().includes('vegas')) {
     return '🎰 Las Vegas';
   }
   
@@ -84,7 +84,7 @@ function getStoreLocation(payload: any): string {
       if (fulfillmentLocation.toLowerCase().includes('hawaii')) {
         return '🌺 Hawaii';
       }
-      if (fulfillmentLocation.toLowerCase().includes('vegas') || fulfillmentLocation.toLowerCase().includes('702')) {
+      if (fulfillmentLocation.toLowerCase().includes('vegas')) {
         return '🎰 Las Vegas';
       }
     }
