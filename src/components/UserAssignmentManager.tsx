@@ -32,10 +32,17 @@ interface Region {
   description: string | null;
 }
 
+interface StaffPinInfo {
+  display_name: string;
+  failed_attempts: number;
+  locked_until: string | null;
+}
+
 interface UserWithDetails {
   id: string;
   email: string;
   roles: string[];
+  pinInfo?: StaffPinInfo | null;
   storeAssignments: {
     [storeKey: string]: {
       storeName: string;
