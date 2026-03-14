@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, CloudUpload, ImageIcon } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { generateTitle } from '@/utils/generateTitle';
 
 export type IntakeItemDetails = {
   id: string;
