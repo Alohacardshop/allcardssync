@@ -173,14 +173,17 @@ export function resolveZplPlaceholders(zpl: string, vars: JobVars): string {
   });
 }
 
-/** Apply field-specific formatting */
+/** Apply field-specific formatting + ZPL escaping */
 function applyFormatter(key: keyof JobVars, value: string): string {
+  let formatted: string;
   switch (key) {
-    case 'CARDNAME': return formatTitle(value);
-    case 'CONDITION': return formatCondition(value);
-    case 'PRICE': return formatPriceWithSpacing(value);
-    default: return safe(value);
+    case 'CARDNAME': formatted = formatTitle(value); break;
+    case 'CONDITION': formatted = formatCondition(value); break;
+    case 'PRICE': formatted = formatPriceWithSpacing(value); break;
+    default: formatted = safe(value);
   }
+  // Always escape ZPL control chars in dynamic values
+  return escapeZpl(formatted);
 }
 
 // Legacy functions — delegate to resolveZplPlaceholders for backward compat
