@@ -10,48 +10,10 @@ import {
   InventoryItemTagsRow,
   InventoryItemActionsRow,
 } from '@/components/inventory-card';
+import { generateTitle } from '@/utils/generateTitle';
 import type { InventoryItem } from '@/types/inventory';
 import type { CachedLocation } from '@/hooks/useLocationNames';
 import type { InventoryLock } from '@/hooks/useInventoryLocks';
-
-// Helper function outside component to prevent re-creation on every render
-const generateTitle = (item: InventoryItem) => {
-  const parts = [];
-  
-  // Add year at the start if available (check both direct field and catalog_snapshot)
-  const catalogSnapshot = item.catalog_snapshot as Record<string, unknown> | null;
-  const year = item.year || (catalogSnapshot && typeof catalogSnapshot === 'object' && 'year' in catalogSnapshot ? catalogSnapshot.year : null);
-  if (year) parts.push(year);
-  
-  // Add brand
-  if (item.brand_title) parts.push(item.brand_title);
-  
-  // Add subject (like FA/MewTwo VSTAR)
-  if (item.subject) parts.push(item.subject);
-  
-  // Add card number
-  if (item.card_number) parts.push(`#${item.card_number}`);
-  
-  // Add variant after vstar (check both direct field and catalog_snapshot)
-  const variant = item.variant || (catalogSnapshot && typeof catalogSnapshot === 'object' && 'varietyPedigree' in catalogSnapshot ? catalogSnapshot.varietyPedigree : null);
-  if (variant && typeof variant === 'string' && variant.toLowerCase() !== 'vstar' && variant.toLowerCase() !== 'normal') {
-    parts.push(variant.toLowerCase());
-  }
-  
-  // Handle grading - use grading company for graded certs
-  if (item.grade && (item.psa_cert || item.cgc_cert)) {
-    const company = item.grading_company || 'PSA';
-    parts.push(`${company} ${item.grade}`);
-  } else if (item.grade) {
-    parts.push(`Grade ${item.grade}`);
-  } else if (item.psa_cert) {
-    parts.push(`PSA ${item.psa_cert}`);
-  } else if (item.cgc_cert) {
-    parts.push(`CGC ${item.cgc_cert}`);
-  }
-  
-  return parts.length > 0 ? parts.join(' ') : 'Unknown Item';
-};
 
 interface InventoryItemCardProps {
   item: InventoryItem;

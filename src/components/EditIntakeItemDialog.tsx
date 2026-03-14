@@ -85,23 +85,8 @@ function cleanVariant(variant?: string): string {
     .trim();
 }
 
-function generateTitle(item: IntakeItemDetails): string {
-  const parts: string[] = [];
-  if (item.year) parts.push(item.year);
-  if (item.brandTitle) parts.push(item.brandTitle);
-  if (item.subject) parts.push(item.subject);
-  if (item.cardNumber) parts.push(`#${item.cardNumber}`);
-  if (item.variant && item.variant.toLowerCase() !== 'normal') {
-    parts.push(item.variant.toLowerCase());
-  }
-  if (item.grade && (item.psaCert || item.gradingCompany)) {
-    const company = item.gradingCompany || 'PSA';
-    parts.push(`${company} ${item.grade}`);
-  } else if (item.grade) {
-    parts.push(`Grade ${item.grade}`);
-  }
-  return parts.length > 0 ? parts.join(' ') : 'Unknown Item';
-}
+// Title generation uses shared utility (supports camelCase fields from IntakeItemDetails)
+import { generateTitle } from '@/utils/generateTitle';
 
 // --- Layout-specific field sections ---
 

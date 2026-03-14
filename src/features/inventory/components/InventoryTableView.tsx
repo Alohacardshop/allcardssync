@@ -45,19 +45,7 @@ interface SortConfig {
   direction: SortDirection;
 }
 
-// Generate title from item
-const generateTitle = (item: InventoryListItem): string => {
-  const parts: (string | number | null | undefined)[] = [];
-  if (item.year) parts.push(item.year);
-  if (item.brand_title) parts.push(item.brand_title);
-  if (item.subject) parts.push(item.subject);
-  if (item.card_number) parts.push(`#${item.card_number}`);
-  if (item.grade && (item.psa_cert || item.cgc_cert)) {
-    const company = item.grading_company || 'PSA';
-    parts.push(`${company} ${item.grade}`);
-  }
-  return parts.filter(Boolean).join(' ') || 'Unknown Item';
-};
+import { generateTitle } from '@/utils/generateTitle';
 
 // Get sync status display
 const getSyncStatus = (item: InventoryListItem) => {
