@@ -593,55 +593,7 @@ export function UserAssignmentManager() {
     setDialogOpen(true);
   };
 
-  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
-  const [resetPasswordResult, setResetPasswordResult] = useState<{ email: string; password: string } | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [confirmResetUser, setConfirmResetUser] = useState<{ id: string; email: string } | null>(null);
-  const [resettingPassword, setResettingPassword] = useState(false);
-
-  const handleResetPassword = (userId: string, email: string) => {
-    console.log("Reset password clicked for:", email, userId);
-    setConfirmResetUser({ id: userId, email });
-  };
-
-  const executeResetPassword = async () => {
-    if (!confirmResetUser) return;
-    const { id: userId, email } = confirmResetUser;
-    setResettingPassword(true);
-
-    try {
-      console.log("Invoking reset-user-password for:", userId);
-      const { data, error } = await supabase.functions.invoke('reset-user-password', {
-        body: { userId }
-      });
-
-      console.log("Reset response:", { data, error });
-
-      if (error) {
-        const errorBody = await (error as any).context?.json?.().catch(() => null);
-        throw new Error(errorBody?.error || error.message);
-      }
-      if (!data.ok) throw new Error(data.error);
-
-      setResetPasswordResult({ email, password: data.newPassword });
-      setCopied(false);
-      setConfirmResetUser(null);
-      setPasswordDialogOpen(true);
-    } catch (error: any) {
-      console.error("Failed to reset password:", error);
-      toast.error(`Failed to reset password: ${error.message}`);
-    } finally {
-      setResettingPassword(false);
-    }
-  };
-
-  const handleCopyPassword = async () => {
-    if (!resetPasswordResult) return;
-    await navigator.clipboard.writeText(resetPasswordResult.password);
-    setCopied(true);
-    toast.success("Password copied to clipboard");
-    setTimeout(() => setCopied(false), 2000);
-  };
+  // Old password reset code removed — now using PIN-based login
 
   useEffect(() => {
     const checkAdminRole = async () => {
