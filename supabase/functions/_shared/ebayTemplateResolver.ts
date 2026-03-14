@@ -289,14 +289,31 @@ export function buildTitle(item: any, template?: string | null): string {
       .trim()
   }
 
-  const parts: string[] = []
-  if (item.year) parts.push(item.year)
-  if (item.brand_title) parts.push(item.brand_title)
-  if (item.subject) parts.push(item.subject)
-  if (item.card_number) parts.push(`#${item.card_number}`)
-
+  // ── Fallback: build title from fields with category-aware logic ──
   const isGraded = !!(item.grade || item.psa_cert || item.cgc_cert)
+  const isComic = item.main_category === 'comics'
   const SKIP_VARIANTS = new Set(['normal', 'none', 'n/a', 'base', 'standard'])
+  const snapshot = item.catalog_snapshot || item.psa_snapshot || {}
+
+  const parts: string[] = []
+
+  if (isComic) {
+    // Comic: PUBLISHER TITLE #ISSUE YEAR VARIANT [COMPANY GRADE]
+    if (item.brand_title) parts.push(item.brand_title)
+    if (item.subject) parts.push(item.subject)
+    const issueNum = (snapshot as any).issueNumber || (snapshot as any).cardNumber || item.card_number
+    if (issueNum) {
+      const n = String(issueNum).replace(/^#/, '').trim()
+      if (n && !/^0+$/.test(n)) parts.push(`#${n}`)
+    }
+    if (item.year) parts.push(item.year)
+  } else {
+    // Card: YEAR BRAND SUBJECT #NUMBER
+    if (item.year) parts.push(item.year)
+    if (item.brand_title) parts.push(item.brand_title)
+    if (item.subject) parts.push(item.subject)
+    if (item.card_number) parts.push(`#${item.card_number}`)
+  }
 
   if (isGraded) {
     if (item.variant && !SKIP_VARIANTS.has(item.variant.toLowerCase().trim())) {
