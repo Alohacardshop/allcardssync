@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, CloudUpload, ImageIcon } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { generateTitle } from '@/utils/generateTitle';
 
 export type IntakeItemDetails = {
   id: string;
@@ -85,23 +86,6 @@ function cleanVariant(variant?: string): string {
     .trim();
 }
 
-function generateTitle(item: IntakeItemDetails): string {
-  const parts: string[] = [];
-  if (item.year) parts.push(item.year);
-  if (item.brandTitle) parts.push(item.brandTitle);
-  if (item.subject) parts.push(item.subject);
-  if (item.cardNumber) parts.push(`#${item.cardNumber}`);
-  if (item.variant && item.variant.toLowerCase() !== 'normal') {
-    parts.push(item.variant.toLowerCase());
-  }
-  if (item.grade && (item.psaCert || item.gradingCompany)) {
-    const company = item.gradingCompany || 'PSA';
-    parts.push(`${company} ${item.grade}`);
-  } else if (item.grade) {
-    parts.push(`Grade ${item.grade}`);
-  }
-  return parts.length > 0 ? parts.join(' ') : 'Unknown Item';
-}
 
 // --- Layout-specific field sections ---
 

@@ -294,13 +294,36 @@ export function buildTitle(item: any, template?: string | null): string {
   if (item.brand_title) parts.push(item.brand_title)
   if (item.subject) parts.push(item.subject)
   if (item.card_number) parts.push(`#${item.card_number}`)
-  if (item.grade && item.grading_company) {
-    parts.push(`${item.grading_company} ${item.grade}`)
-  } else if (item.grade) {
-    parts.push(`PSA ${item.grade}`)
+
+  const isGraded = !!(item.grade || item.psa_cert || item.cgc_cert)
+  const SKIP_VARIANTS = new Set(['normal', 'none', 'n/a', 'base', 'standard'])
+
+  if (isGraded) {
+    if (item.variant && !SKIP_VARIANTS.has(item.variant.toLowerCase().trim())) {
+      parts.push(item.variant)
+    }
+    if (item.grade) {
+      const company = item.grading_company || 'PSA'
+      parts.push(`${company} ${item.grade}`)
+    }
+  } else {
+    if (item.variant) parts.push(item.variant)
   }
 
-  return parts.join(' ') || 'Trading Card'
+  // Deduplicate words
+  const seen = new Set<string>()
+  const deduped: string[] = []
+  for (const part of parts) {
+    const words = part.split(/\s+/)
+    const kept: string[] = []
+    for (const w of words) {
+      const lower = w.toLowerCase()
+      if (!seen.has(lower)) { seen.add(lower); kept.push(w) }
+    }
+    if (kept.length) deduped.push(kept.join(' '))
+  }
+
+  return deduped.join(' ') || 'Trading Card'
 }
 
 /**
