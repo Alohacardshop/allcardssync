@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
     }
 
     const data = await response.json();
-    const locations = data.locations || [];
+    const locations = (data.locations || []).filter((l: any) => l.active);
 
     console.log(`fetch-shopify-locations: Found ${locations.length} locations for ${storeKey}:`, 
       locations.map((l: any) => ({ id: l.id, name: l.name, active: l.active })));

@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
       throw new Error("Unexpected Shopify response format");
     }
     
-    const locations = data.locations || [];
+    const locations = (data.locations || []).filter((l: any) => l.active);
     console.log(`shopify-locations: Found ${locations.length} locations for store ${storeKey}`);
 
     // Cache locations in shopify_location_cache table
