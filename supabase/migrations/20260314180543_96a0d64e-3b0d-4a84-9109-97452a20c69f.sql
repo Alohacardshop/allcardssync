@@ -1,0 +1,1 @@
+DELETE FROM shopify_location_cache WHERE location_name ILIKE '%702%';
