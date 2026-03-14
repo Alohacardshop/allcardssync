@@ -240,3 +240,11 @@ verify_jwt = true
 # Admin password reset (admin-only)
 [functions.reset-user-password]
 verify_jwt = true
+
+# PIN-based login (public - no JWT, validates PIN internally)
+[functions.pin-login]
+verify_jwt = false
+
+# Admin PIN management (admin-only)
+[functions.manage-staff-pin]
+verify_jwt = true
