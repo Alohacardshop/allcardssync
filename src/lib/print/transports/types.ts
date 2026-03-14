@@ -15,12 +15,11 @@ export type PrintTransport = (payload: string) => Promise<void>;
 
 /**
  * Available transport modes.
- * - mock:    logs ZPL, no hardware needed
- * - qz-tray: sends via QZ Tray (production)
- *
- * Future: add 'tcp' here when direct TCP/9100 is wired up.
+ * - mock:    logs ZPL, no hardware needed (dev default)
+ * - tcp:     sends raw ZPL to Zebra on port 9100 via QZ Tray (prod default)
+ * - qz-tray: alias for tcp (legacy compat)
  */
-export type TransportMode = 'mock' | 'qz-tray';
+export type TransportMode = 'mock' | 'tcp' | 'qz-tray';
 
 // ---------------------------------------------------------------------------
 // Printer Config
