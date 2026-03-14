@@ -1,29 +1,30 @@
 
 
-## Fix: "Connection Error" on PIN Login
+## Problem
 
-### Root Cause
+Only `services.ebay_sync` rows exist in the database for both regions. When you click "Shopify Sync" or "Discord Notifications," the upsert tries to INSERT a new row. The code and RLS policies look correct (admin has ALL access, unique constraint exists for upsert), so the issue is likely **not** a permissions problem.
 
-The `pin-login` edge function returns HTTP status codes like **401** (invalid credentials) and **429** (locked out) for expected validation failures. However, `supabase.functions.invoke()` treats **any non-2xx response** as a `FunctionsHttpError`, throwing a generic error with the message `"Edge Function returned a non-2xx status code"`. The actual JSON body (`{"ok":false,"error":"Invalid name or PIN"}`) is swallowed and never reaches the frontend's error handling logic.
+The real issue is that `services.shopify_sync` and `services.discord_notifications` rows simply don't exist yet. The upsert *should* create them, but the button click may be silently failing or the accordion is swallowing the click event before it reaches the button.
 
-I confirmed this by running a live browser test:
-- Entered name "test", PIN "4321"
-- Edge function returned `401` with body `{"ok":false,"error":"Invalid name or PIN"}`
-- Frontend caught `FunctionsHttpError` and displayed the generic message instead of the actual error
+Looking at the code, I notice the `isSaving` variable depends on `savingKey === saveKey`. If a previous save attempt failed and `savingKey` got stuck (or if the error handler doesn't run), subsequent clicks would find the button `disabled={isSaving}` permanently.
 
-This is why Zach sees "connection error" — the `invokeError.message` is the generic Supabase client message, not the structured error from the function.
+## Plan
 
-### Fix
+### 1. Seed the missing service toggle rows
+Insert the missing `services.shopify_sync` and `services.discord_notifications` rows for both regions via a database migration. This ensures the upsert always hits an UPDATE (not INSERT), matching how `services.ebay_sync` already works.
 
-**Change the `pin-login` edge function to always return HTTP 200** for all handled cases (success, invalid PIN, locked account). The `ok` field in the JSON body already distinguishes success from failure. Reserve non-2xx codes only for truly unexpected server errors.
+```sql
+INSERT INTO region_settings (region_id, setting_key, setting_value, description)
+VALUES 
+  ('hawaii', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
+  ('hawaii', 'services.discord_notifications', 'false', 'Enable Discord order notifications'),
+  ('las_vegas', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
+  ('las_vegas', 'services.discord_notifications', 'false', 'Enable Discord order notifications')
+ON CONFLICT (region_id, setting_key) DO NOTHING;
+```
 
-### Files to Change
+### 2. Add defensive error logging to the toggle click handler
+Update the boolean toggle's `onClick` in `RegionSettingsEditor.tsx` to log the error details to the console. This ensures any future upsert failures are visible rather than silently swallowed.
 
-**`supabase/functions/pin-login/index.ts`**
-- Change all `status: 401` responses to `status: 200` (invalid credentials, wrong PIN)
-- Change `status: 429` response to `status: 200` (account locked)
-- Keep `status: 400` for malformed requests (missing fields, bad PIN format) — though these could also be 200
-- Keep `status: 500` for unexpected errors
-
-This is a single-file change — the frontend already handles `data.ok === false`, `data.locked`, and `data.error` correctly. Once the function returns 200, those fields will flow through properly.
+This is a small, targeted fix -- seeding the rows is the primary solution.
 

@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
       // Don't reveal if user exists
       return new Response(
         JSON.stringify({ ok: false, error: "Invalid name or PIN" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
             locked: true,
             minutesLeft,
           }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       // Lockout expired, reset
@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
             : `Account locked for ${LOCKOUT_MINUTES} minutes.`,
           locked: newAttempts >= MAX_ATTEMPTS,
         }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
