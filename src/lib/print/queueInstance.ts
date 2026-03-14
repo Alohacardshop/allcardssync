@@ -1,6 +1,6 @@
 import { PrintQueue, PrintQueueOptions } from "./printQueue";
-import { zebraService } from "@/lib/printer/zebraService";
 import { logger } from "@/lib/logger";
+import { getTransport, getTransportMode } from "./transports";
 
 // ZD410: tiny throwaway label in cutter mode to fire ONE cut at end of batch, then revert to tear-off.
 const ZD410_END_CUT_TAIL = `^XA
@@ -38,6 +38,10 @@ let configuredPrinterName: string | null = null;
  */
 export function setConfiguredPrinter(printerName: string | null) {
   configuredPrinterName = printerName;
+  // Forward to qzTray transport if it's loaded
+  import('./transports/qzTray').then(({ setQzPrinterName }) => {
+    setQzPrinterName(printerName);
+  }).catch(() => {});
   logger.debug('Print queue printer configured', { printerName }, 'print-transport');
 }
 
@@ -48,48 +52,18 @@ export function getConfiguredPrinter(): string | null {
   return configuredPrinterName;
 }
 
-// QZ Tray transport function
-async function qzTrayTransport(payload: string): Promise<void> {
-  try {
-    logger.debug('QZ Tray transport starting', { 
-      payloadLength: payload.length,
-      firstChars: payload.substring(0, 50)
-    }, 'print-transport');
+/**
+ * Delegating transport — lazily resolves the real transport on first call.
+ * This avoids top-level async while still using the factory.
+ */
+let resolvedTransport: ((payload: string) => Promise<void>) | null = null;
 
-    // First check for externally configured printer, then fall back to zebraService
-    let printerName = configuredPrinterName;
-    
-    if (!printerName) {
-      const config = zebraService.getConfig();
-      printerName = config?.name || null;
-    }
-    
-    if (!printerName) {
-      const error = 'No printer configured. Please select a printer in Settings.';
-      logger.error('Printer config missing', new Error(error), undefined, 'print-transport');
-      throw new Error(error);
-    }
-
-    logger.info('Sending print job via QZ Tray', { 
-      printerName,
-      payloadSize: payload.length 
-    }, 'print-transport');
-
-    // Send ZPL via QZ Tray
-    const result = await zebraService.print(payload, printerName);
-    
-    if (!result.success) {
-      throw new Error(result.error || 'Print failed');
-    }
-
-    logger.info('Print job sent successfully via QZ Tray', { 
-      printerName,
-      message: result.message
-    }, 'print-transport');
-  } catch (error) {
-    logger.error('Queue: QZ Tray transport error', error instanceof Error ? error : new Error(String(error)), undefined, 'print-transport');
-    throw error;
+async function delegatingTransport(payload: string): Promise<void> {
+  if (!resolvedTransport) {
+    resolvedTransport = await getTransport();
+    logger.info(`Print transport resolved: ${getTransportMode()}`, undefined, 'print-transport');
   }
+  return resolvedTransport(payload);
 }
 
-export const printQueue = new PrintQueue(qzTrayTransport, DEFAULT_OPTIONS);
+export const printQueue = new PrintQueue(delegatingTransport, DEFAULT_OPTIONS);
