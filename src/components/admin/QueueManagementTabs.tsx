@@ -68,6 +68,7 @@ export function QueueManagementTabs() {
           )}
         </TabsTrigger>
         <TabsTrigger value="comic-repair">Comic Repair</TabsTrigger>
+        <TabsTrigger value="title-repair">Title Repair</TabsTrigger>
         <TabsTrigger value="settings">Settings</TabsTrigger>
       </TabsList>
 
