@@ -46,6 +46,7 @@ export const ItemDetailsDrawer = React.memo(({
   isResyncing,
 }: ItemDetailsDrawerProps) => {
   const { toggleListOnEbay, isToggling } = useEbayListing();
+  const { ebayEnabled } = useServiceFlags();
   
   // Fetch detail data lazily when drawer opens
   const { data: detailData, isLoading: isLoadingDetail } = useInventoryItemDetail(
