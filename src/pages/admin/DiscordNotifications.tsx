@@ -18,6 +18,7 @@ interface RegionDiscordConfig {
   roleId: string;
   channelName: string;
   enabled: boolean;
+  notifyCancellations: boolean;
 }
 
 const REGIONS = [
@@ -25,7 +26,7 @@ const REGIONS = [
   { id: 'las_vegas', label: '🎰 Las Vegas' },
 ];
 
-const DISCORD_KEYS = ['discord.webhook_url', 'discord.role_id', 'discord.channel_name', 'discord.enabled'] as const;
+const DISCORD_KEYS = ['discord.webhook_url', 'discord.role_id', 'discord.channel_name', 'discord.enabled', 'discord.notify_cancellations'] as const;
 
 export default function DiscordNotifications() {
   const { toast } = useToast();
@@ -33,8 +34,8 @@ export default function DiscordNotifications() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [configs, setConfigs] = useState<Record<string, RegionDiscordConfig>>({
-    hawaii: { webhookUrl: '', roleId: '', channelName: '', enabled: false },
-    las_vegas: { webhookUrl: '', roleId: '', channelName: '', enabled: false },
+    hawaii: { webhookUrl: '', roleId: '', channelName: '', enabled: false, notifyCancellations: false },
+    las_vegas: { webhookUrl: '', roleId: '', channelName: '', enabled: false, notifyCancellations: false },
   });
   const [manualOrderNumber, setManualOrderNumber] = useState('');
   const [manualStoreKey, setManualStoreKey] = useState('');
@@ -70,6 +71,9 @@ export default function DiscordNotifications() {
           case 'discord.enabled':
             newConfigs[region].enabled = row.setting_value !== false;
             break;
+          case 'discord.notify_cancellations':
+            newConfigs[region].notifyCancellations = row.setting_value === true;
+            break;
         }
       });
       setConfigs(newConfigs);
@@ -92,6 +96,7 @@ export default function DiscordNotifications() {
         { region_id: regionId, setting_key: 'discord.role_id', setting_value: config.roleId },
         { region_id: regionId, setting_key: 'discord.channel_name', setting_value: config.channelName },
         { region_id: regionId, setting_key: 'discord.enabled', setting_value: config.enabled },
+        { region_id: regionId, setting_key: 'discord.notify_cancellations', setting_value: config.notifyCancellations },
       ];
 
       for (const u of updates) {
@@ -229,6 +234,22 @@ export default function DiscordNotifications() {
                         placeholder="e.g., #orders"
                         value={configs[region.id]?.channelName ?? ''}
                         onChange={(e) => updateConfig(region.id, 'channelName', e.target.value)}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-lg border p-3">
+                      <div>
+                        <Label htmlFor={`cancellations-${region.id}`} className="text-sm font-medium">
+                          Notify on Cancellations
+                        </Label>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Send a Discord alert when an order is cancelled
+                        </p>
+                      </div>
+                      <Switch
+                        id={`cancellations-${region.id}`}
+                        checked={configs[region.id]?.notifyCancellations ?? false}
+                        onCheckedChange={(checked) => updateConfig(region.id, 'notifyCancellations', checked)}
                       />
                     </div>
 

@@ -223,10 +223,25 @@ serve(async (req) => {
           await handleInventoryLevelUpdate(supabase, payload, shopifyDomain);
           break;
         
-        case 'orders/cancelled':
-          await sendCancellationNotification(supabase, payload, 'cancelled', shopifyDomain);
+        case 'orders/cancelled': {
+          // Check region setting before sending cancellation notification
+          const cancelRegion = getOrderRegionFromPayload(payload, storeKey);
+          const cancelRegionId = cancelRegion === 'las_vegas' ? 'las_vegas' : 'hawaii';
+          const { data: cancelSetting } = await supabase
+            .from('region_settings')
+            .select('setting_value')
+            .eq('region_id', cancelRegionId)
+            .eq('setting_key', 'discord.notify_cancellations')
+            .single();
+          
+          if (cancelSetting?.setting_value === true) {
+            await sendCancellationNotification(supabase, payload, 'cancelled', shopifyDomain);
+          } else {
+            console.log(`[DISCORD] Cancellation notification skipped for ${cancelRegionId} (disabled)`);
+          }
           await handleOrderCancellation(supabase, payload, shopifyDomain);
           break;
+        }
         
         case 'refunds/create':
           // Skip Discord notification for refunds - shippers check manually
