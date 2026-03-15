@@ -425,12 +425,16 @@ export function isOnlineOrderNeedingFulfillment(payload: any): boolean {
   if (sourceName === 'pos' || sourceName === 'shopify_pos' || sourceName === 'POS') return false;
   if (payload.fulfillment_status === 'fulfilled') return false;
 
+  // External/eBay orders always need notification (staff needs to pull items)
+  const tags = payload.tags || '';
+  const tagString = typeof tags === 'string' ? tags.toLowerCase() : (tags as any[]).join(',').toLowerCase();
+  if (tagString.includes('external_sale') || tagString.includes('ebay') || tagString.includes('needs_pull')) return true;
+  if (sourceName === 'external') return true;
+
   const shippingLines = payload.shipping_lines || [];
   const hasShipping = shippingLines.length > 0;
   const hasShippingAddress = payload.shipping_address != null;
 
-  const tags = payload.tags || '';
-  const tagString = typeof tags === 'string' ? tags.toLowerCase() : (tags as any[]).join(',').toLowerCase();
   const hasPickupTag = tagString.includes('pickup') || tagString.includes('local_pickup') || tagString.includes('store_pickup');
 
   const fulfillments = payload.fulfillments || [];
