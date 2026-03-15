@@ -47,6 +47,9 @@ export default function DiscordNotifications() {
     hawaii: null,
     las_vegas: null,
   });
+  const [testRegion, setTestRegion] = useState('hawaii');
+  const [testType, setTestType] = useState('shipping');
+  const [sendingTest, setSendingTest] = useState(false);
 
   useEffect(() => {
     loadConfigs();
