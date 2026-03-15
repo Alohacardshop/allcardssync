@@ -56,7 +56,7 @@ export default function DiscordNotifications() {
       const { data, error } = await supabase
         .from('region_settings')
         .select('region_id, setting_key, setting_value')
-        .in('setting_key', [...DISCORD_KEYS]);
+        .in('setting_key', [...ALL_KEYS]);
 
       if (error) throw error;
 
