@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useRegionSettings } from "@/hooks/useRegionSettings";
 import { Badge } from "@/components/ui/badge";
 import { ShopifySyncPanel } from "./ShopifySyncPanel";
 import ShopifyQueueHealth from "./ShopifyQueueHealth";
