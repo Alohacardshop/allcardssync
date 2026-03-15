@@ -555,6 +555,7 @@ export const InventoryTableView = memo(({
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const [auditDialogItem, setAuditDialogItem] = useState<InventoryListItem | null>(null);
+  const { ebayEnabled } = useServiceFlags();
 
   // Sort items
   const items = useMemo(() => {
