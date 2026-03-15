@@ -15,6 +15,7 @@ import {
   Bell,
   RefreshCw,
   Activity,
+  TrendingDown,
   type LucideIcon,
 } from 'lucide-react';
 import { PATHS } from '@/routes/paths';
