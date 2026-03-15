@@ -261,10 +261,10 @@ export const OverviewTab = React.memo(({ item, detailData, locationsMap, onField
                   ) : (
                     <RefreshCw className="h-3 w-3 mr-1" />
                   )}
-                  {isListed ? 'Resync All' : 'Resync'}
+                  {isListed && ebayEnabled ? 'Resync All' : 'Resync'}
                 </Button>
               </TooltipTrigger>
-              {isListed && (
+              {isListed && ebayEnabled && (
                 <TooltipContent side="bottom">Resyncs to both Shopify & eBay</TooltipContent>
               )}
             </Tooltip>
