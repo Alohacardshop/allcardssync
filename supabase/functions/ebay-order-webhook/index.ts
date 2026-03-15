@@ -1,6 +1,8 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
  import { writeInventory, generateRequestId, locationGidToId } from '../_shared/inventory-write.ts'
+ import { createShopifyOrderForEbaySale } from '../_shared/shopify-create-ebay-order.ts'
+ import { parseIdFromGid } from '../_shared/shopify-helpers.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
