@@ -23,6 +23,7 @@ export function BottomNav({ className }: BottomNavProps) {
   const location = useLocation();
   const { isAdmin } = useAuth();
   const { accentClass } = useEcosystemTheme();
+  const { ebayEnabled } = useServiceFlags();
 
   const isActive = (href: string) => {
     if (href === PATHS.dashboard) return location.pathname === PATHS.dashboard;

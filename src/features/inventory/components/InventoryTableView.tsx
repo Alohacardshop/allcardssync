@@ -118,6 +118,7 @@ const TableRow = memo(({
   onOpenDetails,
 }: TableRowProps) => {
   const { toggleListOnEbay, isToggling } = useEbayListing();
+  const { ebayEnabled } = useServiceFlags();
   const title = useMemo(() => generateTitle(item), [item]);
   const syncStatus = useMemo(() => getSyncStatus(item), [item]);
   const status = item.shopify_sync_status as string | null;

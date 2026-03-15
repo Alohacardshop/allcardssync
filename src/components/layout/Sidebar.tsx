@@ -23,6 +23,7 @@ export function Sidebar({ className }: SidebarProps) {
   const location = useLocation();
   const { isAdmin } = useAuth();
   const { bgClass, accentClass } = useEcosystemTheme();
+  const { ebayEnabled } = useServiceFlags();
 
   const isActive = (href: string) => {
     if (href === PATHS.dashboard) return location.pathname === PATHS.dashboard;
