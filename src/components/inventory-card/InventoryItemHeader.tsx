@@ -84,6 +84,7 @@ export const InventoryItemHeader = memo(({
   onToggleSelection,
   onToggleExpanded,
 }: InventoryItemHeaderProps) => {
+  const { ebayEnabled } = useServiceFlags();
   return (
     <CardHeader className="pb-3">
       <div className="flex items-start justify-between">
