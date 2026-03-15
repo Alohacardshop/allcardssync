@@ -42,6 +42,7 @@ export const INVENTORY_COLUMNS: ColumnConfig[] = [
   { id: 'checkbox', label: 'Select', defaultVisible: true, locked: true, width: '40px' },
   { id: 'sku', label: 'SKU', defaultVisible: true, width: '100px' },
   { id: 'title', label: 'Title', defaultVisible: true, width: 'minmax(220px, 1fr)' },
+  { id: 'item_type', label: 'Type', defaultVisible: true, width: '120px' },
   { id: 'location', label: 'Location', defaultVisible: true, width: '120px' },
   { id: 'price', label: 'Price', defaultVisible: true, width: '80px' },
   { id: 'quantity', label: 'Qty', defaultVisible: true, width: '65px' },

@@ -237,6 +237,22 @@ export default function DiscordNotifications() {
                       />
                     </div>
 
+                    <div className="flex items-center justify-between rounded-lg border p-3">
+                      <div>
+                        <Label htmlFor={`cancellations-${region.id}`} className="text-sm font-medium">
+                          Notify on Cancellations
+                        </Label>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Send a Discord alert when an order is cancelled
+                        </p>
+                      </div>
+                      <Switch
+                        id={`cancellations-${region.id}`}
+                        checked={configs[region.id]?.notifyCancellations ?? false}
+                        onCheckedChange={(checked) => updateConfig(region.id, 'notifyCancellations', checked)}
+                      />
+                    </div>
+
                     <Button onClick={() => saveRegionConfig(region.id)} disabled={saving === region.id}>
                       {saving === region.id ? (
                         <>

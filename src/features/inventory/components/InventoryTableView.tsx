@@ -745,6 +745,7 @@ export const InventoryTableView = memo(({
                </div>}
                {isColumnVisible('sku') && <SortableHeader label="SKU" field="sku" sortConfig={sortConfig} onSort={handleSort} />}
                {isColumnVisible('title') && <SortableHeader label="Title" field="title" sortConfig={sortConfig} onSort={handleSort} />}
+               {isColumnVisible('item_type') && <span className="text-muted-foreground">Type</span>}
                {isColumnVisible('location') && <span className="text-muted-foreground">Location</span>}
                {isColumnVisible('price') && <SortableHeader label="Price" field="price" sortConfig={sortConfig} onSort={handleSort} className="justify-end pr-1" />}
                {isColumnVisible('quantity') && <SortableHeader label="Qty" field="quantity" sortConfig={sortConfig} onSort={handleSort} className="justify-center" />}

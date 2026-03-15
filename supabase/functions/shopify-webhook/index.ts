@@ -241,6 +241,7 @@ serve(async (req) => {
           }
           await handleOrderCancellation(supabase, payload, shopifyDomain);
           break;
+        }
         
         case 'refunds/create':
           // Skip Discord notification for refunds - shippers check manually
