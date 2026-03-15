@@ -53,7 +53,15 @@ interface Props {
 export function BusinessHoursConfig({ regionId, regionLabel, initialData, onSaved }: Props) {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
-  const [config, setConfig] = useState<BusinessHoursData>(initialData ?? DEFAULT_CONFIG);
+  const [config, setConfig] = useState<BusinessHoursData>(() => {
+    if (!initialData) return DEFAULT_CONFIG;
+    return {
+      timezone: initialData.timezone || DEFAULT_CONFIG.timezone,
+      start: typeof initialData.start === 'string' ? initialData.start : DEFAULT_CONFIG.start,
+      end: typeof initialData.end === 'string' ? initialData.end : DEFAULT_CONFIG.end,
+      active_days: Array.isArray(initialData.active_days) ? initialData.active_days : DEFAULT_CONFIG.active_days,
+    };
+  });
   const [errors, setErrors] = useState<string[]>([]);
 
   const validate = (): string[] => {
