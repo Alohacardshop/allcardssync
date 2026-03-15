@@ -229,7 +229,8 @@ serve(async (req) => {
           break;
         
         case 'refunds/create':
-          await sendCancellationNotification(supabase, payload, 'refunded', shopifyDomain);
+          // Skip Discord notification for refunds - shippers check manually
+          // await sendCancellationNotification(supabase, payload, 'refunded', shopifyDomain);
           await handleRefundCreated(supabase, payload, shopifyDomain);
           break;
         
