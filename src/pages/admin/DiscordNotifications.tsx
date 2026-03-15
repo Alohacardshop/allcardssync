@@ -276,6 +276,13 @@ export default function DiscordNotifications() {
                     </Button>
                   </CardContent>
                 </Card>
+
+                <BusinessHoursConfig
+                  regionId={region.id}
+                  regionLabel={region.label}
+                  initialData={businessHours[region.id]}
+                  onSaved={(data) => setBusinessHours((prev) => ({ ...prev, [region.id]: data }))}
+                />
               </TabsContent>
             ))}
           </Tabs>
