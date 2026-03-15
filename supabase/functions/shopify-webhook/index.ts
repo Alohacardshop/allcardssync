@@ -224,6 +224,7 @@ serve(async (req) => {
           break;
         
         case 'orders/cancelled':
+          await sendCancellationNotification(supabase, payload, 'cancelled', shopifyDomain);
           await handleOrderCancellation(supabase, payload, shopifyDomain);
           break;
         
