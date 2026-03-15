@@ -92,6 +92,10 @@ export function QueueManagementTabs() {
         <ComicBulkRepairPanel />
       </TabsContent>
 
+      <TabsContent value="title-repair">
+        <TitleRepairPanel />
+      </TabsContent>
+
       <TabsContent value="settings">
         <ShopifyQueueSettings />
       </TabsContent>
