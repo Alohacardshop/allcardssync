@@ -95,7 +95,13 @@ serve(async (req) => {
 
     const payload: EbayOrderNotification = await req.json()
     
-    console.log('[eBay Webhook] Received notification:', JSON.stringify(payload.metadata || {}))
+    // DETAILED: Log full payload for production debugging (first real events)
+    console.log('[eBay Webhook] === INCOMING EVENT ===')
+    console.log('[eBay Webhook] Topic:', payload.metadata?.topic)
+    console.log('[eBay Webhook] Metadata:', JSON.stringify(payload.metadata || {}))
+    console.log('[eBay Webhook] Order ID:', payload.notification?.data?.orderId)
+    console.log('[eBay Webhook] Line items count:', payload.notification?.data?.orderLineItems?.length || 0)
+    console.log('[eBay Webhook] Full payload:', JSON.stringify(payload))
 
     const topic = payload.metadata?.topic
     const orderData = payload.notification?.data
@@ -134,8 +140,19 @@ serve(async (req) => {
       const ebayItemId = lineItem.legacyItemId
       const quantity = lineItem.quantity
 
+      console.log(`[eBay Webhook] --- Line item: SKU=${sku || 'none'}, ebayItemId=${ebayItemId}, qty=${quantity}, cost=${lineItem.lineItemCost?.value} ${lineItem.lineItemCost?.currency}`)
+
       if (!sku && !ebayItemId) {
-        console.log(`[eBay Webhook] Line item missing SKU and item ID, skipping`)
+        const msg = `[eBay Webhook] ⚠️ Line item missing both SKU and eBay item ID in order ${orderId}`
+        console.error(msg)
+        errors.push('Line item missing SKU and item ID')
+        // Alert: log as error so this is never silent
+        await supabase.from('system_logs').insert({
+          level: 'error',
+          message: msg,
+          source: 'ebay-order-webhook',
+          context: { orderId, lineItem: JSON.stringify(lineItem) }
+        })
         continue
       }
 
@@ -219,7 +236,24 @@ serve(async (req) => {
                   if (inventoryResult.success) {
                     console.log(`[eBay Webhook] ✓ Shopify inventory zeroed for ${sku}`);
                   } else {
-                    console.error(`[eBay Webhook] Shopify zero failed, queueing:`, inventoryResult.error);
+                    const errMsg = `Shopify inventory zero FAILED for SKU ${sku} (eBay order ${orderId}). Queued for retry.`;
+                    console.error(`[eBay Webhook] 🚨 ${errMsg}`, inventoryResult.error);
+                    errors.push(errMsg);
+                    
+                    // CRITICAL ALERT: Shopify zero failed — log as error
+                    await supabase.from('system_logs').insert({
+                      level: 'error',
+                      message: errMsg,
+                      source: 'ebay-order-webhook',
+                      context: {
+                        orderId,
+                        sku,
+                        shopify_inventory_item_id: card.shopify_inventory_item_id,
+                        location_id: card.current_shopify_location_id,
+                        store_key: storeKey,
+                        error: String(inventoryResult.error)
+                      }
+                    });
                     
                     await supabase.rpc('queue_shopify_zero', {
                       p_sku: sku,
@@ -228,7 +262,20 @@ serve(async (req) => {
                       p_store_key: storeKey
                     });
                   }
+                } else {
+                  const missingMsg = `Card ${sku} sold on eBay but missing Shopify credentials (domain=${!!domain}, token=${!!token})`;
+                  console.error(`[eBay Webhook] 🚨 ${missingMsg}`);
+                  errors.push(missingMsg);
+                  await supabase.from('system_logs').insert({
+                    level: 'error',
+                    message: missingMsg,
+                    source: 'ebay-order-webhook',
+                    context: { orderId, sku, storeKey: storeKey }
+                  });
                 }
+              } else {
+                // Card has no Shopify IDs — log as warning (may be eBay-only item)
+                console.log(`[eBay Webhook] Card ${sku} has no Shopify inventory IDs — skipping cross-channel zero`);
               }
               
               // Also update intake_items for this SKU
@@ -277,8 +324,17 @@ serve(async (req) => {
         }
 
         if (!items || items.length === 0) {
-          console.log(`[eBay Webhook] No matching item found for SKU: ${sku}, eBay ID: ${ebayItemId}`)
-          errors.push(`No item found for ${sku || ebayItemId}`)
+          const noMatchMsg = `eBay sale item lookup FAILED: no matching item for SKU=${sku}, eBay ID=${ebayItemId} in order ${orderId}`;
+          console.error(`[eBay Webhook] 🚨 ${noMatchMsg}`)
+          errors.push(noMatchMsg)
+          
+          // CRITICAL ALERT: Item not found — real sale could be missed
+          await supabase.from('system_logs').insert({
+            level: 'error',
+            message: noMatchMsg,
+            source: 'ebay-order-webhook',
+            context: { orderId, sku, ebayItemId, quantity, lineItemTitle: lineItem.title }
+          });
           continue
         }
 
