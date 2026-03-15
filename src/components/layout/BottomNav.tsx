@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { EcosystemBadge } from '@/components/ui/EcosystemBadge';
 import { PATHS } from '@/routes/paths';
 import { BOTTOM_NAV_PRIMARY, BOTTOM_NAV_MORE, type AppNavItem } from '@/config/navigation';
+import { useServiceFlags } from '@/hooks/useServiceFlags';
 
 interface BottomNavProps {
   className?: string;
