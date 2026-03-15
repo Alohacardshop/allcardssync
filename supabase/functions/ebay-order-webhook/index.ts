@@ -140,8 +140,19 @@ serve(async (req) => {
       const ebayItemId = lineItem.legacyItemId
       const quantity = lineItem.quantity
 
+      console.log(`[eBay Webhook] --- Line item: SKU=${sku || 'none'}, ebayItemId=${ebayItemId}, qty=${quantity}, cost=${lineItem.lineItemCost?.value} ${lineItem.lineItemCost?.currency}`)
+
       if (!sku && !ebayItemId) {
-        console.log(`[eBay Webhook] Line item missing SKU and item ID, skipping`)
+        const msg = `[eBay Webhook] ⚠️ Line item missing both SKU and eBay item ID in order ${orderId}`
+        console.error(msg)
+        errors.push('Line item missing SKU and item ID')
+        // Alert: log as error so this is never silent
+        await supabase.from('system_logs').insert({
+          level: 'error',
+          message: msg,
+          source: 'ebay-order-webhook',
+          context: { orderId, lineItem: JSON.stringify(lineItem) }
+        })
         continue
       }
 
