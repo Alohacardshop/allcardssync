@@ -23,7 +23,6 @@ export default function Index() {
       setCollectibleType('cards');
     }
   }, [comicsEnabled, collectibleType]);
-  const [batchCount, setBatchCount] = useState(0);
 
   const handleBatchCountUpdate = useCallback((count: number) => {
     setBatchCount(count);
