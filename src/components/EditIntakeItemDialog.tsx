@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
 import { detectMainCategory } from "@/utils/categoryMapping";
+import { useServiceFlags } from "@/hooks/useServiceFlags";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, CloudUpload, ImageIcon } from "lucide-react";
@@ -289,6 +290,7 @@ const TYPE_LABELS: Record<ItemType, { label: string; emoji: string }> = {
 
 function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = false }: Props) {
   const [form, setForm] = useState<IntakeItemDetails | null>(null);
+  const { comicsEnabled } = useServiceFlags();
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncingToShopify, setIsSyncingToShopify] = useState(false);
 
@@ -442,7 +444,7 @@ function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = fals
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent className="bg-background border shadow-md z-50">
                   <SelectItem value="tcg">🎴 TCG</SelectItem>
-                  <SelectItem value="comics">📚 Comics</SelectItem>
+                  {comicsEnabled && <SelectItem value="comics">📚 Comics</SelectItem>}
                 </SelectContent>
               </Select>
             </div>

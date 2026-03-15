@@ -18,6 +18,7 @@ import { MetadataSection } from './details/MetadataSection';
 import { ImageGallery } from './details/ImageGallery';
 import type { InventoryListItem } from '../types';
 import type { CachedLocation } from '@/hooks/useLocationNames';
+import { useServiceFlags } from '@/hooks/useServiceFlags';
 
 interface ItemDetailsDrawerProps {
   item: InventoryListItem | null;
@@ -45,6 +46,7 @@ export const ItemDetailsDrawer = React.memo(({
   isResyncing,
 }: ItemDetailsDrawerProps) => {
   const { toggleListOnEbay, isToggling } = useEbayListing();
+  const { ebayEnabled } = useServiceFlags();
   
   // Fetch detail data lazily when drawer opens
   const { data: detailData, isLoading: isLoadingDetail } = useInventoryItemDetail(
@@ -188,15 +190,19 @@ eBay: ${item.ebay_sync_status || 'Not listed'}
                 isResyncing={isResyncing}
               />
 
-              <Separator />
+              {ebayEnabled && (
+                <>
+                  <Separator />
 
-              {/* eBay */}
-              <EbaySection 
-                item={item}
-                detailData={null}
-                onToggleEbay={handleToggleEbay}
-                isTogglingEbay={isToggling === item.id}
-              />
+                  {/* eBay */}
+                  <EbaySection 
+                    item={item}
+                    detailData={null}
+                    onToggleEbay={handleToggleEbay}
+                    isTogglingEbay={isToggling === item.id}
+                  />
+                </>
+              )}
 
               <Separator />
 

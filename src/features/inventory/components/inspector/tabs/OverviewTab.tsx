@@ -10,6 +10,7 @@ import { ImageGallery } from '../../details/ImageGallery';
 import { EditableField } from '../EditableField';
 import { InlineQuantityEditor } from '@/components/inventory-card/InlineQuantityEditor';
 import { useEbayListing } from '@/hooks/useEbayListing';
+import { useServiceFlags } from '@/hooks/useServiceFlags';
 import type { InventoryListItem } from '../../../types';
 import type { CachedLocation } from '@/hooks/useLocationNames';
 import { formatGrade } from '@/lib/labelData';
@@ -30,6 +31,7 @@ interface OverviewTabProps {
 
 export const OverviewTab = React.memo(({ item, detailData, locationsMap, onFieldSave, onResync, isResyncing, isSaving }: OverviewTabProps) => {
   const { toggleListOnEbay, isToggling, resyncToEbay, isResyncing: isEbayResyncing } = useEbayListing();
+  const { ebayEnabled } = useServiceFlags();
 
   const locationName = item.shopify_location_gid 
     ? locationsMap?.get(item.shopify_location_gid)?.location_name || 'Unknown'
@@ -259,58 +261,60 @@ export const OverviewTab = React.memo(({ item, detailData, locationsMap, onField
                   ) : (
                     <RefreshCw className="h-3 w-3 mr-1" />
                   )}
-                  {isListed ? 'Resync All' : 'Resync'}
+                  {isListed && ebayEnabled ? 'Resync All' : 'Resync'}
                 </Button>
               </TooltipTrigger>
-              {isListed && (
+              {isListed && ebayEnabled && (
                 <TooltipContent side="bottom">Resyncs to both Shopify & eBay</TooltipContent>
               )}
             </Tooltip>
           </div>
 
-          {/* eBay row */}
-          <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-2 min-h-[40px] px-3 py-2">
-            <span className="text-sm font-medium">eBay</span>
-            <div className="flex items-center">
-              {ebayStatus === 'error' && ebayError ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge variant="destructive" className="text-[10px] h-5 px-1.5 cursor-help">
-                      Error
-                      <AlertCircle className="h-2.5 w-2.5 ml-1" />
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[300px] text-xs">
-                    {ebayError}
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                getEbayBadge()
-              )}
-            </div>
-            {isListed && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => resyncToEbay(item.id)}
-                disabled={isEbayResyncing === item.id || isDeleted}
-                className="h-7 px-2 text-xs text-muted-foreground"
-              >
-                {isEbayResyncing === item.id ? (
-                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+          {/* eBay row - only when eBay is enabled for the region */}
+          {ebayEnabled && (
+            <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-2 min-h-[40px] px-3 py-2">
+              <span className="text-sm font-medium">eBay</span>
+              <div className="flex items-center">
+                {ebayStatus === 'error' && ebayError ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="destructive" className="text-[10px] h-5 px-1.5 cursor-help">
+                        Error
+                        <AlertCircle className="h-2.5 w-2.5 ml-1" />
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-[300px] text-xs">
+                      {ebayError}
+                    </TooltipContent>
+                  </Tooltip>
                 ) : (
-                  <RefreshCw className="h-3 w-3 mr-1" />
+                  getEbayBadge()
                 )}
-                Resync
-              </Button>
-            )}
-            <Switch
-              checked={listOnEbay || false}
-              onCheckedChange={handleEbayToggle}
-              disabled={isToggling === item.id || isDeleted}
-              className="border border-border"
-            />
-          </div>
+              </div>
+              {isListed && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => resyncToEbay(item.id)}
+                  disabled={isEbayResyncing === item.id || isDeleted}
+                  className="h-7 px-2 text-xs text-muted-foreground"
+                >
+                  {isEbayResyncing === item.id ? (
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                  )}
+                  Resync
+                </Button>
+              )}
+              <Switch
+                checked={listOnEbay || false}
+                onCheckedChange={handleEbayToggle}
+                disabled={isToggling === item.id || isDeleted}
+                className="border border-border"
+              />
+            </div>
+          )}
         </div>
       </div>
 

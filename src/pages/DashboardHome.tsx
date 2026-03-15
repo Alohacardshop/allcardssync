@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { canUseApp, getUserRole, type AppKey } from '@/lib/permissions';
 import { useEcosystemTheme } from '@/hooks/useEcosystemTheme';
 import { useAnimatedCounter } from '@/hooks/useAnimatedCounter';
+import { useServiceFlags } from '@/hooks/useServiceFlags';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { ActiveLotsDialog } from '@/components/dashboard/ActiveLotsDialog';
 import { Card, CardContent } from '@/components/ui/card';
@@ -175,8 +176,14 @@ export default function DashboardHome() {
     staleTime: 60_000, // 1 minute
   });
 
-  // Filter tiles based on user permissions
-  const visibleTiles = APP_TILES.filter(tile => canUseApp(role, tile.key));
+  const { ebayEnabled } = useServiceFlags();
+
+  // Filter tiles based on user permissions and service flags
+  const visibleTiles = APP_TILES.filter(tile => {
+    if (!canUseApp(role, tile.key)) return false;
+    if (tile.key === 'ebay' && !ebayEnabled) return false;
+    return true;
+  });
 
   // Format large numbers with commas
   const formatNumber = (num: number) => {

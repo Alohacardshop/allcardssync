@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { EcosystemBadge } from '@/components/ui/EcosystemBadge';
 import { PATHS } from '@/routes/paths';
 import { BOTTOM_NAV_PRIMARY, BOTTOM_NAV_MORE, type AppNavItem } from '@/config/navigation';
+import { useServiceFlags } from '@/hooks/useServiceFlags';
 
 interface BottomNavProps {
   className?: string;
@@ -22,6 +23,7 @@ export function BottomNav({ className }: BottomNavProps) {
   const location = useLocation();
   const { isAdmin } = useAuth();
   const { accentClass } = useEcosystemTheme();
+  const { ebayEnabled } = useServiceFlags();
 
   const isActive = (href: string) => {
     if (href === PATHS.dashboard) return location.pathname === PATHS.dashboard;
@@ -58,9 +60,10 @@ export function BottomNav({ className }: BottomNavProps) {
     );
   };
 
-  // Filter more items based on admin status
+  // Filter more items based on admin status and service flags
   const visibleMoreItems = BOTTOM_NAV_MORE.filter(item => {
     if (item.adminOnly && !isAdmin) return false;
+    if (item.key === 'ebay' && !ebayEnabled) return false;
     return true;
   });
 

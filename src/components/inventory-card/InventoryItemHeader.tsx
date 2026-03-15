@@ -10,6 +10,7 @@ import type { InventoryItem } from '@/types/inventory';
 import type { CachedLocation } from '@/hooks/useLocationNames';
 import { getLocationDisplayInfoFromGid } from '@/hooks/useLocationNames';
 import type { InventoryLock } from '@/hooks/useInventoryLocks';
+import { useServiceFlags } from '@/hooks/useServiceFlags';
 
 interface InventoryItemHeaderProps {
   item: InventoryItem;
@@ -83,6 +84,7 @@ export const InventoryItemHeader = memo(({
   onToggleSelection,
   onToggleExpanded,
 }: InventoryItemHeaderProps) => {
+  const { ebayEnabled } = useServiceFlags();
   return (
     <CardHeader className="pb-3">
       <div className="flex items-start justify-between">
@@ -133,13 +135,15 @@ export const InventoryItemHeader = memo(({
                   expiresAt={lockInfo.expires_at}
                 />
               )}
-              <EbayStatusBadge
-                syncStatus={item.ebay_sync_status}
-                listingId={item.ebay_listing_id}
-                listingUrl={item.ebay_listing_url}
-                syncError={item.ebay_sync_error}
-                listOnEbay={item.list_on_ebay}
-              />
+              {ebayEnabled && (
+                <EbayStatusBadge
+                  syncStatus={item.ebay_sync_status}
+                  listingId={item.ebay_listing_id}
+                  listingUrl={item.ebay_listing_url}
+                  syncError={item.ebay_sync_error}
+                  listOnEbay={item.list_on_ebay}
+                />
+              )}
             </div>
           </div>
         </div>

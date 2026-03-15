@@ -31,6 +31,7 @@ import { LocationStockPopover } from '@/components/inventory/LocationStockPopove
 import { ItemAuditDialog } from '@/components/inventory/ItemAuditDialog';
 import { QuantityAuditTooltip } from '@/components/inventory/QuantityAuditTooltip';
 import { useEbayListing } from '@/hooks/useEbayListing';
+import { useServiceFlags } from '@/hooks/useServiceFlags';
 import type { VirtualInventoryListProps, InventoryListItem } from '../types';
 import type { CachedLocation } from '@/hooks/useLocationNames';
 import { getShortLocationName } from '@/hooks/useLocationNames';
@@ -117,6 +118,7 @@ const TableRow = memo(({
   onOpenDetails,
 }: TableRowProps) => {
   const { toggleListOnEbay, isToggling } = useEbayListing();
+  const { ebayEnabled } = useServiceFlags();
   const title = useMemo(() => generateTitle(item), [item]);
   const syncStatus = useMemo(() => getSyncStatus(item), [item]);
   const status = item.shopify_sync_status as string | null;
@@ -292,8 +294,8 @@ const TableRow = memo(({
         </div>
          )}
 
-        {/* eBay Status - fixed container height */}
-         {isColVisible('ebay_status') && (
+        {/* eBay Status - fixed container height (hidden when eBay disabled) */}
+         {isColVisible('ebay_status') && ebayEnabled && (
         <div className="flex items-center justify-center h-[44px]">
           <EbayStatusBadge
             syncStatus={item.ebay_sync_status}
@@ -553,6 +555,7 @@ export const InventoryTableView = memo(({
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const [auditDialogItem, setAuditDialogItem] = useState<InventoryListItem | null>(null);
+  const { ebayEnabled } = useServiceFlags();
 
   // Sort items
   const items = useMemo(() => {
@@ -608,7 +611,10 @@ export const InventoryTableView = memo(({
 
    // Compute visible columns and grid template
    const visibleColumns = propVisibleColumns || INVENTORY_COLUMNS.map(c => c.id);
-   const effectiveColumns = getVisibleColumns(visibleColumns);
+   // Filter out ebay_status when eBay is disabled for this region
+   const effectiveColumns = getVisibleColumns(visibleColumns).filter(
+     col => col !== 'ebay_status' || ebayEnabled
+   ) as InventoryColumn[];
    const isColumnVisible = (colId: InventoryColumn) => effectiveColumns.includes(colId);
  
   const rowVirtualizer = useVirtualizer({

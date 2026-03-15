@@ -19,6 +19,7 @@ import { HistoryTab } from './tabs/HistoryTab';
 
 import type { InventoryListItem } from '../../types';
 import type { CachedLocation } from '@/hooks/useLocationNames';
+import { useServiceFlags } from '@/hooks/useServiceFlags';
 
 interface InspectorPanelProps {
   item: InventoryListItem | null;
@@ -45,6 +46,7 @@ export const InspectorPanel = React.memo(({
 }: InspectorPanelProps) => {
   // Field sync hook for editable fields
   const { updateField, isSaving } = useInventoryFieldSync();
+  const { ebayEnabled } = useServiceFlags();
 
   // Fetch detail data lazily when item is selected
   const { data: detailData, isLoading: isLoadingDetail } = useInventoryItemDetail(
@@ -233,9 +235,11 @@ eBay: ${item.ebay_sync_status || 'Not listed'}
                   onResync={() => onResync(item)}
                   isResyncing={isResyncing}
                 />
-                <div className="border-t border-border pt-4">
-                  <EbayTab item={item} />
-                </div>
+                {ebayEnabled && (
+                  <div className="border-t border-border pt-4">
+                    <EbayTab item={item} />
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="printing" className="p-4 m-0">

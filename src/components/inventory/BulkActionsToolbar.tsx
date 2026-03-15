@@ -7,6 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useServiceFlags } from '@/hooks/useServiceFlags';
 
 export type ResyncTarget = 'shopify' | 'ebay' | 'both';
 
@@ -43,6 +44,7 @@ export const BulkActionsToolbar = React.memo(({
   onBulkToggleEbay,
   onPrintSelected
 }: BulkActionsToolbarProps) => {
+  const { ebayEnabled } = useServiceFlags();
   return (
     <div className="flex flex-col gap-3">
       {/* Selection info */}
@@ -113,14 +115,18 @@ export const BulkActionsToolbar = React.memo(({
               <Store className="h-3.5 w-3.5 mr-2" />
               Shopify
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onResyncSelected('ebay')}>
-              <ShoppingBag className="h-3.5 w-3.5 mr-2" />
-              eBay
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onResyncSelected('both')}>
-              <RotateCcw className="h-3.5 w-3.5 mr-2" />
-              Both Marketplaces
-            </DropdownMenuItem>
+            {ebayEnabled && (
+              <DropdownMenuItem onClick={() => onResyncSelected('ebay')}>
+                <ShoppingBag className="h-3.5 w-3.5 mr-2" />
+                eBay
+              </DropdownMenuItem>
+            )}
+            {ebayEnabled && (
+              <DropdownMenuItem onClick={() => onResyncSelected('both')}>
+                <RotateCcw className="h-3.5 w-3.5 mr-2" />
+                Both Marketplaces
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -142,7 +148,7 @@ export const BulkActionsToolbar = React.memo(({
         )}
 
         {/* eBay Buttons */}
-        {onBulkToggleEbay && (
+        {ebayEnabled && onBulkToggleEbay && (
           <>
             <Button
               variant="outline"
