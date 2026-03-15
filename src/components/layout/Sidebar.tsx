@@ -115,7 +115,7 @@ export function Sidebar({ className }: SidebarProps) {
                   Admin
                 </p>
               )}
-              {APP_ADMIN_ITEMS.map(renderNavItem)}
+              {APP_ADMIN_ITEMS.filter(item => item.key !== 'ebay' || ebayEnabled).map(renderNavItem)}
             </div>
           </>
         )}

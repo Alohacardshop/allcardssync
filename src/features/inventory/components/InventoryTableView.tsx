@@ -293,8 +293,8 @@ const TableRow = memo(({
         </div>
          )}
 
-        {/* eBay Status - fixed container height */}
-         {isColVisible('ebay_status') && (
+        {/* eBay Status - fixed container height (hidden when eBay disabled) */}
+         {isColVisible('ebay_status') && ebayEnabled && (
         <div className="flex items-center justify-center h-[44px]">
           <EbayStatusBadge
             syncStatus={item.ebay_sync_status}

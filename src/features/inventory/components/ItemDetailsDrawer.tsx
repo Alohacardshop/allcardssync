@@ -190,15 +190,19 @@ eBay: ${item.ebay_sync_status || 'Not listed'}
                 isResyncing={isResyncing}
               />
 
-              <Separator />
+              {ebayEnabled && (
+                <>
+                  <Separator />
 
-              {/* eBay */}
-              <EbaySection 
-                item={item}
-                detailData={null}
-                onToggleEbay={handleToggleEbay}
-                isTogglingEbay={isToggling === item.id}
-              />
+                  {/* eBay */}
+                  <EbaySection 
+                    item={item}
+                    detailData={null}
+                    onToggleEbay={handleToggleEbay}
+                    isTogglingEbay={isToggling === item.id}
+                  />
+                </>
+              )}
 
               <Separator />
 

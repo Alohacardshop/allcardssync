@@ -148,7 +148,7 @@ export const BulkActionsToolbar = React.memo(({
         )}
 
         {/* eBay Buttons */}
-        {onBulkToggleEbay && (
+        {ebayEnabled && onBulkToggleEbay && (
           <>
             <Button
               variant="outline"

@@ -59,9 +59,10 @@ export function BottomNav({ className }: BottomNavProps) {
     );
   };
 
-  // Filter more items based on admin status
+  // Filter more items based on admin status and service flags
   const visibleMoreItems = BOTTOM_NAV_MORE.filter(item => {
     if (item.adminOnly && !isAdmin) return false;
+    if (item.key === 'ebay' && !ebayEnabled) return false;
     return true;
   });
 

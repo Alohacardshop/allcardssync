@@ -135,13 +135,15 @@ export const InventoryItemHeader = memo(({
                   expiresAt={lockInfo.expires_at}
                 />
               )}
-              <EbayStatusBadge
-                syncStatus={item.ebay_sync_status}
-                listingId={item.ebay_listing_id}
-                listingUrl={item.ebay_listing_url}
-                syncError={item.ebay_sync_error}
-                listOnEbay={item.list_on_ebay}
-              />
+              {ebayEnabled && (
+                <EbayStatusBadge
+                  syncStatus={item.ebay_sync_status}
+                  listingId={item.ebay_listing_id}
+                  listingUrl={item.ebay_listing_url}
+                  syncError={item.ebay_sync_error}
+                  listOnEbay={item.list_on_ebay}
+                />
+              )}
             </div>
           </div>
         </div>

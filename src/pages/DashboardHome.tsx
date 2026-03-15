@@ -176,8 +176,14 @@ export default function DashboardHome() {
     staleTime: 60_000, // 1 minute
   });
 
-  // Filter tiles based on user permissions
-  const visibleTiles = APP_TILES.filter(tile => canUseApp(role, tile.key));
+  const { ebayEnabled } = useServiceFlags();
+
+  // Filter tiles based on user permissions and service flags
+  const visibleTiles = APP_TILES.filter(tile => {
+    if (!canUseApp(role, tile.key)) return false;
+    if (tile.key === 'ebay' && !ebayEnabled) return false;
+    return true;
+  });
 
   // Format large numbers with commas
   const formatNumber = (num: number) => {

@@ -235,9 +235,11 @@ eBay: ${item.ebay_sync_status || 'Not listed'}
                   onResync={() => onResync(item)}
                   isResyncing={isResyncing}
                 />
-                <div className="border-t border-border pt-4">
-                  <EbayTab item={item} />
-                </div>
+                {ebayEnabled && (
+                  <div className="border-t border-border pt-4">
+                    <EbayTab item={item} />
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="printing" className="p-4 m-0">
