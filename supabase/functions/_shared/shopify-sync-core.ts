@@ -119,8 +119,8 @@ export function filterChangedMetafields(
 // ── Comic helpers ──
 
 const MONTH_NAMES = [
-  'JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE',
-  'JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December'
 ]
 
 /** Parse "2025-11" or bare "2025" into structured month/year. Returns null for bad input. */
