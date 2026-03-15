@@ -200,6 +200,14 @@ export const ADMIN_TOOLS: AdminNavItem[] = [
     description: 'Shopify sync dashboard',
     keywords: ['shopify', 'sync', 'bulk', 'dashboard'],
   },
+  { 
+    id: 'underpricing-audit', 
+    path: PATHS.adminUnderpricingAudit, 
+    title: 'Pricing Audit', 
+    icon: TrendingDown,
+    description: 'Underpricing audit from eBay comps',
+    keywords: ['underpricing', 'audit', 'ebay', 'comps', 'pricing'],
+  },
 ];
 
 /** Get all admin navigation items for command palette */
