@@ -1,17 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_lib/cors.ts';
+import { isWithinBusinessHours } from '../_shared/business-hours.ts';
 
 const STALE_THRESHOLD_MINUTES = 60; // Alert if no webhooks for 60 minutes
  const ALERT_COOLDOWN_MINUTES = 30; // Don't re-alert same location within this window
- 
- // Default business hours (8am-7pm)
- const DEFAULT_BUSINESS_HOURS = { start: 8, end: 19 };
- 
- // Timezone mappings per region
- const REGION_TIMEZONES: Record<string, string> = {
-   hawaii: 'Pacific/Honolulu',
-   vegas: 'America/Los_Angeles',
- };
 
 interface WebhookHealthRow {
   store_key: string;
