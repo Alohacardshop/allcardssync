@@ -31,6 +31,7 @@ interface OverviewTabProps {
 
 export const OverviewTab = React.memo(({ item, detailData, locationsMap, onFieldSave, onResync, isResyncing, isSaving }: OverviewTabProps) => {
   const { toggleListOnEbay, isToggling, resyncToEbay, isResyncing: isEbayResyncing } = useEbayListing();
+  const { ebayEnabled } = useServiceFlags();
 
   const locationName = item.shopify_location_gid 
     ? locationsMap?.get(item.shopify_location_gid)?.location_name || 'Unknown'
