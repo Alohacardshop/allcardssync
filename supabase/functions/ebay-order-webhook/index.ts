@@ -236,7 +236,24 @@ serve(async (req) => {
                   if (inventoryResult.success) {
                     console.log(`[eBay Webhook] ✓ Shopify inventory zeroed for ${sku}`);
                   } else {
-                    console.error(`[eBay Webhook] Shopify zero failed, queueing:`, inventoryResult.error);
+                    const errMsg = `Shopify inventory zero FAILED for SKU ${sku} (eBay order ${orderId}). Queued for retry.`;
+                    console.error(`[eBay Webhook] 🚨 ${errMsg}`, inventoryResult.error);
+                    errors.push(errMsg);
+                    
+                    // CRITICAL ALERT: Shopify zero failed — log as error
+                    await supabase.from('system_logs').insert({
+                      level: 'error',
+                      message: errMsg,
+                      source: 'ebay-order-webhook',
+                      context: {
+                        orderId,
+                        sku,
+                        shopify_inventory_item_id: card.shopify_inventory_item_id,
+                        location_id: card.current_shopify_location_id,
+                        store_key: storeKey,
+                        error: String(inventoryResult.error)
+                      }
+                    });
                     
                     await supabase.rpc('queue_shopify_zero', {
                       p_sku: sku,
@@ -245,7 +262,20 @@ serve(async (req) => {
                       p_store_key: storeKey
                     });
                   }
+                } else {
+                  const missingMsg = `Card ${sku} sold on eBay but missing Shopify credentials (domain=${!!domain}, token=${!!token})`;
+                  console.error(`[eBay Webhook] 🚨 ${missingMsg}`);
+                  errors.push(missingMsg);
+                  await supabase.from('system_logs').insert({
+                    level: 'error',
+                    message: missingMsg,
+                    source: 'ebay-order-webhook',
+                    context: { orderId, sku, storeKey: storeKey }
+                  });
                 }
+              } else {
+                // Card has no Shopify IDs — log as warning (may be eBay-only item)
+                console.log(`[eBay Webhook] Card ${sku} has no Shopify inventory IDs — skipping cross-channel zero`);
               }
               
               // Also update intake_items for this SKU
