@@ -31,6 +31,7 @@ import { LocationStockPopover } from '@/components/inventory/LocationStockPopove
 import { ItemAuditDialog } from '@/components/inventory/ItemAuditDialog';
 import { QuantityAuditTooltip } from '@/components/inventory/QuantityAuditTooltip';
 import { useEbayListing } from '@/hooks/useEbayListing';
+import { useServiceFlags } from '@/hooks/useServiceFlags';
 import type { VirtualInventoryListProps, InventoryListItem } from '../types';
 import type { CachedLocation } from '@/hooks/useLocationNames';
 import { getShortLocationName } from '@/hooks/useLocationNames';
