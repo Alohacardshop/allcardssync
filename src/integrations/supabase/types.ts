@@ -3579,6 +3579,60 @@ export type Database = {
         }
         Relationships: []
       }
+      underpricing_alerts: {
+        Row: {
+          alerted_at: string
+          difference_dollars: number
+          difference_percent: number
+          ebay_median: number
+          id: string
+          intake_item_id: string
+          match_count: number
+          our_price: number
+          search_query: string
+          sku: string | null
+        }
+        Insert: {
+          alerted_at?: string
+          difference_dollars: number
+          difference_percent: number
+          ebay_median: number
+          id?: string
+          intake_item_id: string
+          match_count: number
+          our_price: number
+          search_query: string
+          sku?: string | null
+        }
+        Update: {
+          alerted_at?: string
+          difference_dollars?: number
+          difference_percent?: number
+          ebay_median?: number
+          id?: string
+          intake_item_id?: string
+          match_count?: number
+          our_price?: number
+          search_query?: string
+          sku?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "underpricing_alerts_intake_item_id_fkey"
+            columns: ["intake_item_id"]
+            isOneToOne: true
+            referencedRelation: "intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "underpricing_alerts_intake_item_id_fkey"
+            columns: ["intake_item_id"]
+            isOneToOne: true
+            referencedRelation: "stale_lot_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_inventory_views: {
         Row: {
           created_at: string
