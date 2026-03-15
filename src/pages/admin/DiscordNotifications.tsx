@@ -61,8 +61,13 @@ export default function DiscordNotifications() {
       if (error) throw error;
 
       const newConfigs = { ...configs };
+      const newBH: Record<string, BusinessHoursData | null> = { hawaii: null, las_vegas: null };
       data?.forEach((row: any) => {
         const region = row.region_id;
+        if (row.setting_key === 'operations.business_hours') {
+          if (row.setting_value) newBH[region] = row.setting_value as BusinessHoursData;
+          return;
+        }
         if (!newConfigs[region]) return;
         switch (row.setting_key) {
           case 'discord.webhook_url':
@@ -83,6 +88,7 @@ export default function DiscordNotifications() {
         }
       });
       setConfigs(newConfigs);
+      setBusinessHours(newBH);
     } catch (error) {
       console.error('Failed to load config:', error);
       toast({ title: 'Error', description: 'Failed to load Discord configuration', variant: 'destructive' });
