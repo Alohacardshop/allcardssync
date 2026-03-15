@@ -34,8 +34,8 @@ export default function DiscordNotifications() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [configs, setConfigs] = useState<Record<string, RegionDiscordConfig>>({
-    hawaii: { webhookUrl: '', roleId: '', channelName: '', enabled: false },
-    las_vegas: { webhookUrl: '', roleId: '', channelName: '', enabled: false },
+    hawaii: { webhookUrl: '', roleId: '', channelName: '', enabled: false, notifyCancellations: false },
+    las_vegas: { webhookUrl: '', roleId: '', channelName: '', enabled: false, notifyCancellations: false },
   });
   const [manualOrderNumber, setManualOrderNumber] = useState('');
   const [manualStoreKey, setManualStoreKey] = useState('');
