@@ -1,50 +1,30 @@
 
 
-# Discord Bot Improvements
+## Problem
 
-## Issues Found
+Only `services.ebay_sync` rows exist in the database for both regions. When you click "Shopify Sync" or "Discord Notifications," the upsert tries to INSERT a new row. The code and RLS policies look correct (admin has ALL access, unique constraint exists for upsert), so the issue is likely **not** a permissions problem.
 
-### 1. Massive Code Duplication
-`buildOrderEmbed`, `safeString`, `formatMoney`, `extractCustomerName`, `extractLineItemsSummary`, `extractFirstProductImage`, `getOrderType`, `getOrderSource`, `getPaymentStatus`, `getFulfillmentStatus`, `regionMeta`, `orderTypeEmoji`, `orderTypeLabel`, `hasEbayTag` are all **copy-pasted identically** across three files:
-- `shopify-webhook/index.ts`
-- `flush-pending-notifications/index.ts`
-- `shopify-order-notify/index.ts`
+The real issue is that `services.shopify_sync` and `services.discord_notifications` rows simply don't exist yet. The upsert *should* create them, but the button click may be silently failing or the accordion is swallowing the click event before it reaches the button.
 
-**Fix**: Extract all shared helpers into `supabase/functions/_shared/discord-helpers.ts` and import from one place.
-
-### 2. No Cancellation/Refund Notifications
-When an order is cancelled or refunded, the `orders/cancelled` and `refunds/create` handlers update inventory but never notify Discord. Staff who already started pulling an order have no way to know it was cancelled.
-
-**Fix**: Send a red-colored Discord embed to the same region channel when a cancellation or refund occurs, with the original order details.
-
-### 3. Customer Name Missing Last Name
-`extractCustomerName` only grabs `first_name` -- never includes last name, making it hard to identify customers.
-
-**Fix**: Combine `first_name` + `last_name` when available.
-
-### 4. Hardcoded Role ID in flush-pending-notifications
-Line 455 has `hawaii: '852989670496272394'` hardcoded, bypassing the `region_settings` DB lookup. Las Vegas has no hardcoded ID.
-
-**Fix**: Remove the hardcode, use `region_settings` consistently for both regions.
-
-### 5. Admin UI References Old Global Config
-`DiscordNotifications.tsx` still reads/writes `app_settings` keys (`discord.webhooks`, `discord.mention`, `discord.templates`) -- the old global config. The edge functions now use per-region `region_settings`. The admin page is effectively disconnected from the actual config.
-
-**Fix**: Rewrite the admin page to manage per-region Discord settings (webhook URL, role ID, enabled) from `region_settings`, with a region selector tab.
-
-### 6. No Shipping Address Preview
-For shipping orders, the embed doesn't show the destination state/city. This helps staff prioritize or identify orders.
-
-**Fix**: Add a shipping destination field (city, state) for shipping-type orders.
+Looking at the code, I notice the `isSaving` variable depends on `savingKey === saveKey`. If a previous save attempt failed and `savingKey` got stuck (or if the error handler doesn't run), subsequent clicks would find the button `disabled={isSaving}` permanently.
 
 ## Plan
 
-| # | Change | File(s) |
-|---|--------|---------|
-| 1 | Extract shared Discord helpers to `_shared/discord-helpers.ts` | New file + update 3 edge functions to import |
-| 2 | Add cancellation/refund Discord notifications | `shopify-webhook/index.ts` |
-| 3 | Fix customer name to include last name | `_shared/discord-helpers.ts` |
-| 4 | Remove hardcoded role ID, use DB only | `flush-pending-notifications/index.ts` |
-| 5 | Rewrite admin page for per-region config | `DiscordNotifications.tsx` |
-| 6 | Add shipping destination field to embeds | `_shared/discord-helpers.ts` |
+### 1. Seed the missing service toggle rows
+Insert the missing `services.shopify_sync` and `services.discord_notifications` rows for both regions via a database migration. This ensures the upsert always hits an UPDATE (not INSERT), matching how `services.ebay_sync` already works.
+
+```sql
+INSERT INTO region_settings (region_id, setting_key, setting_value, description)
+VALUES 
+  ('hawaii', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
+  ('hawaii', 'services.discord_notifications', 'false', 'Enable Discord order notifications'),
+  ('las_vegas', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
+  ('las_vegas', 'services.discord_notifications', 'false', 'Enable Discord order notifications')
+ON CONFLICT (region_id, setting_key) DO NOTHING;
+```
+
+### 2. Add defensive error logging to the toggle click handler
+Update the boolean toggle's `onClick` in `RegionSettingsEditor.tsx` to log the error details to the console. This ensures any future upsert failures are visible rather than silently swallowed.
+
+This is a small, targeted fix -- seeding the rows is the primary solution.
 

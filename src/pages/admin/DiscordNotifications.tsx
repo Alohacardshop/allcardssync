@@ -4,174 +4,119 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, Plus, Send, ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Send, Loader2, CheckCircle } from 'lucide-react';
 import { AdminGuard } from '@/components/AdminGuard';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingState } from '@/components/ui/LoadingState';
 
-interface DiscordChannel {
-  name: string;
-  webhook_url: string;
+interface RegionDiscordConfig {
+  webhookUrl: string;
+  roleId: string;
+  channelName: string;
+  enabled: boolean;
 }
 
-interface DiscordConfig {
-  webhooks: {
-    channels: DiscordChannel[];
-    immediate_channel: string;
-    queued_channel: string;
-  };
-  mention: {
-    enabled: boolean;
-    role_id: string;
-  };
-  templates: {
-    immediate: string;
-    queued: string;
-  };
-}
+const REGIONS = [
+  { id: 'hawaii', label: '🌺 Hawaii' },
+  { id: 'las_vegas', label: '🎰 Las Vegas' },
+];
 
-const DEFAULT_TEMPLATES = {
-  immediate: `<@&{role_id}> 🛍️ **NEW EBAY ORDER**
-
-**Order Details:**
-• Order #: \`{id}\`
-• Customer: **{customer_name}**
-• Total: **{total}**
-• Created: {created_at}
-• Tags: {tags}
-
----
-_Order received during business hours_`,
-  queued: `<@&{role_id}> 🌙 **QUEUED EBAY ORDER** (Off-Hours)
-
-**Order Details:**
-• Order #: \`{id}\`
-• Customer: **{customer_name}**
-• Total: **{total}**
-• Created: {created_at}
-• Tags: {tags}
-
----
-_Order received outside business hours (before 9am or after 7pm HST)_`,
-};
+const DISCORD_KEYS = ['discord.webhook_url', 'discord.role_id', 'discord.channel_name', 'discord.enabled'] as const;
 
 export default function DiscordNotifications() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [config, setConfig] = useState<DiscordConfig>({
-    webhooks: { channels: [{ name: 'Operations', webhook_url: '' }], immediate_channel: 'Operations', queued_channel: 'Operations' },
-    mention: { enabled: true, role_id: '' },
-    templates: DEFAULT_TEMPLATES,
+  const [saving, setSaving] = useState<string | null>(null);
+  const [configs, setConfigs] = useState<Record<string, RegionDiscordConfig>>({
+    hawaii: { webhookUrl: '', roleId: '', channelName: '', enabled: false },
+    las_vegas: { webhookUrl: '', roleId: '', channelName: '', enabled: false },
   });
-  const [testChannel, setTestChannel] = useState('');
   const [manualOrderNumber, setManualOrderNumber] = useState('');
   const [manualStoreKey, setManualStoreKey] = useState('');
   const [sendingManual, setSendingManual] = useState(false);
 
   useEffect(() => {
-    loadConfig();
+    loadConfigs();
   }, []);
 
-  const loadConfig = async () => {
+  const loadConfigs = async () => {
     try {
       const { data, error } = await supabase
-        .from('app_settings')
-        .select('key, value')
-        .in('key', ['discord.webhooks', 'discord.mention', 'discord.templates']);
+        .from('region_settings')
+        .select('region_id, setting_key, setting_value')
+        .in('setting_key', [...DISCORD_KEYS]);
 
       if (error) throw error;
 
-      const configMap: Record<string, any> = {};
-      data?.forEach((item) => {
-        configMap[item.key] = item.value;
+      const newConfigs = { ...configs };
+      data?.forEach((row: any) => {
+        const region = row.region_id;
+        if (!newConfigs[region]) return;
+        switch (row.setting_key) {
+          case 'discord.webhook_url':
+            newConfigs[region].webhookUrl = row.setting_value || '';
+            break;
+          case 'discord.role_id':
+            newConfigs[region].roleId = row.setting_value || '';
+            break;
+          case 'discord.channel_name':
+            newConfigs[region].channelName = row.setting_value || '';
+            break;
+          case 'discord.enabled':
+            newConfigs[region].enabled = row.setting_value !== false;
+            break;
+        }
       });
-
-      setConfig({
-        webhooks: configMap['discord.webhooks'] || config.webhooks,
-        mention: configMap['discord.mention'] || config.mention,
-        templates: configMap['discord.templates'] || config.templates,
-      });
+      setConfigs(newConfigs);
     } catch (error) {
       console.error('Failed to load config:', error);
-      toast({ title: 'Error', description: 'Failed to load configuration', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Failed to load Discord configuration', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
   };
 
-  const saveConfig = async () => {
-    setSaving(true);
+  const saveRegionConfig = async (regionId: string) => {
+    setSaving(regionId);
     try {
-      // Validate at least one webhook URL
-      if (!config.webhooks.channels.some((ch) => ch.webhook_url.trim())) {
-        throw new Error('At least one webhook URL is required');
-      }
-
-      // Validate role ID if mentions enabled
-      if (config.mention.enabled && !config.mention.role_id.trim()) {
-        throw new Error('Staff Role ID is required when mentions are enabled');
-      }
+      const config = configs[regionId];
+      if (!config) throw new Error('Invalid region');
 
       const updates = [
-        { key: 'discord.webhooks', value: config.webhooks },
-        { key: 'discord.mention', value: config.mention },
-        { key: 'discord.templates', value: config.templates },
+        { region_id: regionId, setting_key: 'discord.webhook_url', setting_value: config.webhookUrl },
+        { region_id: regionId, setting_key: 'discord.role_id', setting_value: config.roleId },
+        { region_id: regionId, setting_key: 'discord.channel_name', setting_value: config.channelName },
+        { region_id: regionId, setting_key: 'discord.enabled', setting_value: config.enabled },
       ];
 
-      for (const update of updates) {
+      for (const u of updates) {
         const { error } = await supabase
-          .from('app_settings')
-          .upsert([{ key: update.key, value: update.value as any, updated_at: new Date().toISOString() }]);
-
+          .from('region_settings')
+          .upsert(
+            { region_id: u.region_id, setting_key: u.setting_key, setting_value: u.setting_value as any },
+            { onConflict: 'region_id,setting_key' }
+          );
         if (error) throw error;
       }
 
-      toast({ title: 'Success', description: 'Configuration saved successfully' });
+      toast({ title: 'Saved', description: `Discord settings saved for ${regionId}` });
     } catch (error: any) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     } finally {
-      setSaving(false);
+      setSaving(null);
     }
   };
 
-  const testWebhook = async () => {
-    if (!testChannel) {
-      toast({ title: 'Error', description: 'Please select a channel to test', variant: 'destructive' });
-      return;
-    }
-
-    setTesting(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('discord-test', {
-        body: {
-          channelName: testChannel,
-          payload: {
-            id: 'TEST-12345',
-            customer_name: 'Test Customer',
-            total: '$99.99',
-            created_at: new Date().toISOString(),
-            tags: ['ebay', 'test'],
-          },
-        },
-      });
-
-      if (error) throw error;
-
-      toast({ title: 'Success', description: 'Test message sent to Discord!' });
-    } catch (error: any) {
-      toast({ title: 'Error', description: error.message || 'Failed to send test message', variant: 'destructive' });
-    } finally {
-      setTesting(false);
-    }
+  const updateConfig = (regionId: string, field: keyof RegionDiscordConfig, value: any) => {
+    setConfigs((prev) => ({
+      ...prev,
+      [regionId]: { ...prev[regionId], [field]: value },
+    }));
   };
 
   const sendManualNotification = async () => {
@@ -183,60 +128,18 @@ export default function DiscordNotifications() {
     setSendingManual(true);
     try {
       const { data, error } = await supabase.functions.invoke('shopify-order-notify', {
-        body: {
-          orderNumber: manualOrderNumber,
-          storeKey: manualStoreKey,
-        },
+        body: { orderNumber: manualOrderNumber, storeKey: manualStoreKey },
       });
 
       if (error) throw error;
 
-      toast({ 
-        title: 'Success', 
-        description: `Notification sent for order ${data.orderNumber}` 
-      });
+      toast({ title: 'Success', description: `Notification sent for order ${data.orderNumber} (${data.region})` });
       setManualOrderNumber('');
     } catch (error: any) {
-      toast({ 
-        title: 'Error', 
-        description: error.message || 'Failed to send notification', 
-        variant: 'destructive' 
-      });
+      toast({ title: 'Error', description: error.message || 'Failed to send notification', variant: 'destructive' });
     } finally {
       setSendingManual(false);
     }
-  };
-
-  const addChannel = () => {
-    setConfig({
-      ...config,
-      webhooks: {
-        ...config.webhooks,
-        channels: [...config.webhooks.channels, { name: `Channel ${config.webhooks.channels.length + 1}`, webhook_url: '' }],
-      },
-    });
-  };
-
-  const removeChannel = (index: number) => {
-    const newChannels = config.webhooks.channels.filter((_, i) => i !== index);
-    setConfig({
-      ...config,
-      webhooks: { ...config.webhooks, channels: newChannels },
-    });
-  };
-
-  const updateChannel = (index: number, field: 'name' | 'webhook_url', value: string) => {
-    const newChannels = [...config.webhooks.channels];
-    newChannels[index] = { ...newChannels[index], [field]: value };
-    setConfig({
-      ...config,
-      webhooks: { ...config.webhooks, channels: newChannels },
-    });
-  };
-
-  const resetTemplates = () => {
-    setConfig({ ...config, templates: DEFAULT_TEMPLATES });
-    toast({ title: 'Templates Reset', description: 'Templates restored to defaults' });
   };
 
   if (loading) {
@@ -252,7 +155,7 @@ export default function DiscordNotifications() {
       <div className="container mx-auto px-4 py-6 max-w-4xl">
         <PageHeader
           title="Discord Notifications"
-          description="Configure Discord alerts for eBay orders with business-hours logic"
+          description="Configure per-region Discord alerts for online orders"
           showEcosystem
           actions={
             <Button variant="ghost" size="sm" onClick={() => navigate('/admin')}>
@@ -262,208 +165,128 @@ export default function DiscordNotifications() {
           }
         />
 
-          <div className="space-y-6">
-            {/* Discord Webhooks */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Discord Webhooks</CardTitle>
-                <CardDescription>Add webhook URLs for different channels</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {config.webhooks.channels.map((channel, index) => (
-                  <div key={index} className="flex gap-2 items-start">
-                    <div className="flex-1 space-y-2">
+        <div className="space-y-6">
+          {/* Per-Region Config */}
+          <Tabs defaultValue="hawaii">
+            <TabsList className="grid w-full grid-cols-2">
+              {REGIONS.map((r) => (
+                <TabsTrigger key={r.id} value={r.id}>
+                  {r.label}
+                  {configs[r.id]?.enabled && <CheckCircle className="h-3 w-3 ml-1.5 text-primary" />}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+
+            {REGIONS.map((region) => (
+              <TabsContent key={region.id} value={region.id}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      {region.label} Discord Settings
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor={`enabled-${region.id}`} className="text-sm font-normal">
+                          Enabled
+                        </Label>
+                        <Switch
+                          id={`enabled-${region.id}`}
+                          checked={configs[region.id]?.enabled ?? false}
+                          onCheckedChange={(checked) => updateConfig(region.id, 'enabled', checked)}
+                        />
+                      </div>
+                    </CardTitle>
+                    <CardDescription>
+                      Webhook URL, role mention, and channel name for {region.label}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <Label htmlFor={`webhook-${region.id}`}>Webhook URL</Label>
                       <Input
-                        placeholder="Channel name"
-                        value={channel.name}
-                        onChange={(e) => updateChannel(index, 'name', e.target.value)}
-                      />
-                      <Input
+                        id={`webhook-${region.id}`}
                         placeholder="https://discord.com/api/webhooks/..."
-                        value={channel.webhook_url}
-                        onChange={(e) => updateChannel(index, 'webhook_url', e.target.value)}
+                        value={configs[region.id]?.webhookUrl ?? ''}
+                        onChange={(e) => updateConfig(region.id, 'webhookUrl', e.target.value)}
                       />
                     </div>
-                    {config.webhooks.channels.length > 1 && (
-                      <Button variant="ghost" size="icon" onClick={() => removeChannel(index)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
-                <Button variant="outline" onClick={addChannel}>
-                  <Plus className="h-4 w-4 mr-2" /> Add Channel
-                </Button>
 
-                <div className="space-y-4 mt-4">
-                  <div>
-                    <Label>Default Immediate Channel</Label>
-                    <RadioGroup
-                      value={config.webhooks.immediate_channel}
-                      onValueChange={(value) => setConfig({ ...config, webhooks: { ...config.webhooks, immediate_channel: value } })}
-                    >
-                      {config.webhooks.channels.map((ch) => (
-                        <div key={ch.name} className="flex items-center space-x-2">
-                          <RadioGroupItem value={ch.name} id={`imm-${ch.name}`} />
-                          <Label htmlFor={`imm-${ch.name}`}>{ch.name}</Label>
-                        </div>
-                      ))}
-                    </RadioGroup>
-                  </div>
+                    <div>
+                      <Label htmlFor={`role-${region.id}`}>Staff Role ID</Label>
+                      <Input
+                        id={`role-${region.id}`}
+                        placeholder="123456789012345678"
+                        value={configs[region.id]?.roleId ?? ''}
+                        onChange={(e) => updateConfig(region.id, 'roleId', e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Enable Developer Mode in Discord → right-click role → Copy ID
+                      </p>
+                    </div>
 
-                  <div>
-                    <Label>Default Queued Channel</Label>
-                    <RadioGroup
-                      value={config.webhooks.queued_channel}
-                      onValueChange={(value) => setConfig({ ...config, webhooks: { ...config.webhooks, queued_channel: value } })}
-                    >
-                      {config.webhooks.channels.map((ch) => (
-                        <div key={ch.name} className="flex items-center space-x-2">
-                          <RadioGroupItem value={ch.name} id={`queue-${ch.name}`} />
-                          <Label htmlFor={`queue-${ch.name}`}>{ch.name}</Label>
-                        </div>
-                      ))}
-                    </RadioGroup>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                    <div>
+                      <Label htmlFor={`channel-${region.id}`}>Channel Name (display only)</Label>
+                      <Input
+                        id={`channel-${region.id}`}
+                        placeholder="e.g., #orders"
+                        value={configs[region.id]?.channelName ?? ''}
+                        onChange={(e) => updateConfig(region.id, 'channelName', e.target.value)}
+                      />
+                    </div>
 
-            {/* Mentions */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Mentions</CardTitle>
-                <CardDescription>Configure role mentions for notifications</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="mention-enabled"
-                    checked={config.mention.enabled}
-                    onCheckedChange={(checked) => setConfig({ ...config, mention: { ...config.mention, enabled: checked as boolean } })}
-                  />
-                  <Label htmlFor="mention-enabled">Include @staff mention</Label>
-                </div>
-                <div>
-                  <Label htmlFor="role-id">Staff Role ID</Label>
-                  <Input
-                    id="role-id"
-                    placeholder="123456789012345678"
-                    value={config.mention.role_id}
-                    onChange={(e) => setConfig({ ...config, mention: { ...config.mention, role_id: e.target.value } })}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Enable Developer Mode in Discord, right-click role, Copy ID
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+                    <Button onClick={() => saveRegionConfig(region.id)} disabled={saving === region.id}>
+                      {saving === region.id ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving…
+                        </>
+                      ) : (
+                        'Save Settings'
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            ))}
+          </Tabs>
 
-            {/* Templates */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Message Templates</CardTitle>
-                <CardDescription>
-                  Variables: {'{id}'}, {'{customer_name}'}, {'{total}'}, {'{created_at}'}, {'{tags}'}, {'{raw_json}'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="immediate-template">Immediate Template</Label>
-                  <Textarea
-                    id="immediate-template"
-                    rows={5}
-                    value={config.templates.immediate}
-                    onChange={(e) => setConfig({ ...config, templates: { ...config.templates, immediate: e.target.value } })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="queued-template">Queued Template</Label>
-                  <Textarea
-                    id="queued-template"
-                    rows={5}
-                    value={config.templates.queued}
-                    onChange={(e) => setConfig({ ...config, templates: { ...config.templates, queued: e.target.value } })}
-                  />
-                </div>
-                <Button variant="outline" onClick={resetTemplates}>
-                  Reset to Defaults
-                </Button>
-              </CardContent>
-            </Card>
+          {/* Manual Notification */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Send Manual Notification</CardTitle>
+              <CardDescription>
+                Send a Discord notification for any order. Routes to the correct region automatically.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="manual-order">Order Name/Number</Label>
+                <Input
+                  id="manual-order"
+                  placeholder="e.g., #1234 or 15-13759-56842"
+                  value={manualOrderNumber}
+                  onChange={(e) => setManualOrderNumber(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="manual-store">Store Key</Label>
+                <Input
+                  id="manual-store"
+                  placeholder="e.g., HAWAII or LAS_VEGAS"
+                  value={manualStoreKey}
+                  onChange={(e) => setManualStoreKey(e.target.value)}
+                />
+              </div>
+              <Button
+                onClick={sendManualNotification}
+                disabled={sendingManual || !manualOrderNumber || !manualStoreKey}
+              >
+                <Send className="mr-2 h-4 w-4" />
+                {sendingManual ? 'Sending…' : 'Send Notification'}
+              </Button>
+            </CardContent>
+          </Card>
 
-            {/* Test */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Test</CardTitle>
-                <CardDescription>Send a test notification to verify your configuration</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="test-channel">Select Channel</Label>
-                  <Select value={testChannel} onValueChange={setTestChannel}>
-                    <SelectTrigger id="test-channel">
-                      <SelectValue placeholder="Choose a channel..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {config.webhooks.channels.map((ch) => (
-                        <SelectItem key={ch.name} value={ch.name}>
-                          {ch.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button onClick={testWebhook} disabled={testing || !testChannel}>
-                  {testing ? 'Sending...' : 'Send Test'}
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Manual Notification for Imported Orders */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Send Manual Notification</CardTitle>
-                <CardDescription>
-                  Send Discord notification for imported orders (use order name like "15-13759-56842")
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="manual-order">Order Name/Number</Label>
-                  <Input
-                    id="manual-order"
-                    placeholder="e.g., 15-13759-56842"
-                    value={manualOrderNumber}
-                    onChange={(e) => setManualOrderNumber(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="manual-store">Store Key</Label>
-                  <Input
-                    id="manual-store"
-                    placeholder="e.g., hawaii or las_vegas"
-                    value={manualStoreKey}
-                    onChange={(e) => setManualStoreKey(e.target.value)}
-                  />
-                </div>
-                <Button 
-                  onClick={sendManualNotification} 
-                  disabled={sendingManual || !manualOrderNumber || !manualStoreKey}
-                >
-                  <Send className="mr-2 h-4 w-4" />
-                  {sendingManual ? 'Sending...' : 'Send Notification'}
-                </Button>
-              </CardContent>
-            </Card>
-
-          {/* Actions */}
           <div className="flex gap-4">
-            <Button onClick={saveConfig} disabled={saving}>
-              {saving ? 'Saving...' : 'Save Configuration'}
-            </Button>
             <Button variant="outline" onClick={() => navigate('/admin')}>
-              Cancel
+              Back to Admin
             </Button>
           </div>
         </div>
