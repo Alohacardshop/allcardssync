@@ -199,7 +199,7 @@ serve(async (req) => {
                 // Find store key from card
                 const { data: itemData } = await supabase
                   .from('intake_items')
-                  .select('store_key')
+                  .select('store_key, shopify_variant_id')
                   .eq('sku', sku)
                   .limit(1)
                   .single();
