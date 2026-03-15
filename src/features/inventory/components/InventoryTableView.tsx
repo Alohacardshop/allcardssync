@@ -224,6 +224,35 @@ const TableRow = memo(({
         </div>
          )}
 
+        {/* Item Type - category + raw/graded badge */}
+        {isColVisible('item_type') && (
+        <div className="flex items-center gap-1 h-[44px] overflow-hidden">
+          {item.main_category ? (
+            <Badge 
+              variant="outline" 
+              className={cn(
+                "text-[10px] h-5 px-1.5 font-medium whitespace-nowrap shrink-0",
+                item.main_category === 'Sports Cards' && "border-blue-500/30 text-blue-600 dark:text-blue-400",
+                item.main_category === 'TCG' && "border-purple-500/30 text-purple-600 dark:text-purple-400",
+                item.main_category === 'Comics' && "border-amber-500/30 text-amber-600 dark:text-amber-400",
+                item.main_category === 'Non-Sport' && "border-emerald-500/30 text-emerald-600 dark:text-emerald-400",
+              )}
+            >
+              {item.main_category === 'Sports Cards' ? 'Sports' : item.main_category}
+            </Badge>
+          ) : (
+            <span className="text-[10px] text-muted-foreground">—</span>
+          )}
+          {item.grading_company && item.grading_company !== 'none' && item.grade ? (
+            <Badge className="text-[10px] h-5 px-1.5 font-medium whitespace-nowrap shrink-0 bg-primary/10 text-primary border border-primary/20">
+              {item.grading_company.toUpperCase()} {item.grade}
+            </Badge>
+          ) : (
+            <span className="text-[10px] text-muted-foreground">Raw</span>
+          )}
+        </div>
+        )}
+
         {/* Location with hover popover for multi-location stock - fixed height */}
          {isColVisible('location') && (
         <div className="flex items-center h-[44px]">
