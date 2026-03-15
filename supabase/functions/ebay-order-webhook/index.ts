@@ -216,16 +216,7 @@ serve(async (req) => {
               if (card?.shopify_inventory_item_id && card?.current_shopify_location_id) {
                 // Try to zero Shopify inventory
                 console.log(`[eBay Webhook] Cross-channel: zeroing Shopify for ${sku}`);
-                
-                const { data: credentials } = await supabase
-                  .from('system_settings')
-                  .select('key_name, key_value')
-                  .in('key_name', [`SHOPIFY_${storeKeyUpper}_STORE_DOMAIN`, `SHOPIFY_${storeKeyUpper}_ACCESS_TOKEN`]);
-                
-                const credMap = new Map(credentials?.map(c => [c.key_name, c.key_value]) || []);
-                const domain = credMap.get(`SHOPIFY_${storeKeyUpper}_STORE_DOMAIN`);
-                const token = credMap.get(`SHOPIFY_${storeKeyUpper}_ACCESS_TOKEN`);
-                
+
                 if (domain && token) {
                   const requestId = generateRequestId('ebay-sale-zero');
                   const locationId = locationGidToId(card.current_shopify_location_id);
