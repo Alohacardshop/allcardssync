@@ -10,6 +10,7 @@ import type { InventoryItem } from '@/types/inventory';
 import type { CachedLocation } from '@/hooks/useLocationNames';
 import { getLocationDisplayInfoFromGid } from '@/hooks/useLocationNames';
 import type { InventoryLock } from '@/hooks/useInventoryLocks';
+import { useServiceFlags } from '@/hooks/useServiceFlags';
 
 interface InventoryItemHeaderProps {
   item: InventoryItem;
