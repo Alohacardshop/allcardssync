@@ -295,8 +295,40 @@ serve(async (req) => {
                 .eq('sku', sku);
               
               // ======== STEP 3: CREATE SHOPIFY ORDER FOR STAFF PULL ========
-              const shopifyVariantId = card?.shopify_variant_id || itemData?.shopify_variant_id;
-              if (shopifyVariantId && domain && token) {
+              // SAFETY: Only create a Shopify order if we have a CONFIRMED variant mapping.
+              // The cards table is the authoritative source; intake_items is a secondary check.
+              // We do NOT create orders from ambiguous or fallback-resolved variants.
+              const cardVariantId = card?.shopify_variant_id;
+              const intakeVariantId = itemData?.shopify_variant_id;
+              
+              // Determine if we have a confident variant mapping
+              let confirmedVariantId: string | null = null;
+              let variantSource = 'none';
+              
+              if (cardVariantId) {
+                // Cards table is authoritative — trust it
+                confirmedVariantId = cardVariantId;
+                variantSource = 'cards';
+              } else if (intakeVariantId) {
+                // intake_items has a variant but cards doesn't — this is a weaker signal
+                // Only use if card didn't have shopify fields at all (eBay-only items won't have card shopify data)
+                if (!card?.shopify_inventory_item_id) {
+                  confirmedVariantId = intakeVariantId;
+                  variantSource = 'intake_items (no card shopify data)';
+                } else {
+                  // Card has shopify_inventory_item_id but no variant — data inconsistency
+                  console.warn(`[eBay Webhook] ⚠️ Card ${sku} has shopify_inventory_item_id but no variant_id — skipping order creation (data inconsistency)`);
+                  await supabase.from('system_logs').insert({
+                    level: 'warning',
+                    message: `Shopify order skipped for ${sku}: card has inventory_item_id but no variant_id (inconsistent mapping)`,
+                    source: 'ebay-order-webhook',
+                    context: { orderId, sku, shopify_inventory_item_id: card.shopify_inventory_item_id, intakeVariantId }
+                  });
+                  variantSource = 'inconsistent';
+                }
+              }
+              
+              if (confirmedVariantId && domain && token) {
                 // Idempotency: check if we already created a Shopify order for this sale event
                 const sourceEventId = `${orderId}_${sku}`;
                 const { data: existingSale } = await supabase
@@ -307,16 +339,20 @@ serve(async (req) => {
                 
                 if (existingSale?.shopify_order_id) {
                   console.log(`[eBay Webhook] Shopify order already exists for ${sourceEventId}: ${existingSale.shopify_order_id}`);
+                  processedItems.push(`${sku} (atomic lock, shopify order exists)`);
                 } else {
                   const locationNumericId = card?.current_shopify_location_id 
                     ? locationGidToId(card.current_shopify_location_id) 
                     : undefined;
                   
+                  const resolvedVariantNumericId = parseIdFromGid(confirmedVariantId) || confirmedVariantId;
+                  console.log(`[eBay Webhook] Creating Shopify order: variant=${resolvedVariantNumericId} (source: ${variantSource})`);
+                  
                   const orderResult = await createShopifyOrderForEbaySale({
                     domain,
                     token,
                     sku,
-                    variantId: parseIdFromGid(shopifyVariantId) || shopifyVariantId,
+                    variantId: resolvedVariantNumericId,
                     quantity,
                     pricePerUnit: parseFloat(lineItem.lineItemCost.value),
                     currency: lineItem.lineItemCost.currency || 'USD',
@@ -334,7 +370,7 @@ serve(async (req) => {
                       .update({
                         shopify_order_id: orderResult.shopifyOrderId,
                         shopify_order_name: orderResult.shopifyOrderName,
-                        metadata: { shopify_order_created_at: new Date().toISOString() }
+                        metadata: { shopify_order_created_at: new Date().toISOString(), variant_source: variantSource }
                       })
                       .eq('source_event_id', sourceEventId);
                     
@@ -354,15 +390,25 @@ serve(async (req) => {
                       level: 'error',
                       message: errMsg,
                       source: 'ebay-order-webhook',
-                      context: { orderId, sku, ebayItemId, variantId: shopifyVariantId, error: orderResult.error }
+                      context: { orderId, sku, ebayItemId, variantId: confirmedVariantId, variantSource, error: orderResult.error }
                     });
                     
                     processedItems.push(`${sku} (atomic lock, shopify order FAILED)`);
                   }
                 }
+              } else if (!domain || !token) {
+                console.log(`[eBay Webhook] No Shopify credentials — skipping order creation for ${sku}`);
+                processedItems.push(`${sku} (atomic lock, no shopify creds)`);
               } else {
-                console.log(`[eBay Webhook] No Shopify variant for ${sku} — skipping order creation`);
-                processedItems.push(`${sku} (atomic lock, no shopify variant)`);
+                // No confirmed variant — log clearly but do NOT create an ambiguous order
+                console.log(`[eBay Webhook] No confirmed Shopify variant for ${sku} (source: ${variantSource}) — skipping order creation`);
+                await supabase.from('system_logs').insert({
+                  level: 'warning',
+                  message: `Shopify order skipped for eBay sale ${sku}: no confirmed variant mapping (source: ${variantSource})`,
+                  source: 'ebay-order-webhook',
+                  context: { orderId, sku, ebayItemId, cardVariantId, intakeVariantId, variantSource }
+                });
+                processedItems.push(`${sku} (atomic lock, no confirmed variant)`);
               }
               
               continue; // Skip legacy processing
