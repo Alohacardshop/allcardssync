@@ -42,6 +42,10 @@ export default function DiscordNotifications() {
   const [manualOrderNumber, setManualOrderNumber] = useState('');
   const [manualStoreKey, setManualStoreKey] = useState('');
   const [sendingManual, setSendingManual] = useState(false);
+  const [businessHours, setBusinessHours] = useState<Record<string, BusinessHoursData | null>>({
+    hawaii: null,
+    las_vegas: null,
+  });
 
   useEffect(() => {
     loadConfigs();
