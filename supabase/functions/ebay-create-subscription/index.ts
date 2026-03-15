@@ -6,156 +6,189 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+async function refreshToken(supabase: any, storeKey: string): Promise<string> {
+  const { data: tokenData } = await supabase
+    .from('system_settings')
+    .select('key_value')
+    .eq('key_name', `EBAY_TOKENS_${storeKey}`)
+    .single()
+
+  const tokens = typeof tokenData.key_value === 'string' 
+    ? JSON.parse(tokenData.key_value) 
+    : tokenData.key_value
+
+  const clientId = Deno.env.get('EBAY_CLIENT_ID')!
+  const clientSecret = Deno.env.get('EBAY_CLIENT_SECRET')!
+  const credentials = btoa(`${clientId}:${clientSecret}`)
+
+  const scopes = [
+    'https://api.ebay.com/oauth/api_scope',
+    'https://api.ebay.com/oauth/api_scope/sell.fulfillment',
+    'https://api.ebay.com/oauth/api_scope/sell.inventory',
+    'https://api.ebay.com/oauth/api_scope/sell.account',
+  ].join(' ')
+
+  console.log('[eBay] Refreshing access token...')
+  const res = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Authorization': `Basic ${credentials}`,
+    },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: tokens.refresh_token,
+      scope: scopes,
+    }).toString(),
+  })
+
+  const refreshResult = await res.json()
+  
+  if (!res.ok) {
+    console.error('[eBay] Token refresh failed:', JSON.stringify(refreshResult))
+    throw new Error(`Token refresh failed: ${refreshResult.error_description || res.status}`)
+  }
+
+  console.log('[eBay] Token refreshed successfully')
+
+  // Save new tokens
+  const newTokens = {
+    ...tokens,
+    access_token: refreshResult.access_token,
+    expires_in: refreshResult.expires_in,
+    refreshed_at: new Date().toISOString(),
+  }
+
+  await supabase
+    .from('system_settings')
+    .update({ key_value: newTokens, updated_at: new Date().toISOString() })
+    .eq('key_name', `EBAY_TOKENS_${storeKey}`)
+
+  return refreshResult.access_token
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
   try {
-    const { store_key, topic } = await req.json()
+    const { store_key, action } = await req.json()
     const storeKey = store_key || 'hawaii'
-    const subscriptionTopic = topic || 'MARKETPLACE.ORDER.CREATED'
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // Get stored token
-    const { data: tokenData } = await supabase
-      .from('system_settings')
-      .select('key_value')
-      .eq('key_name', `EBAY_TOKENS_${storeKey}`)
-      .single()
+    // Step 1: Refresh token
+    const accessToken = await refreshToken(supabase, storeKey)
 
-    if (!tokenData) {
-      return new Response(JSON.stringify({ error: 'No eBay token found' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    const webhookEndpoint = `${supabaseUrl}/functions/v1/ebay-order-webhook`
+    const verificationToken = Deno.env.get('EBAY_VERIFICATION_TOKEN') || ''
+    const results: Record<string, any> = {}
+
+    // Step 2: List existing subscriptions & destinations
+    const [subsRes, destsRes, topicsRes] = await Promise.all([
+      fetch('https://api.ebay.com/commerce/notification/v1/subscription', {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      }),
+      fetch('https://api.ebay.com/commerce/notification/v1/destination', {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      }),
+      fetch('https://api.ebay.com/commerce/notification/v1/topic', {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      })
+    ])
+
+    results.existingSubscriptions = await subsRes.json()
+    results.existingDestinations = await destsRes.json()
+    results.availableTopics = await topicsRes.json()
+
+    if (action === 'list_only') {
+      return new Response(JSON.stringify(results), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
 
-    const tokens = typeof tokenData.key_value === 'string' 
-      ? JSON.parse(tokenData.key_value) 
-      : tokenData.key_value
-    const accessToken = tokens.access_token
-
-    const endpoint = `${supabaseUrl}/functions/v1/ebay-order-webhook`
-
-    // First, list existing subscriptions
-    console.log('[eBay Subscription] Listing existing subscriptions...')
-    const listRes = await fetch('https://api.ebay.com/commerce/notification/v1/subscription', {
-      headers: { 'Authorization': `Bearer ${accessToken}` }
-    })
-    const existingSubs = await listRes.json()
-    console.log('[eBay Subscription] Existing:', JSON.stringify(existingSubs))
-
-    // Create subscription
-    console.log(`[eBay Subscription] Creating subscription for topic: ${subscriptionTopic}`)
-    const createRes = await fetch('https://api.ebay.com/commerce/notification/v1/subscription', {
+    // Step 3: Create destination
+    console.log(`[eBay Subscription] Creating destination: ${webhookEndpoint}`)
+    const destRes = await fetch('https://api.ebay.com/commerce/notification/v1/destination', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
-        'Accept': 'application/json',
       },
       body: JSON.stringify({
-        topicId: subscriptionTopic,
+        name: `AlohaCardShop_${storeKey}_OrderWebhook`,
         status: 'ENABLED',
-        payload: {
-          format: 'JSON'
-        },
-        destinationId: endpoint
+        deliveryConfig: {
+          endpoint: webhookEndpoint,
+          verificationToken: verificationToken
+        }
       })
     })
 
-    const status = createRes.status
-    const responseText = await createRes.text()
-    let responseBody
-    try { responseBody = JSON.parse(responseText) } catch { responseBody = responseText }
+    const destStatus = destRes.status
+    const destLocationHeader = destRes.headers.get('Location')
+    const destBody = await destRes.text()
+    console.log(`[eBay Subscription] Destination ${destStatus}:`, destBody, 'Location:', destLocationHeader)
 
-    console.log(`[eBay Subscription] Response ${status}:`, responseText)
+    let destinationId = destLocationHeader?.split('/').pop()
+    try {
+      const parsed = JSON.parse(destBody)
+      if (parsed.destinationId) destinationId = parsed.destinationId
+    } catch {}
 
-    // If we need to create a destination first
-    if (status === 400 || status === 404) {
-      console.log('[eBay Subscription] Trying to create destination first...')
-      
-      const destRes = await fetch('https://api.ebay.com/commerce/notification/v1/destination', {
+    results.destination = { status: destStatus, body: destBody, location: destLocationHeader, destinationId }
+
+    if (!destinationId && destStatus !== 200 && destStatus !== 201 && destStatus !== 409) {
+      return new Response(JSON.stringify({ error: 'Failed to create destination', ...results }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
+    // If 409 conflict, destination already exists - find it
+    if (destStatus === 409 || !destinationId) {
+      const existingDests = results.existingDestinations
+      if (existingDests?.destinations) {
+        const match = existingDests.destinations.find((d: any) => 
+          d.deliveryConfig?.endpoint === webhookEndpoint
+        )
+        if (match) {
+          destinationId = match.destinationId
+          console.log(`[eBay Subscription] Using existing destination: ${destinationId}`)
+        }
+      }
+    }
+
+    // Step 4: Create subscription for order topics
+    const orderTopics = ['MARKETPLACE.ORDER.CREATED', 'MARKETPLACE.ORDER.PAID']
+    
+    for (const topic of orderTopics) {
+      console.log(`[eBay Subscription] Creating subscription for ${topic}`)
+      const subRes = await fetch('https://api.ebay.com/commerce/notification/v1/subscription', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
         },
         body: JSON.stringify({
-          name: 'AlohaCardShop_OrderWebhook',
+          topicId: topic,
           status: 'ENABLED',
-          deliveryConfig: {
-            endpoint: endpoint,
-            verificationToken: Deno.env.get('EBAY_VERIFICATION_TOKEN') || ''
-          }
+          payload: { format: 'JSON' },
+          destinationId: destinationId
         })
       })
 
-      const destStatus = destRes.status
-      const destText = await destRes.text()
-      console.log(`[eBay Subscription] Destination response ${destStatus}:`, destText)
-
-      let destBody
-      try { destBody = JSON.parse(destText) } catch { destBody = destText }
-
-      // Get destination ID from Location header or response
-      const locationHeader = destRes.headers.get('Location')
-      let destinationId = locationHeader?.split('/').pop()
-      if (!destinationId && destBody?.destinationId) {
-        destinationId = destBody.destinationId
-      }
-
-      if (destinationId || destStatus === 200 || destStatus === 201) {
-        // Now create subscription with destination ID
-        console.log(`[eBay Subscription] Retrying subscription with destinationId: ${destinationId}`)
-        
-        const retryRes = await fetch('https://api.ebay.com/commerce/notification/v1/subscription', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: JSON.stringify({
-            topicId: subscriptionTopic,
-            status: 'ENABLED',
-            payload: { format: 'JSON' },
-            destinationId: destinationId
-          })
-        })
-
-        const retryStatus = retryRes.status
-        const retryText = await retryRes.text()
-        console.log(`[eBay Subscription] Retry response ${retryStatus}:`, retryText)
-
-        return new Response(JSON.stringify({
-          step: 'subscription_with_destination',
-          destinationId,
-          subscriptionStatus: retryStatus,
-          subscriptionResponse: retryText,
-          existingSubscriptions: existingSubs
-        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-      }
-
-      return new Response(JSON.stringify({
-        step: 'destination_creation',
-        destinationStatus: destStatus,
-        destinationResponse: destBody,
-        initialError: responseBody,
-        existingSubscriptions: existingSubs
-      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      const subStatus = subRes.status
+      const subBody = await subRes.text()
+      console.log(`[eBay Subscription] ${topic} => ${subStatus}:`, subBody)
+      results[`subscription_${topic}`] = { status: subStatus, body: subBody }
     }
 
-    return new Response(JSON.stringify({
-      step: 'direct_subscription',
-      status,
-      response: responseBody,
-      existingSubscriptions: existingSubs
-    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify(results), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    })
 
   } catch (error) {
     console.error('[eBay Subscription] Error:', error)
