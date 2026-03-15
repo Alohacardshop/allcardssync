@@ -229,6 +229,7 @@ serve(async (req) => {
           break;
         
         case 'refunds/create':
+          await sendCancellationNotification(supabase, payload, 'refunded', shopifyDomain);
           await handleRefundCreated(supabase, payload, shopifyDomain);
           break;
         
