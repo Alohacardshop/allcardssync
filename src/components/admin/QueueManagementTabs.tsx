@@ -91,9 +91,11 @@ export function QueueManagementTabs() {
         <DeadLetterDashboard />
       </TabsContent>
 
-      <TabsContent value="comic-repair">
-        <ComicBulkRepairPanel />
-      </TabsContent>
+      {comicsEnabled && (
+        <TabsContent value="comic-repair">
+          <ComicBulkRepairPanel />
+        </TabsContent>
+      )}
 
       <TabsContent value="title-repair">
         <TitleRepairPanel />
