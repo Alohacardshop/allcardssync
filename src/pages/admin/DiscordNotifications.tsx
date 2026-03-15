@@ -18,6 +18,7 @@ interface RegionDiscordConfig {
   roleId: string;
   channelName: string;
   enabled: boolean;
+  notifyCancellations: boolean;
 }
 
 const REGIONS = [
