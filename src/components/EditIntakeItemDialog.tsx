@@ -444,7 +444,7 @@ function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = fals
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent className="bg-background border shadow-md z-50">
                   <SelectItem value="tcg">🎴 TCG</SelectItem>
-                  <SelectItem value="comics">📚 Comics</SelectItem>
+                  {comicsEnabled && <SelectItem value="comics">📚 Comics</SelectItem>}
                 </SelectContent>
               </Select>
             </div>
