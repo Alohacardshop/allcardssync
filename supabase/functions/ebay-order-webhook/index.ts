@@ -324,8 +324,17 @@ serve(async (req) => {
         }
 
         if (!items || items.length === 0) {
-          console.log(`[eBay Webhook] No matching item found for SKU: ${sku}, eBay ID: ${ebayItemId}`)
-          errors.push(`No item found for ${sku || ebayItemId}`)
+          const noMatchMsg = `eBay sale item lookup FAILED: no matching item for SKU=${sku}, eBay ID=${ebayItemId} in order ${orderId}`;
+          console.error(`[eBay Webhook] 🚨 ${noMatchMsg}`)
+          errors.push(noMatchMsg)
+          
+          // CRITICAL ALERT: Item not found — real sale could be missed
+          await supabase.from('system_logs').insert({
+            level: 'error',
+            message: noMatchMsg,
+            source: 'ebay-order-webhook',
+            context: { orderId, sku, ebayItemId, quantity, lineItemTitle: lineItem.title }
+          });
           continue
         }
 
