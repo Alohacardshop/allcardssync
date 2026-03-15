@@ -95,7 +95,13 @@ serve(async (req) => {
 
     const payload: EbayOrderNotification = await req.json()
     
-    console.log('[eBay Webhook] Received notification:', JSON.stringify(payload.metadata || {}))
+    // DETAILED: Log full payload for production debugging (first real events)
+    console.log('[eBay Webhook] === INCOMING EVENT ===')
+    console.log('[eBay Webhook] Topic:', payload.metadata?.topic)
+    console.log('[eBay Webhook] Metadata:', JSON.stringify(payload.metadata || {}))
+    console.log('[eBay Webhook] Order ID:', payload.notification?.data?.orderId)
+    console.log('[eBay Webhook] Line items count:', payload.notification?.data?.orderLineItems?.length || 0)
+    console.log('[eBay Webhook] Full payload:', JSON.stringify(payload))
 
     const topic = payload.metadata?.topic
     const orderData = payload.notification?.data
