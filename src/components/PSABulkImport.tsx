@@ -19,6 +19,7 @@ import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
 import { detectMainCategory } from "@/utils/categoryMapping";
 import { logger } from "@/lib/logger";
 import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
+import { useServiceFlags } from "@/hooks/useServiceFlags";
 
 interface PSAImportItem {
   psaCert: string;
