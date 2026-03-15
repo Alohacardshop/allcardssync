@@ -2525,7 +2525,10 @@ export type Database = {
           created_at: string
           error: string | null
           id: string
+          metadata: Json | null
           processed_at: string | null
+          shopify_order_id: string | null
+          shopify_order_name: string | null
           sku: string
           source: Database["public"]["Enums"]["sale_source"]
           source_event_id: string
@@ -2535,7 +2538,10 @@ export type Database = {
           created_at?: string
           error?: string | null
           id?: string
+          metadata?: Json | null
           processed_at?: string | null
+          shopify_order_id?: string | null
+          shopify_order_name?: string | null
           sku: string
           source: Database["public"]["Enums"]["sale_source"]
           source_event_id: string
@@ -2545,7 +2551,10 @@ export type Database = {
           created_at?: string
           error?: string | null
           id?: string
+          metadata?: Json | null
           processed_at?: string | null
+          shopify_order_id?: string | null
+          shopify_order_name?: string | null
           sku?: string
           source?: Database["public"]["Enums"]["sale_source"]
           source_event_id?: string
