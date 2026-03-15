@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_lib/cors.ts';
-import JsBarcode from 'https://esm.sh/jsbarcode@3.11.6';
+
 import {
   buildOrderEmbed,
   getOrderType,
@@ -90,38 +90,14 @@ Deno.serve(async (req) => {
     const embed = buildOrderEmbed(regionId, order, orderType, domain, '(Manual)');
     const mention = config.roleId ? `<@&${config.roleId}>\n` : '';
 
-    // Generate barcode SVG
-    let barcodeSvg: string | null = null;
-    try {
-      const orderId = order.id?.toString() || order.order_number?.toString() || 'NO-ID';
-      const svg = JsBarcode(orderId, {
-        format: 'CODE128',
-        width: 2,
-        height: 60,
-        displayValue: true,
-        xmlDocument: true,
-      });
-      barcodeSvg = svg;
-    } catch (error) {
-      console.warn('Failed to generate barcode:', error);
-    }
-
-    // Send to Discord
-    const formData = new FormData();
-    formData.append('payload_json', JSON.stringify({
-      content: `${mention}📬 **MANUAL NOTIFICATION**`,
-      embeds: [embed],
-      allowed_mentions: { parse: ['roles'] },
-    }));
-
-    if (barcodeSvg) {
-      const svgBlob = new Blob([barcodeSvg], { type: 'image/svg+xml' });
-      formData.append('files[0]', svgBlob, 'barcode.svg');
-    }
-
     const discordResponse = await fetch(config.webhookUrl, {
       method: 'POST',
-      body: formData,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: `${mention}📬 **MANUAL NOTIFICATION**`,
+        embeds: [embed],
+        allowed_mentions: { parse: ['roles'] },
+      }),
     });
 
     if (!discordResponse.ok) {

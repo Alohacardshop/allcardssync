@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.56.0";
-import JsBarcode from 'https://esm.sh/jsbarcode@3.11.6';
+
 import { writeInventory, generateRequestId, locationGidToId } from '../_shared/inventory-write.ts';
 import {
   buildOrderEmbed,
@@ -560,37 +560,14 @@ async function sendDiscordNotification(supabase: any, payload: any, shopifyDomai
       const embed = buildOrderEmbed(regionId, payload, orderType, shopifyDomain);
       const mention = roleId ? `<@&${roleId}>\n` : '';
 
-      // Generate barcode SVG attachment
-      let barcodeSvg: string | null = null;
-      try {
-        const orderId = payload.id?.toString() || payload.order_number?.toString() || 'NO-ID';
-        const svg = JsBarcode(orderId, {
-          format: 'CODE128',
-          width: 2,
-          height: 60,
-          displayValue: true,
-          xmlDocument: true,
-        });
-        barcodeSvg = svg;
-      } catch (error) {
-        console.warn('Failed to generate barcode:', error);
-      }
-
-      const formData = new FormData();
-      formData.append('payload_json', JSON.stringify({
-        content: `${mention}📬 New order received!`,
-        embeds: [embed],
-        allowed_mentions: { parse: ['roles'] },
-      }));
-
-      if (barcodeSvg) {
-        const svgBlob = new Blob([barcodeSvg], { type: 'image/svg+xml' });
-        formData.append('files[0]', svgBlob, 'barcode.svg');
-      }
-
       const discordResponse = await fetch(webhookUrl, {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: `${mention}📬 New order received!`,
+          embeds: [embed],
+          allowed_mentions: { parse: ['roles'] },
+        }),
       });
 
       if (!discordResponse.ok) {
