@@ -47,7 +47,8 @@ export const PSABulkImport = () => {
   const [manualInput, setManualInput] = useState('');
   const { assignedStore, selectedLocation, availableLocations } = useStore();
   const { mutateAsync: addItem } = useAddIntakeItem();
-  const batchId = uuidv4(); // Generate a unique batch ID for this import session
+  const { comicsEnabled } = useServiceFlags();
+  const batchId = uuidv4();
   const [mainCategory, setMainCategory] = useState('tcg');
   const [subCategory, setSubCategory] = useState('');
 
