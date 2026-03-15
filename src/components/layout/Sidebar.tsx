@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { PATHS } from '@/routes/paths';
 import { APP_NAV_ITEMS, APP_ADMIN_ITEMS, type AppNavItem } from '@/config/navigation';
+import { useServiceFlags } from '@/hooks/useServiceFlags';
 
 interface SidebarProps {
   className?: string;
