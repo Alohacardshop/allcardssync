@@ -189,10 +189,20 @@ Deno.serve(async (req) => {
         }
 
         if (productRes.status === 404) {
-          if (mode === 'preview') {
-            diffs.push({ item_id: intakeItem.id, sku: intakeItem.sku, item_type: itemType, current_title: null, intended_title: intendedTitle, title_changed: false, description_changed: false, error: 'Product not found (404)' })
+          // Auto-cleanup stale Shopify links
+          if (mode === 'execute') {
+            await supabase.from('intake_items').update({
+              shopify_product_id: null,
+              shopify_variant_id: null,
+              shopify_inventory_item_id: null,
+              shopify_sync_status: null,
+              last_shopify_synced_at: null,
+              updated_by: 'bulk_title_repair_cleanup',
+              updated_at: new Date().toISOString()
+            }).eq('id', intakeItem.id)
+            results.push({ item_id: intakeItem.id, sku: intakeItem.sku, item_type: itemType, status: 'updated', changes: ['cleanup_stale_link'], error: '404 - product missing, link cleared', api_calls: 1 })
           } else {
-            results.push({ item_id: intakeItem.id, sku: intakeItem.sku, item_type: itemType, status: 'failed', changes: [], error: '404 - product missing', api_calls: 1 })
+            diffs.push({ item_id: intakeItem.id, sku: intakeItem.sku, item_type: itemType, current_title: null, intended_title: intendedTitle, title_changed: false, description_changed: false, error: 'Product not found (404) — will clean up stale link on execute' })
           }
           continue
         }
