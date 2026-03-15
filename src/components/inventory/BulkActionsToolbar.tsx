@@ -44,6 +44,7 @@ export const BulkActionsToolbar = React.memo(({
   onBulkToggleEbay,
   onPrintSelected
 }: BulkActionsToolbarProps) => {
+  const { ebayEnabled } = useServiceFlags();
   return (
     <div className="flex flex-col gap-3">
       {/* Selection info */}
