@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Package, Layers, Lock } from 'lucide-react';
 import { GradedCardIntake } from '@/components/GradedCardIntake';
@@ -7,11 +7,22 @@ import { GradedComicIntake } from '@/components/GradedComicIntake';
 import { RawComicIntake } from '@/components/RawComicIntake';
 import { CurrentBatchPanel } from '@/components/CurrentBatchPanel';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { useRegionSettings } from '@/hooks/useRegionSettings';
 
 export default function Index() {
-  const [collectibleType, setCollectibleType] = useState<'cards' | 'comics'>('comics');
+  const { settings } = useRegionSettings();
+  const comicsEnabled = settings?.['services.comics_enabled'] !== false; // default true
+  const [collectibleType, setCollectibleType] = useState<'cards' | 'comics'>(comicsEnabled ? 'comics' : 'cards');
   const [cardCondition, setCardCondition] = useState<'raw' | 'graded'>('raw');
   const [comicCondition, setComicCondition] = useState<'raw' | 'graded'>('graded');
+  const [batchCount, setBatchCount] = useState(0);
+
+  // If comics get disabled while on comics tab, switch to cards
+  useEffect(() => {
+    if (!comicsEnabled && collectibleType === 'comics') {
+      setCollectibleType('cards');
+    }
+  }, [comicsEnabled, collectibleType]);
   const [batchCount, setBatchCount] = useState(0);
 
   const handleBatchCountUpdate = useCallback((count: number) => {
