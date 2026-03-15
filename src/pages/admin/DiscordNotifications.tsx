@@ -28,6 +28,7 @@ const REGIONS = [
 ];
 
 const DISCORD_KEYS = ['discord.webhook_url', 'discord.role_id', 'discord.channel_name', 'discord.enabled', 'discord.notify_cancellations'] as const;
+const ALL_KEYS = [...DISCORD_KEYS, 'operations.business_hours'] as const;
 
 export default function DiscordNotifications() {
   const { toast } = useToast();
