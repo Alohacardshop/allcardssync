@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { resolveShopifyConfig } from '../_shared/resolveShopifyConfig.ts';
 import { log } from '../_lib/log.ts';
+import { isWithinBusinessHours } from '../_shared/business-hours.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
