@@ -19,6 +19,7 @@ import { HistoryTab } from './tabs/HistoryTab';
 
 import type { InventoryListItem } from '../../types';
 import type { CachedLocation } from '@/hooks/useLocationNames';
+import { useServiceFlags } from '@/hooks/useServiceFlags';
 
 interface InspectorPanelProps {
   item: InventoryListItem | null;
