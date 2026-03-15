@@ -42,7 +42,7 @@ export function QueueManagementTabs() {
 
   return (
     <Tabs defaultValue="overview" className="space-y-6">
-      <TabsList className="grid w-full grid-cols-7">
+      <TabsList className={`grid w-full ${comicsEnabled ? 'grid-cols-7' : 'grid-cols-6'}`}>
         <TabsTrigger value="overview" className="relative">
           Overview
           {stats && stats.queued > 0 && (
@@ -70,7 +70,7 @@ export function QueueManagementTabs() {
             </Badge>
           )}
         </TabsTrigger>
-        <TabsTrigger value="comic-repair">Comic Repair</TabsTrigger>
+        {comicsEnabled && <TabsTrigger value="comic-repair">Comic Repair</TabsTrigger>}
         <TabsTrigger value="title-repair">Title Repair</TabsTrigger>
         <TabsTrigger value="settings">Settings</TabsTrigger>
       </TabsList>
