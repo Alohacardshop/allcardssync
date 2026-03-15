@@ -188,7 +188,7 @@ serve(async (req) => {
               // Card was successfully locked - fetch card details for cross-channel sync
               const { data: card } = await supabase
                 .from('cards')
-                .select('id, shopify_inventory_item_id, current_shopify_location_id')
+                .select('id, shopify_inventory_item_id, current_shopify_location_id, shopify_variant_id')
                 .eq('sku', sku)
                 .single();
               
