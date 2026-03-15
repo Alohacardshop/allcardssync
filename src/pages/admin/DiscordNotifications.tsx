@@ -291,12 +291,76 @@ export default function DiscordNotifications() {
             ))}
           </Tabs>
 
+          {/* Test Notification */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FlaskConical className="h-4 w-4" />
+                Send Test Notification
+              </CardTitle>
+              <CardDescription>
+                Send a fake order notification with sample data to preview how it looks in Discord. Includes product thumbnail, Shopify admin link, and full embed formatting.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Region</Label>
+                  <Select value={testRegion} onValueChange={setTestRegion}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {REGIONS.map((r) => (
+                        <SelectItem key={r.id} value={r.id}>{r.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Order Type</Label>
+                  <Select value={testType} onValueChange={setTestType}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="shipping">🚚 Shipping</SelectItem>
+                      <SelectItem value="pickup">🏪 Store Pickup</SelectItem>
+                      <SelectItem value="ebay">🏷️ eBay Sale</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <Button
+                onClick={async () => {
+                  setSendingTest(true);
+                  try {
+                    const { data, error } = await supabase.functions.invoke('discord-test-notification', {
+                      body: { regionId: testRegion, orderType: testType },
+                    });
+                    if (error) throw error;
+                    if (!data?.success) throw new Error(data?.error || 'Unknown error');
+                    toast({ title: '✅ Test sent!', description: `Check the ${testRegion} Discord channel` });
+                  } catch (err: any) {
+                    toast({ title: 'Error', description: err.message, variant: 'destructive' });
+                  } finally {
+                    setSendingTest(false);
+                  }
+                }}
+                disabled={sendingTest}
+                variant="outline"
+              >
+                {sendingTest ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending…</>
+                ) : (
+                  <><FlaskConical className="h-4 w-4 mr-2" /> Send Test Notification</>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+
           {/* Manual Notification */}
           <Card>
             <CardHeader>
               <CardTitle>Send Manual Notification</CardTitle>
               <CardDescription>
-                Send a Discord notification for any order. Routes to the correct region automatically.
+                Send a Discord notification for a real order by number. Routes to the correct region automatically.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
