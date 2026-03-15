@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { canUseApp, getUserRole, type AppKey } from '@/lib/permissions';
 import { useEcosystemTheme } from '@/hooks/useEcosystemTheme';
 import { useAnimatedCounter } from '@/hooks/useAnimatedCounter';
+import { useServiceFlags } from '@/hooks/useServiceFlags';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { ActiveLotsDialog } from '@/components/dashboard/ActiveLotsDialog';
 import { Card, CardContent } from '@/components/ui/card';
