@@ -71,6 +71,9 @@ export default function DiscordNotifications() {
           case 'discord.enabled':
             newConfigs[region].enabled = row.setting_value !== false;
             break;
+          case 'discord.notify_cancellations':
+            newConfigs[region].notifyCancellations = row.setting_value === true;
+            break;
         }
       });
       setConfigs(newConfigs);
