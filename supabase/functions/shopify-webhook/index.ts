@@ -724,98 +724,214 @@ function getOrderRegionFromPayload(payload: any, shopDomain: string | null): str
   return 'hawaii';
 }
 
-function renderMessage(template: string, payload: any, roleId: string, mentionEnabled: boolean): string {
-  let message = template;
+// ── Rich embed helpers (shared format with flush-pending-notifications) ──
 
-  message = message.replace(/{id}/g, payload.id || payload.order_number || '');
-  message = message.replace(/{customer_name}/g, payload.customer?.first_name || payload.billing_address?.first_name || 'N/A');
-  message = message.replace(/{total}/g, payload.total_price || payload.current_total_price || '');
-  message = message.replace(/{created_at}/g, payload.created_at || '');
-  message = message.replace(/{tags}/g, JSON.stringify(payload.tags || []));
-  
-  const rawJson = JSON.stringify(payload, null, 2);
-  message = message.replace(/{raw_json}/g, rawJson.substring(0, 1800) + (rawJson.length > 1800 ? '...' : ''));
-  
-  message = message.replace(/{role_id}/g, roleId);
+function safeString(v: unknown, fallback = 'N/A'): string {
+  if (v === null || v === undefined) return fallback;
+  const s = String(v).trim();
+  return s.length ? s : fallback;
+}
 
-  if (!mentionEnabled) {
-    message = message.split('\n').filter((line) => !line.includes('<@&')).join('\n');
+function formatMoney(value: unknown): string {
+  if (value === null || value === undefined) return 'N/A';
+  const str = String(value).trim();
+  if (/[a-zA-Z]/.test(str)) return str;
+  const num = Number(str);
+  if (!Number.isFinite(num)) return str;
+  return `$${num.toFixed(2)}`;
+}
+
+function extractCustomerName(payload: any): string {
+  return (
+    payload?.customer_name ||
+    payload?.customer?.first_name ||
+    payload?.billing_address?.first_name ||
+    payload?.customer?.name ||
+    payload?.billing_address?.name ||
+    'Customer'
+  );
+}
+
+function extractOrderName(payload: any): string {
+  const id = safeString(payload?.id || payload?.order_number || payload?.name, 'N/A');
+  return safeString(payload?.name, id.startsWith('#') ? id : `#${id}`);
+}
+
+function extractLineItemsSummary(payload: any): string | null {
+  const items = payload?.line_items;
+  if (!Array.isArray(items) || items.length === 0) return null;
+
+  const lines: string[] = [];
+  for (const item of items.slice(0, 8)) {
+    const title = safeString(item?.title || item?.name, 'Item');
+    const qty = Number(item?.quantity ?? 1);
+    const price = item?.price ? formatMoney(item.price) : '';
+    const lineTotal = item?.price ? formatMoney(Number(item.price) * qty) : '';
+    const sku = item?.sku ? `\`${String(item.sku)}\`` : '';
+    const variant = item?.variant_title ? `${item.variant_title}` : '';
+
+    let line = `**${title}**`;
+    if (variant) line += `\n   ${variant}`;
+    if (sku) line += ` • ${sku}`;
+    if (price && qty) line += `\n   ${price} × ${qty} = **${lineTotal}**`;
+    lines.push(line);
   }
 
-  return message;
+  const more = items.length > 8 ? `\n\n*… +${items.length - 8} more items*` : '';
+  const out = lines.join('\n\n') + more;
+  return out.length > 1024 ? out.slice(0, 1021) + '…' : out;
 }
+
+function extractFirstProductImage(payload: any): string | null {
+  const items = payload?.line_items;
+  if (!Array.isArray(items) || items.length === 0) return null;
+  for (const item of items) {
+    const imageUrl = item?.image?.src || item?.image_url || item?.product_image || item?.image;
+    if (imageUrl && typeof imageUrl === 'string' && imageUrl.startsWith('http')) {
+      return imageUrl;
+    }
+  }
+  return null;
+}
+
+function extractPickupLocation(payload: any): string | null {
+  const fulfillments = payload?.fulfillments || [];
+  for (const f of fulfillments) {
+    if (f?.location?.name) return f.location.name;
+    if (f?.origin_address?.company) return f.origin_address.company;
+  }
+  const shippingLines = payload?.shipping_lines || [];
+  for (const s of shippingLines) {
+    if (s?.title?.toLowerCase().includes('pickup')) {
+      const match = s.title.match(/pickup\s*[-–—]\s*(.+)/i);
+      if (match) return match[1].trim();
+    }
+  }
+  return null;
+}
+
+function getPaymentStatus(payload: any): { text: string; emoji: string } {
+  const financial = payload?.financial_status?.toLowerCase() || '';
+  if (financial === 'paid') return { text: 'Paid', emoji: '💰' };
+  if (financial === 'pending') return { text: 'Pending', emoji: '⏳' };
+  if (financial === 'refunded') return { text: 'Refunded', emoji: '↩️' };
+  return { text: 'Unpaid', emoji: '❌' };
+}
+
+function getFulfillmentStatus(payload: any): { text: string; emoji: string } {
+  const status = payload?.fulfillment_status?.toLowerCase() || 'unfulfilled';
+  if (status === 'fulfilled') return { text: 'Fulfilled', emoji: '✅' };
+  if (status === 'partial') return { text: 'Partial', emoji: '📦' };
+  return { text: 'Unfulfilled', emoji: '📋' };
+}
+
+function orderTypeEmoji(orderType: string): string {
+  if (orderType === 'ebay') return '🏷️';
+  if (orderType === 'pickup') return '🏪';
+  return '📦';
+}
+
+function orderTypeLabel(orderType: string): string {
+  if (orderType === 'ebay') return 'eBay Order';
+  if (orderType === 'pickup') return 'Store Pickup';
+  return 'Online Order';
+}
+
+function regionMeta(regionId: string) {
+  return regionId === 'hawaii'
+    ? { icon: '🌺', label: 'Hawaii', color: 0x2DD4BF }
+    : { icon: '🎰', label: 'Las Vegas', color: 0xF59E0B };
+}
+
+function buildOrderEmbed(regionId: string, payload: any, orderType: string, shopDomainOverride?: string | null) {
+  const { icon, label, color } = regionMeta(regionId);
+  const orderName = extractOrderName(payload);
+  const customerName = extractCustomerName(payload);
+  const total = formatMoney(payload?.total_price || payload?.current_total_price);
+  const items = extractLineItemsSummary(payload);
+  const pickupLocation = extractPickupLocation(payload);
+  const payment = getPaymentStatus(payload);
+  const fulfillment = getFulfillmentStatus(payload);
+  const productImage = extractFirstProductImage(payload);
+  const source = getOrderSource(payload);
+
+  const createdAt = payload?.created_at
+    ? new Date(payload.created_at).toLocaleString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric',
+        hour: 'numeric', minute: '2-digit', hour12: true
+      })
+    : null;
+
+  let description = `## ${orderName}\n`;
+  description += `${payment.emoji} **${payment.text}** • ${fulfillment.emoji} **${fulfillment.text}**\n`;
+  if (createdAt) description += `🕐 ${createdAt}`;
+  if (orderType === 'pickup' && pickupLocation) {
+    description += `\n\n🏪 **Pickup at ${pickupLocation}**`;
+  }
+
+  const fields: Array<{ name: string; value: string; inline?: boolean }> = [
+    { name: '👤 Customer', value: safeString(customerName), inline: true },
+    { name: '💵 Total', value: safeString(total), inline: true },
+    { name: `${orderTypeEmoji(orderType)} Type`, value: orderTypeLabel(orderType), inline: true },
+    { name: '🔗 Source', value: `${source.emoji} ${source.label}`, inline: true },
+  ];
+  if (items) {
+    fields.push({ name: '📦 Items', value: items, inline: false });
+  }
+
+  // Shopify admin link
+  const shopDomain = shopDomainOverride || payload?.shop_domain || 'alohacards-hi.myshopify.com';
+  const numericId = String(payload?.id || '').match(/^\d+$/) ? String(payload.id) : null;
+  const url = numericId ? `https://${shopDomain}/admin/orders/${numericId}` : undefined;
+
+  const embed: any = {
+    title: `${icon} ${label} • New ${orderTypeLabel(orderType)}`,
+    description,
+    color,
+    url,
+    fields,
+    footer: { text: `Order ID: ${payload?.id || 'N/A'}` },
+    timestamp: new Date().toISOString(),
+  };
+  if (productImage) {
+    embed.thumbnail = { url: productImage };
+  }
+  return embed;
+}
+
+// ── Send Discord notification with rich embeds ──
 
 async function sendDiscordNotification(supabase: any, payload: any, shopifyDomain: string | null = null) {
   try {
     console.log('Checking Discord notification for order:', payload.id, 'source:', payload.source_name, 'tags:', payload.tags);
-    
-    // NEW: Check if this is an online order that needs fulfillment (replaces eBay-only filter)
+
     if (!isOnlineOrderNeedingFulfillment(payload)) {
       console.log('Order does not require fulfillment notification (POS or already fulfilled)');
       return;
     }
 
-    // Determine region from order (now uses shop domain for better accuracy)
     const regionId = getOrderRegionFromPayload(payload, shopifyDomain);
     const orderType = getOrderType(payload);
     console.log(`Order region: ${regionId}, type: ${orderType}`);
 
-    // Try region-specific Discord config first
     const regionConfig = await getRegionDiscordConfig(supabase, regionId);
-    
-    // Check if store is open for this region
     const isOpen = await isStoreOpenForRegion(supabase, regionId);
     console.log(`Business hours check for ${regionId}:`, isOpen ? 'OPEN' : 'CLOSED');
 
-    // Fall back to global app_settings if no region config
-    const { data: settings, error: configError } = await supabase
-      .from('app_settings')
-      .select('key, value')
-      .in('key', ['discord.webhooks', 'discord.mention', 'discord.templates']);
-
-    if (configError) {
-      console.error('Failed to load Discord config:', configError);
-      return;
-    }
-
-    const config = {
-      webhooks: settings?.find((s: any) => s.key === 'discord.webhooks')?.value || { channels: [], immediate_channel: '', queued_channel: '' },
-      mention: settings?.find((s: any) => s.key === 'discord.mention')?.value || { enabled: false, role_id: '' },
-      templates: settings?.find((s: any) => s.key === 'discord.templates')?.value || { immediate: '', queued: '' },
-    };
-
-    // Determine which webhook to use: region-specific or fallback to global
-    let webhookUrl: string | null = null;
-    let roleId = config.mention.role_id;
-    let mentionEnabled = config.mention.enabled;
-
-    if (regionConfig?.enabled && regionConfig.webhookUrl) {
-      webhookUrl = regionConfig.webhookUrl;
-      roleId = regionConfig.roleId || roleId;
-      console.log(`Using region-specific Discord config for ${regionId}`);
-    } else {
-      // Use global config
-      const channelName = isOpen ? config.webhooks.immediate_channel : config.webhooks.queued_channel;
-      const channel = config.webhooks.channels.find((ch: any) => ch.name === channelName);
-      webhookUrl = channel?.webhook_url || null;
-    }
+    const webhookUrl = regionConfig?.enabled ? regionConfig.webhookUrl : null;
+    const roleId = regionConfig?.roleId || '';
 
     if (isOpen) {
       if (!webhookUrl) {
-        console.warn('No webhook URL configured for immediate notification');
+        console.warn(`No webhook URL configured for region ${regionId}, skipping immediate`);
         return;
       }
 
-      // Add order type badge, source, and region indicator to message
-      const regionIcon = regionId === 'hawaii' ? '🌺' : '🎰';
-      const regionLabel = regionId === 'hawaii' ? 'Hawaii' : 'Las Vegas';
-      const orderTypeBadge = orderType === 'ebay' ? '🏷️ **eBay ORDER**' 
-                          : orderType === 'pickup' ? '📦 **PICKUP ORDER**' 
-                          : '🛍️ **ONLINE ORDER**';
-      const source = getOrderSource(payload);
-      const sourceLine = `🔗 **Source:** ${source.emoji} ${source.label}`;
-      const message = `${regionIcon} **${regionLabel}** | ${orderTypeBadge}\n${sourceLine}\n` + renderMessage(config.templates.immediate, payload, roleId, mentionEnabled);
+      // Build rich embed (same format as flush-pending-notifications)
+      const embed = buildOrderEmbed(regionId, payload, orderType, shopifyDomain);
+      const mention = roleId ? `<@&${roleId}>\n` : '';
 
+      // Generate barcode SVG attachment
       let barcodeSvg: string | null = null;
       try {
         const orderId = payload.id?.toString() || payload.order_number?.toString() || 'NO-ID';
@@ -833,7 +949,8 @@ async function sendDiscordNotification(supabase: any, payload: any, shopifyDomai
 
       const formData = new FormData();
       formData.append('payload_json', JSON.stringify({
-        content: message,
+        content: `${mention}📬 New order received!`,
+        embeds: [embed],
         allowed_mentions: { parse: ['roles'] },
       }));
 
@@ -850,14 +967,16 @@ async function sendDiscordNotification(supabase: any, payload: any, shopifyDomai
       if (!discordResponse.ok) {
         const errorText = await discordResponse.text();
         console.error('Discord API error:', discordResponse.status, errorText);
-        await supabase.from('pending_notifications').insert({ 
+        // Fallback: queue for later
+        await supabase.from('pending_notifications').insert({
           payload,
-          region_id: regionId 
+          region_id: regionId
         });
       } else {
-        console.log(`Sent Discord notification immediately to ${regionId} channel`);
+        console.log(`Sent rich Discord notification to ${regionId} channel`);
       }
     } else {
+      // Queue for next business hours
       const { data: existing } = await supabase
         .from('pending_notifications')
         .select('id')
@@ -866,9 +985,9 @@ async function sendDiscordNotification(supabase: any, payload: any, shopifyDomai
         .limit(1);
 
       if (!existing || existing.length === 0) {
-        await supabase.from('pending_notifications').insert({ 
+        await supabase.from('pending_notifications').insert({
           payload,
-          region_id: regionId 
+          region_id: regionId
         });
         console.log(`Queued Discord notification for ${regionId} next business hours`);
       } else {

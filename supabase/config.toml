@@ -153,8 +153,7 @@ verify_jwt = false
 [functions.discord-test]
 verify_jwt = true
 
-[functions.shopify-webhook-discord]
-verify_jwt = false
+# shopify-webhook-discord: REMOVED (legacy, replaced by region routing in shopify-webhook)
 
 [functions.shopify-poll-ebay-orders]
 verify_jwt = false
