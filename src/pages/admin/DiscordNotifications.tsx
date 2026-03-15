@@ -26,7 +26,7 @@ const REGIONS = [
   { id: 'las_vegas', label: '🎰 Las Vegas' },
 ];
 
-const DISCORD_KEYS = ['discord.webhook_url', 'discord.role_id', 'discord.channel_name', 'discord.enabled'] as const;
+const DISCORD_KEYS = ['discord.webhook_url', 'discord.role_id', 'discord.channel_name', 'discord.enabled', 'discord.notify_cancellations'] as const;
 
 export default function DiscordNotifications() {
   const { toast } = useToast();
