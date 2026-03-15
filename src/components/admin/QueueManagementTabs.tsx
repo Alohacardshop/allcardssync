@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useRegionSettings } from "@/hooks/useRegionSettings";
 import { Badge } from "@/components/ui/badge";
 import { ShopifySyncPanel } from "./ShopifySyncPanel";
 import ShopifyQueueHealth from "./ShopifyQueueHealth";
@@ -13,6 +14,8 @@ import { supabase } from "@/integrations/supabase/client";
 
 export function QueueManagementTabs() {
   const [refreshKey, setRefreshKey] = useState(0);
+  const { settings } = useRegionSettings();
+  const comicsEnabled = settings?.['services.comics_enabled'] !== false;
 
   // Fetch mini stats for tab badges
   const { data: stats } = useQuery({
@@ -39,7 +42,7 @@ export function QueueManagementTabs() {
 
   return (
     <Tabs defaultValue="overview" className="space-y-6">
-      <TabsList className="grid w-full grid-cols-7">
+      <TabsList className={`grid w-full ${comicsEnabled ? 'grid-cols-7' : 'grid-cols-6'}`}>
         <TabsTrigger value="overview" className="relative">
           Overview
           {stats && stats.queued > 0 && (
@@ -67,7 +70,7 @@ export function QueueManagementTabs() {
             </Badge>
           )}
         </TabsTrigger>
-        <TabsTrigger value="comic-repair">Comic Repair</TabsTrigger>
+        {comicsEnabled && <TabsTrigger value="comic-repair">Comic Repair</TabsTrigger>}
         <TabsTrigger value="title-repair">Title Repair</TabsTrigger>
         <TabsTrigger value="settings">Settings</TabsTrigger>
       </TabsList>
@@ -88,9 +91,11 @@ export function QueueManagementTabs() {
         <DeadLetterDashboard />
       </TabsContent>
 
-      <TabsContent value="comic-repair">
-        <ComicBulkRepairPanel />
-      </TabsContent>
+      {comicsEnabled && (
+        <TabsContent value="comic-repair">
+          <ComicBulkRepairPanel />
+        </TabsContent>
+      )}
 
       <TabsContent value="title-repair">
         <TitleRepairPanel />

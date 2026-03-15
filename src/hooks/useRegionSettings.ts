@@ -39,6 +39,7 @@ export interface RegionSettings {
   'services.ebay_sync'?: boolean;
   'services.shopify_sync'?: boolean;
   'services.discord_notifications'?: boolean;
+  'services.comics_enabled'?: boolean;
 }
 
 /**

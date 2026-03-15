@@ -64,6 +64,7 @@ const SETTING_FIELDS: SettingField[] = [
 
   // Services
   { key: 'services.ebay_sync', label: 'eBay Sync', type: 'boolean', category: 'services', description: 'Enable eBay inventory sync for this store' },
+  { key: 'services.comics_enabled', label: 'Comics', type: 'boolean', category: 'services', description: 'Enable comic intake and comic-related features' },
 ];
 
 export function RegionSettingsEditor() {
