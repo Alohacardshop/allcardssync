@@ -116,6 +116,196 @@ export function filterChangedMetafields(
   })
 }
 
+// ── Shared helpers for all item types ──
+
+const SKIP_VARIANTS = new Set(['normal', 'none', 'n/a', 'base', 'standard'])
+
+/**
+ * Determine if an item is graded based on grade + cert presence.
+ * Items with both grade AND cert are always graded (even if type='Raw' in DB).
+ */
+export function isGradedItem(intakeItem: any, item?: any): boolean {
+  const grade = safeStr(item?.grade, intakeItem?.grade)
+  const hasCert = !!(intakeItem?.psa_cert || intakeItem?.psa_cert_number || intakeItem?.cgc_cert || item?.psa_cert || item?.cgc_cert)
+  if (grade && hasCert) return true
+  const type = intakeItem?.type || item?.type
+  if (type === 'raw' || type === 'Raw') return false
+  return !!grade
+}
+
+/**
+ * Determine if an item is a comic.
+ */
+export function isComicItem(intakeItem: any): boolean {
+  if (intakeItem?.main_category === 'comics') return true
+  const snap = intakeItem?.catalog_snapshot || intakeItem?.psa_snapshot
+  return snap?.type === 'graded_comic' || snap?.type === 'raw_comic'
+}
+
+/**
+ * Build graded card title: YEAR BRAND SUBJECT #NUM VARIANT COMPANY GRADE
+ */
+export function buildGradedCardTitle(intakeItem: any, item?: any): string {
+  const snap = intakeItem?.catalog_snapshot || {}
+  const year = safeStr(item?.year, intakeItem?.year, snap?.year)
+  const brand = safeStr(item?.brand_title, intakeItem?.brand_title)
+  const subject = safeStr(item?.subject, intakeItem?.subject)
+  const cardNumber = safeStr(item?.card_number, intakeItem?.card_number)
+  const variant = cleanVariant(intakeItem?.variant || snap?.varietyPedigree || item?.variant)
+  const grade = safeStr(item?.grade, intakeItem?.grade)
+  const company = safeStr(intakeItem?.grading_company, item?.grading_company) || 'PSA'
+
+  const parts: string[] = []
+  if (year) parts.push(year)
+  if (brand) parts.push(brand)
+  if (subject) parts.push(subject)
+  if (cardNumber) parts.push(`#${cardNumber}`)
+  if (variant && !SKIP_VARIANTS.has(variant.toLowerCase().trim())) parts.push(variant)
+  if (grade) parts.push(`${company} ${grade}`)
+
+  return deduplicateParts(parts.filter(Boolean)).join(' ') || 'Graded Card'
+}
+
+/**
+ * Build graded card description as structured HTML.
+ */
+export function buildGradedCardDescription(intakeItem: any, item?: any): string {
+  const grade = safeStr(item?.grade, intakeItem?.grade)
+  const company = safeStr(intakeItem?.grading_company, item?.grading_company) || 'PSA'
+  const cert = safeStr(item?.psa_cert, intakeItem?.psa_cert, intakeItem?.psa_cert_number, intakeItem?.cgc_cert)
+  const subject = safeStr(item?.subject, intakeItem?.subject)
+  const brand = safeStr(item?.brand_title, intakeItem?.brand_title)
+  const year = safeStr(item?.year, intakeItem?.year)
+  const cardNumber = safeStr(item?.card_number, intakeItem?.card_number)
+  const variant = cleanVariant(intakeItem?.variant || item?.variant)
+
+  const lines: string[] = []
+  lines.push(`<strong>Graded Card — ${company}</strong><br>`)
+  if (cert) lines.push(`<strong>Cert Number:</strong> ${cert}<br>`)
+  if (grade) lines.push(`<strong>Grade:</strong> ${company} ${grade}<br>`)
+  if (subject) lines.push(`<strong>Subject:</strong> ${subject}<br>`)
+  if (brand) lines.push(`<strong>Brand:</strong> ${brand}<br>`)
+  if (year) lines.push(`<strong>Year:</strong> ${year}<br>`)
+  if (cardNumber) lines.push(`<strong>Card #:</strong> #${cardNumber}<br>`)
+  if (variant) lines.push(`<strong>Variant:</strong> ${variant}<br>`)
+  return lines.join('')
+}
+
+/**
+ * Build raw card title: YEAR BRAND SUBJECT #NUM CONDITION
+ */
+export function buildRawCardTitle(intakeItem: any, item?: any): string {
+  const snap = intakeItem?.catalog_snapshot || {}
+  const year = safeStr(item?.year, intakeItem?.year, snap?.year)
+  const brand = safeStr(item?.brand_title, intakeItem?.brand_title)
+  const subject = safeStr(item?.subject, intakeItem?.subject)
+  const cardNumber = safeStr(item?.card_number, intakeItem?.card_number)
+  const condition = safeStr(intakeItem?.variant || item?.variant)
+
+  const parts: string[] = []
+  if (year) parts.push(year)
+  if (brand) parts.push(brand)
+  if (subject) parts.push(subject)
+  if (cardNumber) parts.push(`#${cardNumber}`)
+  if (condition) parts.push(condition)
+
+  return deduplicateParts(parts.filter(Boolean)).join(' ') || 'Raw Card'
+}
+
+/**
+ * Build raw card description as structured HTML.
+ */
+export function buildRawCardDescription(intakeItem: any, _item?: any): string {
+  const brand = safeStr(intakeItem?.brand_title)
+  const year = safeStr(intakeItem?.year)
+  const subject = safeStr(intakeItem?.subject)
+  const cardNumber = safeStr(intakeItem?.card_number)
+  const condition = safeStr(intakeItem?.variant)
+
+  const lines: string[] = []
+  lines.push(`<strong>Raw Card</strong><br>`)
+  if (brand) lines.push(`<strong>Brand:</strong> ${brand}<br>`)
+  if (year) lines.push(`<strong>Year:</strong> ${year}<br>`)
+  if (subject) lines.push(`<strong>Subject:</strong> ${subject}<br>`)
+  if (cardNumber) lines.push(`<strong>Card #:</strong> #${cardNumber}<br>`)
+  if (condition) lines.push(`<strong>Condition:</strong> ${condition}<br>`)
+  return lines.join('')
+}
+
+/**
+ * Build raw comic title: PUBLISHER TITLE #ISSUE MONTH YEAR CONDITION
+ */
+export function buildRawComicTitle(intakeItem: any, item?: any): string {
+  const snap = intakeItem?.catalog_snapshot || intakeItem?.psa_snapshot || {}
+  const publisher = safeStr(snap.brandTitle, intakeItem?.brand_title, item?.brand_title)
+  const comicName = safeStr(snap.subject, intakeItem?.subject, item?.subject)
+  const issueNum = formatIssueNumber(snap.issueNumber || snap.cardNumber || intakeItem?.card_number || item?.card_number)
+  const condition = safeStr(intakeItem?.variant || item?.variant)
+  const pubDate = parsePublicationDate(snap.publicationDate || snap.year || safeStr(intakeItem?.year, item?.year))
+
+  const parts: string[] = []
+  if (publisher) parts.push(publisher)
+  if (comicName) parts.push(comicName)
+  if (issueNum) parts.push(issueNum)
+  if (pubDate) {
+    if (pubDate.month) parts.push(pubDate.month)
+    parts.push(pubDate.year)
+  }
+  if (condition) parts.push(condition)
+
+  return deduplicateParts(parts.filter(Boolean)).join(' ') || 'Raw Comic'
+}
+
+/**
+ * Build raw comic description as structured HTML.
+ */
+export function buildRawComicDescription(intakeItem: any, _item?: any): string {
+  const snap = intakeItem?.catalog_snapshot || intakeItem?.psa_snapshot || {}
+  const publisher = safeStr(snap.brandTitle, intakeItem?.brand_title)
+  const comicName = safeStr(snap.subject, intakeItem?.subject)
+  const issueNum = formatIssueNumber(snap.issueNumber || snap.cardNumber || intakeItem?.card_number)
+  const pubDate = parsePublicationDate(snap.publicationDate || snap.year || safeStr(intakeItem?.year))
+  const condition = safeStr(intakeItem?.variant)
+
+  const lines: string[] = []
+  lines.push(`<strong>Raw Comic</strong><br>`)
+  if (comicName) lines.push(`<strong>Title:</strong> ${comicName}<br>`)
+  if (publisher) lines.push(`<strong>Publisher:</strong> ${publisher}<br>`)
+  if (issueNum) lines.push(`<strong>Issue:</strong> ${issueNum}<br>`)
+  if (pubDate) {
+    const dateStr = [pubDate.month, pubDate.year].filter(Boolean).join(' ')
+    if (dateStr) lines.push(`<strong>Publication Date:</strong> ${dateStr}<br>`)
+  }
+  if (condition) lines.push(`<strong>Condition:</strong> ${condition}<br>`)
+  return lines.join('')
+}
+
+/**
+ * Universal title builder — routes to the correct 4-path builder.
+ */
+export function buildUnifiedTitle(intakeItem: any, item?: any): string {
+  const comic = isComicItem(intakeItem)
+  const graded = isGradedItem(intakeItem, item)
+
+  if (comic && graded) return buildComicTitle(intakeItem, item)
+  if (comic && !graded) return buildRawComicTitle(intakeItem, item)
+  if (graded) return buildGradedCardTitle(intakeItem, item)
+  return buildRawCardTitle(intakeItem, item)
+}
+
+/**
+ * Universal description builder — routes to the correct 4-path builder.
+ */
+export function buildUnifiedDescription(intakeItem: any, item?: any): string {
+  const comic = isComicItem(intakeItem)
+  const graded = isGradedItem(intakeItem, item)
+
+  if (comic && graded) return buildComicDescription(intakeItem, item)
+  if (comic && !graded) return buildRawComicDescription(intakeItem, item)
+  if (graded) return buildGradedCardDescription(intakeItem, item)
+  return buildRawCardDescription(intakeItem, item)
+}
+
 // ── Comic helpers ──
 
 const MONTH_NAMES = [
