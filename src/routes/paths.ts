@@ -44,6 +44,7 @@ export const PATHS = {
   adminShopifyBackfill: '/admin/shopify-backfill',
   adminInventorySync: '/admin/inventory-sync',
   adminSyncHealth: '/admin/sync-health',
+  adminUnderpricingAudit: '/admin/underpricing-audit',
   adminShopifySync: '/admin/shopify-sync',
 
   // Utility routes
