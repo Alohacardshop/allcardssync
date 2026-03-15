@@ -15,20 +15,8 @@ interface DiscordConfig {
   template_queued?: string;
 }
 
-// Check if current time is within business hours in Hawaii (9am-7pm HST)
-function isOpenNowInHawaii(): boolean {
-  const now = new Date();
-  const hstOffset = -10 * 60; // HST is UTC-10
-  const hstTime = new Date(now.getTime() + (hstOffset + now.getTimezoneOffset()) * 60000);
-  const hour = hstTime.getHours();
-  const day = hstTime.getDay();
-  
-  // Closed on Sundays (day 0) or outside 9am-7pm
-  if (day === 0 || hour < 9 || hour >= 19) {
-    return false;
-  }
-  return true;
-}
+// isOpenNowInHawaii replaced by shared business-hours module
+// Import used inline where needed
 
 // Check if order has ebay tag
 function hasEbayTag(tags: any): boolean {

@@ -357,10 +357,10 @@ Deno.serve(async (req) => {
       }
 
        // Check if within business hours for this region
-       const { within: isWithinHours, currentHour, dayOfWeek, timezone } = await isWithinBusinessHours(supabase, regionId);
+       const { within: isWithinHours, currentHour, day, timezone } = await isWithinBusinessHours(supabase, regionId);
        
        if (!isWithinHours) {
-         console.log(`[check-webhook-health] Outside business hours for ${regionId} (hour: ${currentHour}, day: ${dayOfWeek}, tz: ${timezone}), skipping`);
+         console.log(`[check-webhook-health] Outside business hours for ${regionId} (hour: ${currentHour}, day: ${day}, tz: ${timezone}), skipping`);
          skippedOutsideHours += regionStale.length;
          continue;
        }
