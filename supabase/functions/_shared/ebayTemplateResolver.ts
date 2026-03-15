@@ -298,7 +298,8 @@ export function buildTitle(item: any, template?: string | null): string {
   const parts: string[] = []
 
   if (isComic) {
-    // Comic: PUBLISHER TITLE #ISSUE YEAR VARIANT [COMPANY GRADE]
+    // Comic: PUBLISHER TITLE #ISSUE MONTH YEAR VARIANT [COMPANY GRADE]
+    const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
     if (item.brand_title) parts.push(item.brand_title)
     if (item.subject) parts.push(item.subject)
     const issueNum = (snapshot as any).issueNumber || (snapshot as any).cardNumber || item.card_number
@@ -306,7 +307,20 @@ export function buildTitle(item: any, template?: string | null): string {
       const n = String(issueNum).replace(/^#/, '').trim()
       if (n && !/^0+$/.test(n)) parts.push(`#${n}`)
     }
-    if (item.year) parts.push(item.year)
+    // Parse publication date for month + year
+    const pubDateStr = (snapshot as any).publicationDate || (snapshot as any).year || item.year
+    if (pubDateStr) {
+      const m = String(pubDateStr).trim().match(/^(\d{4})-(\d{1,2})/)
+      if (m) {
+        const mi = parseInt(m[2], 10) - 1
+        if (mi >= 0 && mi <= 11) parts.push(MONTH_NAMES[mi])
+        parts.push(m[1])
+      } else {
+        const yo = String(pubDateStr).trim().match(/^(\d{4})$/)
+        if (yo) parts.push(yo[1])
+        else if (item.year) parts.push(item.year)
+      }
+    }
   } else {
     // Card: YEAR BRAND SUBJECT #NUMBER
     if (item.year) parts.push(item.year)
