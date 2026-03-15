@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         content: `${mention}🧪 **Test Notification** — This is a preview of how real order notifications look.`,
         embeds: [embed],
-        allowed_mentions: { parse: [] }, // Don't actually ping anyone for tests
+        allowed_mentions: { parse: ['roles'] },
       }),
     });
 
