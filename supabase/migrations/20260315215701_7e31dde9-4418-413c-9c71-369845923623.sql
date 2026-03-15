@@ -1,0 +1,1 @@
+UPDATE intake_items SET sold_at = now(), sold_channel = 'ebay', quantity = 0, ebay_sync_status = 'sold', updated_at = now() WHERE id IN ('75545fca-e40d-4d6d-b4df-d15dda48d532', 'fe043e6b-162b-40e3-84db-429ec25c69b9') AND sold_at IS NULL
