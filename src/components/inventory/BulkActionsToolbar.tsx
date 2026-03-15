@@ -7,6 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useServiceFlags } from '@/hooks/useServiceFlags';
 
 export type ResyncTarget = 'shopify' | 'ebay' | 'both';
 
