@@ -12,6 +12,7 @@ import { ArrowLeft, Send, Loader2, CheckCircle } from 'lucide-react';
 import { AdminGuard } from '@/components/AdminGuard';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingState } from '@/components/ui/LoadingState';
+import { BusinessHoursConfig, type BusinessHoursData } from '@/components/admin/BusinessHoursConfig';
 
 interface RegionDiscordConfig {
   webhookUrl: string;
