@@ -290,6 +290,7 @@ const TYPE_LABELS: Record<ItemType, { label: string; emoji: string }> = {
 
 function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = false }: Props) {
   const [form, setForm] = useState<IntakeItemDetails | null>(null);
+  const { comicsEnabled } = useServiceFlags();
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncingToShopify, setIsSyncingToShopify] = useState(false);
 
