@@ -80,56 +80,28 @@ Deno.serve(async (req) => {
       message = message.split('\n').filter((line) => !line.includes('<@&')).join('\n');
     }
 
-    // Generate barcode SVG for order ID
-    let barcodeSvg: string | null = null;
-    try {
-      const svg = JsBarcode(testPayload.id, {
-        format: 'CODE128',
-        width: 2,
-        height: 60,
-        displayValue: true,
-        xmlDocument: true,
-      });
-      barcodeSvg = svg;
-    } catch (error) {
-      console.warn('Failed to generate barcode:', error);
-    }
-
-    // Build FormData with message, embeds, and barcode
-    const formData = new FormData();
-    
-    // Create test embed with thumbnail and location
+    // Create test embed
     const testEmbed = {
       title: 'Test Product',
       fields: [
-        { name: '🔢 Barcode', value: `\`${testPayload.id}\``, inline: false },
+        { name: '🔢 Order ID', value: `\`${testPayload.id}\``, inline: false },
         { name: 'SKU', value: 'TEST-SKU-001', inline: true },
         { name: 'Quantity', value: '1', inline: true },
         { name: 'Price', value: '$99.99', inline: true },
       ],
       color: 0x5865F2,
-      footer: {
-        text: 'Store: 🎰 Las Vegas'
-      },
-      thumbnail: {
-        url: 'https://via.placeholder.com/150'
-      }
+      footer: { text: 'Store: 🎰 Las Vegas' },
+      thumbnail: { url: 'https://via.placeholder.com/150' }
     };
-    
-    formData.append('payload_json', JSON.stringify({
-      content: `🧪 **TEST MESSAGE**\n\n${message}`,
-      embeds: [testEmbed],
-      allowed_mentions: { parse: ['roles'] },
-    }));
-
-    if (barcodeSvg) {
-      const svgBlob = new Blob([barcodeSvg], { type: 'image/svg+xml' });
-      formData.append('files[0]', svgBlob, 'barcode.svg');
-    }
 
     const discordResponse = await fetch(channel.webhook_url, {
       method: 'POST',
-      body: formData,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: `🧪 **TEST MESSAGE**\n\n${message}`,
+        embeds: [testEmbed],
+        allowed_mentions: { parse: ['roles'] },
+      }),
     });
 
     if (!discordResponse.ok) {
