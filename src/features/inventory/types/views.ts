@@ -9,6 +9,7 @@ export type InventoryColumn =
   | 'checkbox'
   | 'sku'
   | 'title'
+  | 'item_type'
   | 'location'
   | 'price'
   | 'quantity'
