@@ -14,6 +14,8 @@ import { supabase } from "@/integrations/supabase/client";
 
 export function QueueManagementTabs() {
   const [refreshKey, setRefreshKey] = useState(0);
+  const { settings } = useRegionSettings();
+  const comicsEnabled = settings?.['services.comics_enabled'] !== false;
 
   // Fetch mini stats for tab badges
   const { data: stats } = useQuery({
