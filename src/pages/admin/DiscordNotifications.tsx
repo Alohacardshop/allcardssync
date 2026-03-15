@@ -172,7 +172,7 @@ export default function DiscordNotifications() {
               {REGIONS.map((r) => (
                 <TabsTrigger key={r.id} value={r.id}>
                   {r.label}
-                  {configs[r.id]?.enabled && <CheckCircle className="h-3 w-3 ml-1.5 text-green-500" />}
+                  {configs[r.id]?.enabled && <CheckCircle className="h-3 w-3 ml-1.5 text-primary" />}
                 </TabsTrigger>
               ))}
             </TabsList>
