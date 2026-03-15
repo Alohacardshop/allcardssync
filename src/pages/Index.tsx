@@ -39,7 +39,7 @@ export default function Index() {
 
       {/* TAB NAVIGATION - Collectible Type (Cards/Comics) */}
       <Tabs value={collectibleType} onValueChange={(value) => setCollectibleType(value as 'cards' | 'comics')} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 h-14 p-1.5 bg-muted/60 rounded-xl">
+        <TabsList className={`grid w-full ${comicsEnabled ? 'grid-cols-2' : 'grid-cols-1'} h-14 p-1.5 bg-muted/60 rounded-xl`}>
           <TabsTrigger 
             value="cards" 
             className="flex items-center gap-2 text-sm font-semibold h-full rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
@@ -47,13 +47,15 @@ export default function Index() {
             <Package className="h-4 w-4" />
             🎴 Cards
           </TabsTrigger>
-          <TabsTrigger 
-            value="comics" 
-            className="flex items-center gap-2 text-sm font-semibold h-full rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
-          >
-            <Layers className="h-4 w-4" />
-            📚 Comics
-          </TabsTrigger>
+          {comicsEnabled && (
+            <TabsTrigger 
+              value="comics" 
+              className="flex items-center gap-2 text-sm font-semibold h-full rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
+            >
+              <Layers className="h-4 w-4" />
+              📚 Comics
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* CARDS TAB CONTENT */}
