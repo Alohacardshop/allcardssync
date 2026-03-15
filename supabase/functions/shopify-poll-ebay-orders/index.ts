@@ -249,7 +249,7 @@ Deno.serve(async (req) => {
               customer_name: customerName,
             };
 
-            const isOpen = isOpenNowInHawaii();
+            const { within: isOpen } = await isWithinBusinessHours(supabase, 'hawaii');
 
             if (isOpen) {
               // Send immediately
