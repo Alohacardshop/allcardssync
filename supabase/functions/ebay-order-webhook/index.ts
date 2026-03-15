@@ -71,7 +71,12 @@ serve(async (req) => {
       const hashArray = Array.from(new Uint8Array(hashBuffer))
       const challengeResponse = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
       
-      console.log('[eBay Webhook] Challenge verification request')
+      console.log('[eBay Webhook] Challenge verification request', {
+        challengeCode,
+        verificationToken: verificationToken ? `${verificationToken.substring(0, 5)}...` : 'EMPTY',
+        endpoint,
+        challengeResponse
+      })
       
       return new Response(
         JSON.stringify({ challengeResponse }),
