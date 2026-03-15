@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.56.0";
-import JsBarcode from 'https://esm.sh/jsbarcode@3.11.6';
+
 import { writeInventory, generateRequestId, locationGidToId } from '../_shared/inventory-write.ts';
 import {
   buildOrderEmbed,
