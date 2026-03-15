@@ -611,7 +611,10 @@ export const InventoryTableView = memo(({
 
    // Compute visible columns and grid template
    const visibleColumns = propVisibleColumns || INVENTORY_COLUMNS.map(c => c.id);
-   const effectiveColumns = getVisibleColumns(visibleColumns);
+   // Filter out ebay_status when eBay is disabled for this region
+   const effectiveColumns = getVisibleColumns(visibleColumns).filter(
+     col => col !== 'ebay_status' || ebayEnabled
+   ) as InventoryColumn[];
    const isColumnVisible = (colId: InventoryColumn) => effectiveColumns.includes(colId);
  
   const rowVirtualizer = useVirtualizer({
