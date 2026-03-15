@@ -1,30 +1,56 @@
 
 
-## Problem
+# Improve Discord Order Notifications
 
-Only `services.ebay_sync` rows exist in the database for both regions. When you click "Shopify Sync" or "Discord Notifications," the upsert tries to INSERT a new row. The code and RLS policies look correct (admin has ALL access, unique constraint exists for upsert), so the issue is likely **not** a permissions problem.
+## Current State
 
-The real issue is that `services.shopify_sync` and `services.discord_notifications` rows simply don't exist yet. The upsert *should* create them, but the button click may be silently failing or the accordion is swallowing the click event before it reaches the button.
+There are three notification paths, and they're inconsistent:
 
-Looking at the code, I notice the `isSaving` variable depends on `savingKey === saveKey`. If a previous save attempt failed and `savingKey` got stuck (or if the error handler doesn't run), subsequent clicks would find the button `disabled={isSaving}` permanently.
+| Path | Embeds? | Product Link? | Thumbnail? | Region Routing? |
+|------|---------|---------------|------------|-----------------|
+| **`shopify-webhook`** (immediate) | No -- plain text + barcode SVG | No | No | Yes (correct) |
+| **`flush-pending-notifications`** (queued) | Yes -- rich embeds | Yes -- Shopify admin link | Yes -- first product image | Yes (correct) |
+| **`shopify-order-notify`** (manual) | Yes -- basic embeds | No | Uses `item.image_url` (rarely populated) | No -- uses global config |
 
-## Plan
+## What Needs to Change
 
-### 1. Seed the missing service toggle rows
-Insert the missing `services.shopify_sync` and `services.discord_notifications` rows for both regions via a database migration. This ensures the upsert always hits an UPDATE (not INSERT), matching how `services.ebay_sync` already works.
+### 1. Upgrade `shopify-webhook` immediate notifications to use rich embeds
 
-```sql
-INSERT INTO region_settings (region_id, setting_key, setting_value, description)
-VALUES 
-  ('hawaii', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
-  ('hawaii', 'services.discord_notifications', 'false', 'Enable Discord order notifications'),
-  ('las_vegas', 'services.shopify_sync', 'false', 'Enable Shopify inventory sync'),
-  ('las_vegas', 'services.discord_notifications', 'false', 'Enable Discord order notifications')
-ON CONFLICT (region_id, setting_key) DO NOTHING;
-```
+The `flush-pending-notifications` function already has excellent embed-building logic (`buildOrderEmbed`) with:
+- Product thumbnails from line item images
+- Shopify admin order link (clickable title)
+- Customer name, total, payment/fulfillment status badges
+- Item list with SKU, quantity, price
+- Region color coding (teal for Hawaii, amber for Vegas)
 
-### 2. Add defensive error logging to the toggle click handler
-Update the boolean toggle's `onClick` in `RegionSettingsEditor.tsx` to log the error details to the console. This ensures any future upsert failures are visible rather than silently swallowed.
+The **immediate** path in `sendDiscordNotification` currently sends plain text. We'll replace it with the same `buildOrderEmbed` pattern so both immediate and queued notifications look identical.
 
-This is a small, targeted fix -- seeding the rows is the primary solution.
+### 2. Update `shopify-order-notify` (manual sender) to use region routing
+
+- Map `storeKey` to `region_id` 
+- Load Discord webhook from `region_settings` instead of global `app_settings`
+- Remove the eBay-only restriction (allow any online order)
+- Use the same rich embed format
+
+### 3. Delete `shopify-webhook-discord` (legacy, unused)
+
+This function duplicates logic, is eBay-only, uses global config, and is never called from the frontend.
+
+## Files to Modify
+
+| File | Change |
+|------|--------|
+| `supabase/functions/shopify-webhook/index.ts` | Rewrite `sendDiscordNotification` to build a rich embed with thumbnail + Shopify admin link (matching the flush function's format). Keep barcode SVG attachment. |
+| `supabase/functions/shopify-order-notify/index.ts` | Rewrite to: (a) map storeKey→regionId, (b) load webhook from `region_settings`, (c) remove eBay filter, (d) use rich embeds with product images and Shopify link |
+| `supabase/functions/shopify-webhook-discord/index.ts` | Delete |
+| `supabase/config.toml` | Remove `shopify-webhook-discord` entry |
+
+## Embed Format (all three paths will share this)
+
+- **Title**: Region icon + region name + order type (clickable link to Shopify admin)
+- **Thumbnail**: First product image from line items
+- **Fields**: Customer, Total, Type, Source, Items list with SKUs
+- **Footer**: Order ID
+- **Color**: Teal (Hawaii) or Amber (Vegas)
+- **Attachment**: Barcode SVG (for immediate + manual, not queued batches)
 
