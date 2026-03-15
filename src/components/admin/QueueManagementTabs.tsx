@@ -7,6 +7,7 @@ import ShopifyQueueSettings from "./ShopifyQueueSettings";
 import { DeadLetterDashboard } from "./DeadLetterDashboard";
 import { SyncMetricsDashboard } from "./SyncMetricsDashboard";
 import { ComicBulkRepairPanel } from "./ComicBulkRepairPanel";
+import { TitleRepairPanel } from "./TitleRepairPanel";
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from "@/integrations/supabase/client";
 
