@@ -250,3 +250,7 @@ verify_jwt = false
 # Admin PIN management (admin-only)
 [functions.manage-staff-pin]
 verify_jwt = true
+
+# Daily underpricing audit (cron job - no JWT)
+[functions.underpricing-audit]
+verify_jwt = false
