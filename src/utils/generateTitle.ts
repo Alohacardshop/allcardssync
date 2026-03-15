@@ -111,8 +111,11 @@ function parsePublicationDate(dateStr?: string | null): { month: string; year: s
 function isGradedItem(item: TitleInput): boolean {
   const hasCert = !!(item.psa_cert || item.psaCert || item.cgc_cert || item.cgcCert);
   const hasGrade = !!item.grade;
+  // If the item has both a grade and a cert number, it's graded regardless of `type` field
+  // (many graded items in the DB have type='Raw' due to legacy imports)
+  if (hasGrade && hasCert) return true;
   if (item.type === 'raw' || item.type === 'Raw') return false;
-  return hasGrade || hasCert;
+  return hasGrade;
 }
 
 function isComicItem(item: TitleInput): boolean {
