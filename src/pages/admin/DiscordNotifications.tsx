@@ -12,6 +12,7 @@ import { ArrowLeft, Send, Loader2, CheckCircle } from 'lucide-react';
 import { AdminGuard } from '@/components/AdminGuard';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingState } from '@/components/ui/LoadingState';
+import { BusinessHoursConfig, type BusinessHoursData } from '@/components/admin/BusinessHoursConfig';
 
 interface RegionDiscordConfig {
   webhookUrl: string;
@@ -27,6 +28,7 @@ const REGIONS = [
 ];
 
 const DISCORD_KEYS = ['discord.webhook_url', 'discord.role_id', 'discord.channel_name', 'discord.enabled', 'discord.notify_cancellations'] as const;
+const ALL_KEYS = [...DISCORD_KEYS, 'operations.business_hours'] as const;
 
 export default function DiscordNotifications() {
   const { toast } = useToast();
@@ -40,6 +42,10 @@ export default function DiscordNotifications() {
   const [manualOrderNumber, setManualOrderNumber] = useState('');
   const [manualStoreKey, setManualStoreKey] = useState('');
   const [sendingManual, setSendingManual] = useState(false);
+  const [businessHours, setBusinessHours] = useState<Record<string, BusinessHoursData | null>>({
+    hawaii: null,
+    las_vegas: null,
+  });
 
   useEffect(() => {
     loadConfigs();
@@ -50,13 +56,18 @@ export default function DiscordNotifications() {
       const { data, error } = await supabase
         .from('region_settings')
         .select('region_id, setting_key, setting_value')
-        .in('setting_key', [...DISCORD_KEYS]);
+        .in('setting_key', [...ALL_KEYS]);
 
       if (error) throw error;
 
       const newConfigs = { ...configs };
+      const newBH: Record<string, BusinessHoursData | null> = { hawaii: null, las_vegas: null };
       data?.forEach((row: any) => {
         const region = row.region_id;
+        if (row.setting_key === 'operations.business_hours') {
+          if (row.setting_value) newBH[region] = row.setting_value as BusinessHoursData;
+          return;
+        }
         if (!newConfigs[region]) return;
         switch (row.setting_key) {
           case 'discord.webhook_url':
@@ -77,6 +88,7 @@ export default function DiscordNotifications() {
         }
       });
       setConfigs(newConfigs);
+      setBusinessHours(newBH);
     } catch (error) {
       console.error('Failed to load config:', error);
       toast({ title: 'Error', description: 'Failed to load Discord configuration', variant: 'destructive' });
@@ -264,6 +276,13 @@ export default function DiscordNotifications() {
                     </Button>
                   </CardContent>
                 </Card>
+
+                <BusinessHoursConfig
+                  regionId={region.id}
+                  regionLabel={region.label}
+                  initialData={businessHours[region.id]}
+                  onSaved={(data) => setBusinessHours((prev) => ({ ...prev, [region.id]: data }))}
+                />
               </TabsContent>
             ))}
           </Tabs>

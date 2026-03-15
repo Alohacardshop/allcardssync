@@ -1,17 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_lib/cors.ts';
+import { isWithinBusinessHours } from '../_shared/business-hours.ts';
 
 const STALE_THRESHOLD_MINUTES = 60; // Alert if no webhooks for 60 minutes
  const ALERT_COOLDOWN_MINUTES = 30; // Don't re-alert same location within this window
- 
- // Default business hours (8am-7pm)
- const DEFAULT_BUSINESS_HOURS = { start: 8, end: 19 };
- 
- // Timezone mappings per region
- const REGION_TIMEZONES: Record<string, string> = {
-   hawaii: 'Pacific/Honolulu',
-   vegas: 'America/Los_Angeles',
- };
 
 interface WebhookHealthRow {
   store_key: string;
@@ -49,51 +41,7 @@ function storeKeyToRegion(storeKey: string): string {
   return 'hawaii'; // Default to Hawaii
 }
 
- /**
-  * Check if current time is within business hours for a region
-  */
- async function isWithinBusinessHours(supabase: any, regionId: string): Promise<{ within: boolean; currentHour: number; dayOfWeek: string; timezone: string }> {
-   let timezone = REGION_TIMEZONES[regionId] || 'America/Los_Angeles';
-   let start = DEFAULT_BUSINESS_HOURS.start;
-   let end = DEFAULT_BUSINESS_HOURS.end;
-   
-   try {
-     // Try to get region-specific settings
-     const { data: settings } = await supabase
-       .from('region_settings')
-       .select('setting_value')
-       .eq('region_id', regionId)
-       .eq('setting_key', 'operations.business_hours')
-       .single();
-     
-     if (settings?.setting_value) {
-       start = settings.setting_value.start ?? start;
-       end = settings.setting_value.end ?? end;
-       timezone = settings.setting_value.timezone ?? timezone;
-     }
-   } catch {
-     // Use defaults
-   }
-   
-   const now = new Date();
-   const parts = new Intl.DateTimeFormat('en-US', {
-     timeZone: timezone,
-     hour: 'numeric',
-     hour12: false,
-     weekday: 'short',
-   }).formatToParts(now);
-   
-   const hour = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
-   const dayOfWeek = parts.find(p => p.type === 'weekday')?.value || '';
-   
-   // Closed on Sundays
-   if (dayOfWeek === 'Sun') {
-     return { within: false, currentHour: hour, dayOfWeek, timezone };
-   }
-   
-   const within = hour >= start && hour < end;
-   return { within, currentHour: hour, dayOfWeek, timezone };
- }
+ // isWithinBusinessHours is now imported from _shared/business-hours.ts
  
  /**
   * Check if a specific store/location was recently alerted
@@ -409,10 +357,10 @@ Deno.serve(async (req) => {
       }
 
        // Check if within business hours for this region
-       const { within: isWithinHours, currentHour, dayOfWeek, timezone } = await isWithinBusinessHours(supabase, regionId);
+       const { within: isWithinHours, currentHour, day, timezone } = await isWithinBusinessHours(supabase, regionId);
        
        if (!isWithinHours) {
-         console.log(`[check-webhook-health] Outside business hours for ${regionId} (hour: ${currentHour}, day: ${dayOfWeek}, tz: ${timezone}), skipping`);
+         console.log(`[check-webhook-health] Outside business hours for ${regionId} (hour: ${currentHour}, day: ${day}, tz: ${timezone}), skipping`);
          skippedOutsideHours += regionStale.length;
          continue;
        }
