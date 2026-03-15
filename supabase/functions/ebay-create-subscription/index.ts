@@ -163,7 +163,7 @@ serve(async (req) => {
     }
 
     // Step 4: Create subscription for order topics
-    const orderTopics = ['MARKETPLACE.ORDER.CREATED', 'MARKETPLACE.ORDER.PAID']
+    const orderTopics = ['ORDER_CONFIRMATION']
     
     for (const topic of orderTopics) {
       console.log(`[eBay Subscription] Creating subscription for ${topic}`)
