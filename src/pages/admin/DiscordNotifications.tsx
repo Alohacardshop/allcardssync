@@ -96,6 +96,7 @@ export default function DiscordNotifications() {
         { region_id: regionId, setting_key: 'discord.role_id', setting_value: config.roleId },
         { region_id: regionId, setting_key: 'discord.channel_name', setting_value: config.channelName },
         { region_id: regionId, setting_key: 'discord.enabled', setting_value: config.enabled },
+        { region_id: regionId, setting_key: 'discord.notify_cancellations', setting_value: config.notifyCancellations },
       ];
 
       for (const u of updates) {
