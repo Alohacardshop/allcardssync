@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
 import { detectMainCategory } from "@/utils/categoryMapping";
+import { useServiceFlags } from "@/hooks/useServiceFlags";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, CloudUpload, ImageIcon } from "lucide-react";
