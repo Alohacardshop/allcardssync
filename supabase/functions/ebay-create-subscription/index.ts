@@ -176,7 +176,11 @@ serve(async (req) => {
         body: JSON.stringify({
           topicId: topic,
           status: 'ENABLED',
-          payload: { format: 'JSON' },
+          payload: { 
+            format: 'JSON',
+            deliveryProtocol: 'HTTPS',
+            schemaVersion: '1.0'
+          },
           destinationId: destinationId
         })
       })
