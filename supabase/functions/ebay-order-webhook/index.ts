@@ -294,7 +294,77 @@ serve(async (req) => {
                 })
                 .eq('sku', sku);
               
-              processedItems.push(`${sku} (atomic lock)`);
+              // ======== STEP 3: CREATE SHOPIFY ORDER FOR STAFF PULL ========
+              const shopifyVariantId = card?.shopify_variant_id || itemData?.shopify_variant_id;
+              if (shopifyVariantId && domain && token) {
+                // Idempotency: check if we already created a Shopify order for this sale event
+                const sourceEventId = `${orderId}_${sku}`;
+                const { data: existingSale } = await supabase
+                  .from('sales_events')
+                  .select('shopify_order_id')
+                  .eq('source_event_id', sourceEventId)
+                  .single();
+                
+                if (existingSale?.shopify_order_id) {
+                  console.log(`[eBay Webhook] Shopify order already exists for ${sourceEventId}: ${existingSale.shopify_order_id}`);
+                } else {
+                  const locationNumericId = card?.current_shopify_location_id 
+                    ? locationGidToId(card.current_shopify_location_id) 
+                    : undefined;
+                  
+                  const orderResult = await createShopifyOrderForEbaySale({
+                    domain,
+                    token,
+                    sku,
+                    variantId: parseIdFromGid(shopifyVariantId) || shopifyVariantId,
+                    quantity,
+                    pricePerUnit: parseFloat(lineItem.lineItemCost.value),
+                    currency: lineItem.lineItemCost.currency || 'USD',
+                    ebayOrderId: orderId,
+                    ebayItemId,
+                    locationId: locationNumericId,
+                  });
+                  
+                  if (orderResult.success) {
+                    console.log(`[eBay Webhook] ✅ Shopify order ${orderResult.shopifyOrderName} created for eBay sale ${sku}`);
+                    
+                    // Store Shopify order ID on sales_events
+                    await supabase
+                      .from('sales_events')
+                      .update({
+                        shopify_order_id: orderResult.shopifyOrderId,
+                        shopify_order_name: orderResult.shopifyOrderName,
+                        metadata: { shopify_order_created_at: new Date().toISOString() }
+                      })
+                      .eq('source_event_id', sourceEventId);
+                    
+                    // Also store on intake_items
+                    await supabase
+                      .from('intake_items')
+                      .update({ shopify_order_id: orderResult.shopifyOrderId })
+                      .eq('sku', sku);
+                      
+                    processedItems.push(`${sku} (atomic lock + shopify order ${orderResult.shopifyOrderName})`);
+                  } else {
+                    const errMsg = `Shopify order creation FAILED for eBay sale SKU=${sku}, order=${orderId}: ${orderResult.error}`;
+                    console.error(`[eBay Webhook] 🚨 ${errMsg}`);
+                    errors.push(errMsg);
+                    
+                    await supabase.from('system_logs').insert({
+                      level: 'error',
+                      message: errMsg,
+                      source: 'ebay-order-webhook',
+                      context: { orderId, sku, ebayItemId, variantId: shopifyVariantId, error: orderResult.error }
+                    });
+                    
+                    processedItems.push(`${sku} (atomic lock, shopify order FAILED)`);
+                  }
+                }
+              } else {
+                console.log(`[eBay Webhook] No Shopify variant for ${sku} — skipping order creation`);
+                processedItems.push(`${sku} (atomic lock, no shopify variant)`);
+              }
+              
               continue; // Skip legacy processing
             } else if (result?.result === 'already_sold' || result?.result === 'duplicate_event') {
               console.log(`[eBay Webhook] SKU ${sku} already processed, skipping`);
