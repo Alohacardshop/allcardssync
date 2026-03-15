@@ -115,14 +115,18 @@ export const BulkActionsToolbar = React.memo(({
               <Store className="h-3.5 w-3.5 mr-2" />
               Shopify
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onResyncSelected('ebay')}>
-              <ShoppingBag className="h-3.5 w-3.5 mr-2" />
-              eBay
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onResyncSelected('both')}>
-              <RotateCcw className="h-3.5 w-3.5 mr-2" />
-              Both Marketplaces
-            </DropdownMenuItem>
+            {ebayEnabled && (
+              <DropdownMenuItem onClick={() => onResyncSelected('ebay')}>
+                <ShoppingBag className="h-3.5 w-3.5 mr-2" />
+                eBay
+              </DropdownMenuItem>
+            )}
+            {ebayEnabled && (
+              <DropdownMenuItem onClick={() => onResyncSelected('both')}>
+                <RotateCcw className="h-3.5 w-3.5 mr-2" />
+                Both Marketplaces
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
 
