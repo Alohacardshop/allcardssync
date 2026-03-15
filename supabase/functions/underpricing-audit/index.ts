@@ -239,12 +239,12 @@ serve(async (req) => {
       }
     }
 
-    // 7. Send Discord report
-    if (flagged.length > 0) {
-      await sendDiscordReport(supabase, flagged, checked, noResults, weakSets, skipped);
-    } else {
-      console.log('[Underpricing Audit] No underpriced items found, skipping Discord report');
-    }
+    // 7. Send Discord report (DISABLED — no dedicated channel yet)
+    // TODO: Re-enable once a Discord channel/webhook is configured for pricing alerts
+    // if (flagged.length > 0) {
+    //   await sendDiscordReport(supabase, flagged, checked, noResults, weakSets, skipped);
+    // }
+    console.log(`[Underpricing Audit] Discord report SKIPPED (disabled). ${flagged.length} flagged items saved to DB.`);
 
     return new Response(JSON.stringify({
       message: 'Audit complete',
