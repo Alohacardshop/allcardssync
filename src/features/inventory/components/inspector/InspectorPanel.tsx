@@ -46,6 +46,7 @@ export const InspectorPanel = React.memo(({
 }: InspectorPanelProps) => {
   // Field sync hook for editable fields
   const { updateField, isSaving } = useInventoryFieldSync();
+  const { ebayEnabled } = useServiceFlags();
 
   // Fetch detail data lazily when item is selected
   const { data: detailData, isLoading: isLoadingDetail } = useInventoryItemDetail(
