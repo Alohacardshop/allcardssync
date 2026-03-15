@@ -479,49 +479,11 @@ async function handleProductListingRemove(supabase: any, payload: any, shopifyDo
   }
 }
 
-// Check if store is open based on region business hours
+// Check if store is open based on region business hours (uses shared module)
 async function isStoreOpenForRegion(supabase: any, regionId: string): Promise<boolean> {
-  try {
-    // Fetch business hours from region_settings
-    const { data: settings } = await supabase
-      .from('region_settings')
-      .select('setting_value')
-      .eq('region_id', regionId)
-      .eq('setting_key', 'operations.business_hours')
-      .single();
-    
-    const businessHours = settings?.setting_value || {
-      start: regionId === 'hawaii' ? 9 : 10,
-      end: regionId === 'hawaii' ? 19 : 20,
-      timezone: regionId === 'hawaii' ? 'Pacific/Honolulu' : 'America/Los_Angeles',
-    };
-
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: businessHours.timezone,
-      hour: 'numeric',
-      hour12: false,
-      weekday: 'short',
-    }).formatToParts(new Date());
-    
-    const hour = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10);
-    const day = parts.find((p) => p.type === 'weekday')?.value;
-    
-    // Closed on Sundays
-    if (day === 'Sun') return false;
-    
-    return hour >= businessHours.start && hour < businessHours.end;
-  } catch (error) {
-    console.error('Error checking store hours:', error);
-    // Fallback to Hawaii hours
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Pacific/Honolulu',
-      hour: 'numeric',
-      hour12: false,
-    }).formatToParts(new Date());
-    
-    const hour = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10);
-    return hour >= 9 && hour < 19;
-  }
+  const { isWithinBusinessHours } = await import('../_shared/business-hours.ts');
+  const { within } = await isWithinBusinessHours(supabase, regionId);
+  return within;
 }
 
 // Get region-specific Discord configuration

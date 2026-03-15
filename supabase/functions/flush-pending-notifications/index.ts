@@ -66,9 +66,9 @@ Deno.serve(async (req) => {
     for (const [regionId, regionNotifications] of Object.entries(byRegion)) {
       console.log(`[flush-pending-notifications] Processing ${regionNotifications.length} notifications for ${regionId}`);
       
-      const { within, currentHour, timezone } = await isWithinBusinessHours(supabase, regionId);
+      const { within, currentHour, timezone, day } = await isWithinBusinessHours(supabase, regionId);
       if (!within) {
-        console.log(`[flush-pending-notifications] Outside business hours for ${regionId} (hour: ${currentHour}, tz: ${timezone}), skipping`);
+        console.log(`[flush-pending-notifications] Outside business hours for ${regionId} (hour: ${currentHour}, day: ${day}, tz: ${timezone}), skipping`);
         skippedRegions.push(regionId);
         results[regionId] = { sent: 0, failed: 0 };
         continue;
