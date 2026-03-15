@@ -10,6 +10,7 @@ import { ImageGallery } from '../../details/ImageGallery';
 import { EditableField } from '../EditableField';
 import { InlineQuantityEditor } from '@/components/inventory-card/InlineQuantityEditor';
 import { useEbayListing } from '@/hooks/useEbayListing';
+import { useServiceFlags } from '@/hooks/useServiceFlags';
 import type { InventoryListItem } from '../../../types';
 import type { CachedLocation } from '@/hooks/useLocationNames';
 import { formatGrade } from '@/lib/labelData';
