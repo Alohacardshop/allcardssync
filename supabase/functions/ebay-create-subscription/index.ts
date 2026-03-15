@@ -85,6 +85,7 @@ serve(async (req) => {
 
     const webhookEndpoint = `${supabaseUrl}/functions/v1/ebay-order-webhook`
     const verificationToken = Deno.env.get('EBAY_VERIFICATION_TOKEN') || ''
+    console.log(`[eBay Subscription] Verification token length: ${verificationToken.length}, empty: ${!verificationToken}`)
     const results: Record<string, any> = {}
 
     // Step 2: List existing subscriptions & destinations
