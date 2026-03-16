@@ -451,6 +451,77 @@ export function isOnlineOrderNeedingFulfillment(payload: any): boolean {
 }
 
 /**
+ * Build a rich Discord embed for an eBay sale (sent directly from eBay webhook).
+ * Uses eBay notification data which has buyer, line items, and pricing.
+ */
+export function buildEbayOrderEmbed(
+  regionId: string,
+  ebayOrderId: string,
+  lineItems: Array<{
+    sku?: string;
+    title: string;
+    quantity: number;
+    lineItemCost: { value: string; currency: string };
+    legacyItemId?: string;
+  }>,
+  buyer?: { username: string },
+  total?: { value: string; currency: string },
+  creationDate?: string,
+  shopifyOrderName?: string | null
+) {
+  const { icon, label, color } = regionMeta(regionId);
+
+  const customerName = buyer?.username || 'eBay Buyer';
+  const totalStr = total ? `$${parseFloat(total.value).toFixed(2)} ${total.currency}` : 'N/A';
+
+  const createdAt = creationDate
+    ? new Date(creationDate).toLocaleString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric',
+        hour: 'numeric', minute: '2-digit', hour12: true,
+      })
+    : null;
+
+  let description = `## eBay Order\n`;
+  description += `💰 **Paid** • 📋 **Needs Pull**\n`;
+  if (createdAt) description += `🕐 ${createdAt}`;
+  if (shopifyOrderName) description += `\n📦 Shopify: **${shopifyOrderName}**`;
+
+  // Build items summary
+  const itemLines: string[] = [];
+  for (const item of lineItems.slice(0, 8)) {
+    const title = item.title || 'Item';
+    const qty = item.quantity || 1;
+    const price = item.lineItemCost ? `$${parseFloat(item.lineItemCost.value).toFixed(2)}` : '';
+    const sku = item.sku ? `\`${item.sku}\`` : '';
+    let line = `**${title}**`;
+    if (sku) line += ` • ${sku}`;
+    if (price && qty) line += `\n   ${price} × ${qty}`;
+    itemLines.push(line);
+  }
+
+  const fields: Array<{ name: string; value: string; inline?: boolean }> = [
+    { name: '👤 Buyer', value: customerName, inline: true },
+    { name: '💵 Total', value: totalStr, inline: true },
+    { name: '🏷️ Type', value: 'eBay Order', inline: true },
+    { name: '🔗 Source', value: '🏷️ eBay', inline: true },
+  ];
+
+  if (itemLines.length > 0) {
+    const itemsText = itemLines.join('\n\n');
+    fields.push({ name: '📦 Items', value: itemsText.length > 1024 ? itemsText.slice(0, 1021) + '…' : itemsText, inline: false });
+  }
+
+  return {
+    title: `${icon} ${label} • 🏷️ eBay Sale`,
+    description,
+    color,
+    fields,
+    footer: { text: `eBay Order: ${ebayOrderId}` },
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
  * Send a Discord cancellation/refund notification for an order.
  */
 export async function sendCancellationNotification(

@@ -516,6 +516,14 @@ async function sendDiscordNotification(supabase: any, payload: any, shopifyDomai
       return;
     }
 
+    // Skip Discord for eBay-originated orders — the eBay webhook sends its own richer notification
+    const tags = payload?.tags || '';
+    const tagStr = typeof tags === 'string' ? tags.toLowerCase() : (tags as any[]).join(',').toLowerCase();
+    if (tagStr.includes('external_sale') && tagStr.includes('ebay')) {
+      console.log('Skipping Discord for eBay-created Shopify order (eBay webhook handles notification)');
+      return;
+    }
+
     const regionId = getOrderRegionFromPayload(payload, shopifyDomain);
     const orderType = getOrderType(payload);
     console.log(`Order region: ${regionId}, type: ${orderType}`);

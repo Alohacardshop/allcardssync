@@ -3,6 +3,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
  import { writeInventory, generateRequestId, locationGidToId } from '../_shared/inventory-write.ts'
  import { createShopifyOrderForEbaySale } from '../_shared/shopify-create-ebay-order.ts'
  import { parseIdFromGid } from '../_shared/shopify-helpers.ts'
+ import { buildEbayOrderEmbed, getRegionDiscordConfig, storeKeyToRegionId, regionMeta } from '../_shared/discord-helpers.ts'
+ import { isWithinBusinessHours } from '../_shared/business-hours.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -136,6 +138,8 @@ serve(async (req) => {
     const lineItems = orderData.orderLineItems || []
     const processedItems: string[] = []
     const errors: string[] = []
+    let shopifyOrderNameForNotif: string | null = null
+    let resolvedStoreKey: string = 'hawaii'
 
     for (const lineItem of lineItems) {
       const sku = lineItem.sku
@@ -201,6 +205,7 @@ serve(async (req) => {
                 .single();
               
               const storeKey = itemData?.store_key || 'hawaii';
+              resolvedStoreKey = storeKey;
               const storeKeyUpper = storeKey.toUpperCase().replace(/_STORE$/i, '');
               
               // Fetch Shopify credentials (needed for both zero + order creation)
@@ -363,6 +368,7 @@ serve(async (req) => {
                   });
                   
                   if (orderResult.success) {
+                    shopifyOrderNameForNotif = orderResult.shopifyOrderName || null;
                     console.log(`[eBay Webhook] ✅ Shopify order ${orderResult.shopifyOrderName} created for eBay sale ${sku}`);
                     
                     // Store Shopify order ID on sales_events
@@ -591,6 +597,72 @@ serve(async (req) => {
       } catch (itemError: any) {
         console.error(`[eBay Webhook] Error processing line item:`, itemError)
         errors.push(`Processing error: ${itemError.message}`)
+      }
+    }
+
+    // ── Send rich Discord notification for eBay sale ──
+    if (processedItems.length > 0) {
+      try {
+        const regionId = storeKeyToRegionId(resolvedStoreKey);
+        const regionConfig = await getRegionDiscordConfig(supabase, regionId);
+        
+        if (regionConfig?.enabled && regionConfig.webhookUrl) {
+          const { within: isOpen } = await isWithinBusinessHours(supabase, regionId);
+          
+          const embed = buildEbayOrderEmbed(
+            regionId,
+            orderId,
+            lineItems.map((li: any) => ({
+              sku: li.sku,
+              title: li.title || 'Item',
+              quantity: li.quantity || 1,
+              lineItemCost: li.lineItemCost || { value: '0', currency: 'USD' },
+              legacyItemId: li.legacyItemId,
+            })),
+            orderData.buyer,
+            orderData.pricingSummary?.total,
+            orderData.creationDate,
+            shopifyOrderNameForNotif
+          );
+          
+          const mention = regionConfig.roleId ? `<@&${regionConfig.roleId}>\n` : '';
+          
+          if (isOpen) {
+            const discordRes = await fetch(regionConfig.webhookUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                content: `${mention}🏷️ **eBay Sale — Pull Required**`,
+                embeds: [embed],
+                allowed_mentions: { parse: ['roles'] },
+              }),
+            });
+            
+            if (!discordRes.ok) {
+              console.error(`[eBay Webhook] Discord send failed: ${discordRes.status}`);
+              // Queue for later
+              await supabase.from('pending_notifications').insert({
+                payload: { _ebay_embed: embed, _ebay_order_id: orderId, _ebay_mention: mention },
+                region_id: regionId,
+                sent: false,
+              });
+            } else {
+              console.log(`[eBay Webhook] ✓ Sent Discord notification for eBay order ${orderId}`);
+            }
+          } else {
+            // Queue for business hours
+            await supabase.from('pending_notifications').insert({
+              payload: { _ebay_embed: embed, _ebay_order_id: orderId, _ebay_mention: mention },
+              region_id: regionId,
+              sent: false,
+            });
+            console.log(`[eBay Webhook] Queued Discord notification for eBay order ${orderId} (outside business hours)`);
+          }
+        } else {
+          console.log(`[eBay Webhook] Discord not configured for region, skipping notification`);
+        }
+      } catch (discordErr: any) {
+        console.error(`[eBay Webhook] Discord notification error:`, discordErr.message);
       }
     }
 
