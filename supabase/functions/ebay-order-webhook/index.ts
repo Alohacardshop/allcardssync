@@ -205,6 +205,7 @@ serve(async (req) => {
                 .single();
               
               const storeKey = itemData?.store_key || 'hawaii';
+              resolvedStoreKey = storeKey;
               const storeKeyUpper = storeKey.toUpperCase().replace(/_STORE$/i, '');
               
               // Fetch Shopify credentials (needed for both zero + order creation)
