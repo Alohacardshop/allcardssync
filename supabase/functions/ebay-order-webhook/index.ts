@@ -138,6 +138,8 @@ serve(async (req) => {
     const lineItems = orderData.orderLineItems || []
     const processedItems: string[] = []
     const errors: string[] = []
+    let shopifyOrderNameForNotif: string | null = null
+    let resolvedStoreKey: string = 'hawaii'
 
     for (const lineItem of lineItems) {
       const sku = lineItem.sku
