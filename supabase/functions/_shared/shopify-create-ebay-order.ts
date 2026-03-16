@@ -7,6 +7,7 @@
  * - financial_status=paid, source_name=external → no payment collection, clean accounting
  * - Tags: external_sale, ebay, needs_pull → filterable for staff pull operations
  * - Idempotent: checks sales_events.shopify_order_id before creating
+ * - Includes eBay buyer info and item title for staff context
  */
 
 import { API_VER } from './shopify-helpers.ts'
@@ -22,6 +23,11 @@ export interface CreateEbayOrderParams {
   ebayOrderId: string
   ebayItemId?: string
   locationId?: string  // Shopify numeric location ID for inventory assignment
+  // eBay enrichment fields
+  buyerUsername?: string
+  itemTitle?: string
+  ebayCreationDate?: string
+  ebayTotal?: { value: string; currency: string }
 }
 
 export interface CreateEbayOrderResult {
@@ -38,10 +44,39 @@ export async function createShopifyOrderForEbaySale(
 ): Promise<CreateEbayOrderResult> {
   const {
     domain, token, sku, variantId, quantity,
-    pricePerUnit, currency, ebayOrderId, ebayItemId, locationId
+    pricePerUnit, currency, ebayOrderId, ebayItemId, locationId,
+    buyerUsername, itemTitle, ebayCreationDate, ebayTotal,
   } = params
 
   try {
+    // Build note with all available eBay context
+    const noteLines = [
+      `eBay Sale — Order: ${ebayOrderId}`,
+      itemTitle ? `Item: ${itemTitle}` : null,
+      ebayItemId ? `eBay Item ID: ${ebayItemId}` : null,
+      `SKU: ${sku}`,
+      buyerUsername ? `Buyer: ${buyerUsername}` : null,
+      ebayTotal ? `eBay Total: $${parseFloat(ebayTotal.value).toFixed(2)} ${ebayTotal.currency}` : null,
+      ebayCreationDate ? `eBay Order Date: ${new Date(ebayCreationDate).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}` : null,
+      `Source: ebay (auto-created by webhook)`,
+    ].filter(Boolean).join('\n')
+
+    // Build structured note attributes
+    const noteAttributes = [
+      { name: 'source_channel', value: 'ebay' },
+      { name: 'ebay_order_id', value: ebayOrderId },
+      { name: 'sku', value: sku },
+      ...(ebayItemId ? [{ name: 'ebay_item_id', value: ebayItemId }] : []),
+      ...(buyerUsername ? [{ name: 'ebay_buyer', value: buyerUsername }] : []),
+      ...(itemTitle ? [{ name: 'ebay_item_title', value: itemTitle }] : []),
+      ...(ebayCreationDate ? [{ name: 'ebay_order_date', value: ebayCreationDate }] : []),
+    ]
+
+    // Build customer from eBay buyer username
+    const customer = buyerUsername
+      ? { first_name: buyerUsername, last_name: '(eBay)' }
+      : undefined
+
     // Build the order payload
     const orderPayload: Record<string, any> = {
       order: {
@@ -57,20 +92,12 @@ export async function createShopifyOrderForEbaySale(
         financial_status: 'paid',
         // Tags for filtering
         tags: 'external_sale, ebay, needs_pull',
-        // Note for staff with eBay context
-        note: [
-          `eBay Sale — Order: ${ebayOrderId}`,
-          ebayItemId ? `eBay Item: ${ebayItemId}` : null,
-          `SKU: ${sku}`,
-          `Source: ebay (auto-created by webhook)`
-        ].filter(Boolean).join('\n'),
-        // Note attributes for structured data
-        note_attributes: [
-          { name: 'source_channel', value: 'ebay' },
-          { name: 'ebay_order_id', value: ebayOrderId },
-          { name: 'sku', value: sku },
-          ...(ebayItemId ? [{ name: 'ebay_item_id', value: ebayItemId }] : []),
-        ],
+        // Rich note for staff
+        note: noteLines,
+        // Structured data
+        note_attributes: noteAttributes,
+        // Customer info from eBay buyer
+        ...(customer ? { customer: { ...customer }, email: '' } : {}),
         // Source identification
         source_name: 'external',
         // Don't send confirmation emails
@@ -85,7 +112,7 @@ export async function createShopifyOrderForEbaySale(
       }
     }
 
-    console.log(`[Shopify Order] Creating order for eBay sale: SKU=${sku}, ebayOrder=${ebayOrderId}, variant=${variantId}`)
+    console.log(`[Shopify Order] Creating order for eBay sale: SKU=${sku}, ebayOrder=${ebayOrderId}, variant=${variantId}, buyer=${buyerUsername || 'unknown'}`)
 
     const response = await fetch(
       `https://${domain}/admin/api/${API_VER}/orders.json`,

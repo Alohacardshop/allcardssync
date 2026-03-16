@@ -365,6 +365,11 @@ serve(async (req) => {
                     ebayOrderId: orderId,
                     ebayItemId,
                     locationId: locationNumericId,
+                    // eBay enrichment
+                    buyerUsername: orderData.buyer?.username,
+                    itemTitle: lineItem.title,
+                    ebayCreationDate: orderData.creationDate,
+                    ebayTotal: orderData.pricingSummary?.total,
                   });
                   
                   if (orderResult.success) {
