@@ -97,7 +97,7 @@ export async function createShopifyOrderForEbaySale(
         // Structured data
         note_attributes: noteAttributes,
         // Customer info from eBay buyer
-        ...(customer ? { customer: { ...customer }, email: '' } : {}),
+        ...(customer ? { customer: { ...customer } } : {}),
         // Source identification
         source_name: 'external',
         // Don't send confirmation emails
