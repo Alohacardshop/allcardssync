@@ -1,7 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
-  getEbayOAuthToken,
   removeOutliers,
   fetchEbaySoldListings,
 } from '../_shared/ebayPriceCheck.ts';
@@ -34,41 +33,27 @@ serve(async (req) => {
 
   try {
     const clientId = Deno.env.get('EBAY_CLIENT_ID');
-    const clientSecret = Deno.env.get('EBAY_CLIENT_SECRET');
 
-    if (!clientId || !clientSecret) {
-      throw new Error('EBAY_CLIENT_ID and EBAY_CLIENT_SECRET must be configured');
+    if (!clientId) {
+      throw new Error('EBAY_CLIENT_ID must be configured');
     }
 
     const { searchQuery, itemId, currentPrice }: EbayPriceCheckRequest = await req.json();
 
     console.log(`[eBay Price Check] Checking prices for: ${searchQuery}`);
 
-    // Get OAuth token (cached or fresh)
-    const oauthToken = await getEbayOAuthToken(clientId, clientSecret);
-
-    // Fetch sold listings from eBay using OAuth
-    const rawPrices = await fetchEbaySoldListings(searchQuery, oauthToken);
+    // Fetch sold listings using Finding API (SECURITY-APPNAME auth)
+    const rawPrices = await fetchEbaySoldListings(searchQuery, clientId);
 
     if (rawPrices.length === 0) {
       return new Response(
-        JSON.stringify({
-          error: 'No sold listings found on eBay',
-          searchQuery,
-        }),
-        {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
+        JSON.stringify({ error: 'No sold listings found on eBay', searchQuery }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Remove outliers and calculate average
     const { average, used, outliers } = removeOutliers(rawPrices);
-
-    // Calculate difference percentage
-    const differencePercent =
-      currentPrice > 0 ? ((currentPrice - average) / average) * 100 : 0;
+    const differencePercent = currentPrice > 0 ? ((currentPrice - average) / average) * 100 : 0;
 
     const result: EbayPriceCheckResponse = {
       ebayAverage: Math.round(average * 100) / 100,
@@ -80,7 +65,7 @@ serve(async (req) => {
       differencePercent: Math.round(differencePercent * 100) / 100,
     };
 
-    // Update the database with the result
+    // Update the database
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
