@@ -93,8 +93,25 @@ Deno.serve(async (req) => {
 
       for (const batch of batches) {
         try {
-          const embeds = batch.map((n) => buildOrderEmbed(regionId, n.payload, getOrderType(n.payload)));
-          const mention = config.roleId ? `<@&${config.roleId}>\n` : '';
+          // Separate eBay pre-built embeds from regular Shopify order payloads
+          const ebayEmbeds = batch.filter(n => n.payload?._ebay_embed);
+          const regularOrders = batch.filter(n => !n.payload?._ebay_embed);
+          
+          const embeds: any[] = [];
+          let mention = config.roleId ? `<@&${config.roleId}>\n` : '';
+          
+          // Add regular Shopify order embeds
+          for (const n of regularOrders) {
+            embeds.push(buildOrderEmbed(regionId, n.payload, getOrderType(n.payload)));
+          }
+          
+          // Add pre-built eBay embeds
+          for (const n of ebayEmbeds) {
+            embeds.push(n.payload._ebay_embed);
+            // Use eBay mention if available
+            if (n.payload._ebay_mention) mention = n.payload._ebay_mention;
+          }
+          
           const header = `${mention}Queued orders ready for review (${batch.length})`;
 
           const discordResponse = await fetch(config.webhookUrl, {
