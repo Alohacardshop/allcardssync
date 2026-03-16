@@ -1,58 +1,9 @@
 /**
- * Shared eBay price check utilities for Finding API operations
+ * Shared eBay price check utilities for Finding API operations.
+ *
+ * AUTH: The Finding API uses SECURITY-APPNAME (your eBay Client/App ID)
+ * as a query parameter — NOT OAuth Bearer tokens.
  */
-
-// In-memory token cache (reused across function invocations)
-interface CachedToken {
-  token: string;
-  expiresAt: number;
-}
-
-let cachedToken: CachedToken | null = null;
-
-/**
- * Get eBay OAuth token using client credentials flow
- * Caches token in memory to avoid redundant requests
- */
-export async function getEbayOAuthToken(
-  clientId: string,
-  clientSecret: string
-): Promise<string> {
-  if (cachedToken && cachedToken.expiresAt > Date.now()) {
-    console.log('[eBay OAuth] Using cached token');
-    return cachedToken.token;
-  }
-
-  console.log('[eBay OAuth] Fetching new token');
-  const credentials = btoa(`${clientId}:${clientSecret}`);
-
-  const response = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Authorization: `Basic ${credentials}`,
-    },
-    body: 'grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope',
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('[eBay OAuth] Token request failed:', response.status, errorText);
-    throw new Error(`OAuth token request failed: ${response.statusText}`);
-  }
-
-  const data = await response.json();
-
-  // Cache token (tokens typically expire after 2 hours)
-  // Set expiry 5 minutes before actual expiry for safety
-  cachedToken = {
-    token: data.access_token,
-    expiresAt: Date.now() + (data.expires_in - 300) * 1000,
-  };
-
-  console.log('[eBay OAuth] New token cached, expires in', data.expires_in, 'seconds');
-  return data.access_token;
-}
 
 /**
  * Remove price outliers using ±30% threshold
@@ -91,16 +42,17 @@ export function removeOutliers(prices: number[]): {
 }
 
 /**
- * Fetch sold listings from eBay Finding API
- * Returns array of sold prices
+ * Fetch sold listings from eBay Finding API.
+ * Uses SECURITY-APPNAME (Client ID) for authentication — no OAuth token needed.
  */
 export async function fetchEbaySoldListings(
   searchQuery: string,
-  oauthToken: string
+  appId: string
 ): Promise<number[]> {
   const params = new URLSearchParams({
     'OPERATION-NAME': 'findCompletedItems',
     'SERVICE-VERSION': '1.0.0',
+    'SECURITY-APPNAME': appId,
     'RESPONSE-DATA-FORMAT': 'JSON',
     'REST-PAYLOAD': '',
     keywords: searchQuery,
@@ -114,19 +66,23 @@ export async function fetchEbaySoldListings(
 
   const url = `https://svcs.ebay.com/services/search/FindingService/v1?${params.toString()}`;
 
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${oauthToken}`,
-    },
-  });
+  const response = await fetch(url);
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('[eBay API] Request failed:', response.status, errorText);
-    throw new Error(`eBay API error: ${response.statusText}`);
+    console.error('[eBay Finding API] Request failed:', response.status, errorText);
+    throw new Error(`eBay Finding API error: ${response.status} ${response.statusText}`);
   }
 
   const data = await response.json();
+
+  // Check for API-level errors
+  const ack = data.findCompletedItemsResponse?.[0]?.ack?.[0];
+  if (ack === 'Failure') {
+    const errorMsg = data.findCompletedItemsResponse?.[0]?.errorMessage?.[0]?.error?.[0]?.message?.[0] || 'Unknown API error';
+    console.error('[eBay Finding API] API error:', errorMsg);
+    throw new Error(`eBay Finding API: ${errorMsg}`);
+  }
 
   // Extract sold prices from response
   const searchResult = data.findCompletedItemsResponse?.[0]?.searchResult?.[0];
