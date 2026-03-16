@@ -367,6 +367,7 @@ serve(async (req) => {
                   });
                   
                   if (orderResult.success) {
+                    shopifyOrderNameForNotif = orderResult.shopifyOrderName || null;
                     console.log(`[eBay Webhook] ✅ Shopify order ${orderResult.shopifyOrderName} created for eBay sale ${sku}`);
                     
                     // Store Shopify order ID on sales_events
